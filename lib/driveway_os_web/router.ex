@@ -8,6 +8,10 @@ defmodule DrivewayOSWeb.Router do
     # `conn.assigns[:current_tenant]` and `:tenant_context`. Halts
     # with 404 for unknown subdomains.
     plug DrivewayOSWeb.Plugs.LoadTenant
+    # Resolve session JWT to a tenant-scoped Customer. No-ops for
+    # marketing/admin contexts. Cross-tenant verification is built
+    # in via AshAuthentication's "tenant" JWT claim.
+    plug DrivewayOSWeb.Plugs.LoadCustomer
     plug :fetch_live_flash
     plug :put_root_layout, html: {DrivewayOSWeb.Layouts, :root}
     plug :protect_from_forgery
