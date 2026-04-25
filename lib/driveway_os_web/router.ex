@@ -29,6 +29,8 @@ defmodule DrivewayOSWeb.Router do
     live "/signup", SignupLive
     live "/sign-in", Auth.SignInLive
     live "/register", Auth.RegisterLive
+    live "/book", BookingLive
+    live "/book/success/:id", BookingSuccessLive
 
     get "/auth/customer/store-token", Auth.SessionController, :store_token
     get "/auth/customer/sign-out", Auth.SessionController, :sign_out
