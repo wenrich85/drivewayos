@@ -33,6 +33,11 @@ defmodule DrivewayOSWeb.ConnCase do
 
   setup tags do
     DrivewayOS.DataCase.setup_sandbox(tags)
-    {:ok, conn: Phoenix.ConnTest.build_conn()}
+    # Default host matches `:platform_host` (configured to "lvh.me" in
+    # test). This way, default conns route into the marketing context
+    # (no tenant) and the LoadTenant plug doesn't 404 every test that
+    # forgets to set a host. Tests that need a tenant subdomain set
+    # `conn = put_host(conn, "tenant-slug.lvh.me")` themselves.
+    {:ok, conn: Phoenix.ConnTest.build_conn() |> Map.put(:host, "lvh.me")}
   end
 end

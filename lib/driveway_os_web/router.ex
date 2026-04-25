@@ -4,6 +4,10 @@ defmodule DrivewayOSWeb.Router do
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
+    # Subdomain → tenant. Runs early so downstream code can rely on
+    # `conn.assigns[:current_tenant]` and `:tenant_context`. Halts
+    # with 404 for unknown subdomains.
+    plug DrivewayOSWeb.Plugs.LoadTenant
     plug :fetch_live_flash
     plug :put_root_layout, html: {DrivewayOSWeb.Layouts, :root}
     plug :protect_from_forgery
