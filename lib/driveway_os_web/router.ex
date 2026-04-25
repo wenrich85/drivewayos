@@ -26,6 +26,7 @@ defmodule DrivewayOSWeb.Router do
     pipe_through :browser
 
     live "/", LandingLive
+    live "/signup", SignupLive
   end
 
   # Other scopes may use custom stacks.
