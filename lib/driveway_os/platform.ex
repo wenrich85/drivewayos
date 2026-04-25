@@ -74,12 +74,13 @@ defmodule DrivewayOS.Platform do
   def reserved_slugs, do: @reserved_slugs
 
   @doc """
-  Atomically provision a new tenant + first admin Customer.
+  Atomically provision a new tenant + first admin Customer + default
+  service catalog.
 
-  Wraps the two creates in a single `Repo.transaction/1` — if the
-  Customer create fails (bad password, malformed email), the Tenant
-  insert rolls back so we never have an orphan tenant row with no
-  one to log into it.
+  Wraps the creates in a single `Repo.transaction/1` — if any step
+  fails (bad password, malformed email, etc.), the tenant insert
+  rolls back so we never have an orphan tenant row with no one to
+  log into it and no services to book.
 
   Slug validation:
     * Format enforced by Tenant resource (kebab regex)
@@ -101,7 +102,8 @@ defmodule DrivewayOS.Platform do
       true ->
         DrivewayOS.Repo.transaction(fn ->
           with {:ok, tenant} <- create_tenant(attrs),
-               {:ok, admin} <- create_admin(tenant, attrs) do
+               {:ok, admin} <- create_admin(tenant, attrs),
+               :ok <- DrivewayOS.Scheduling.seed_default_service_types(tenant.id) do
             %{tenant: tenant, admin: admin}
           else
             {:error, reason} -> DrivewayOS.Repo.rollback(reason)
