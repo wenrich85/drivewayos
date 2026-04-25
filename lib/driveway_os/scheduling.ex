@@ -10,6 +10,7 @@ defmodule DrivewayOS.Scheduling do
 
   resources do
     resource DrivewayOS.Scheduling.ServiceType
+    resource DrivewayOS.Scheduling.Appointment
   end
 
   @default_service_types [
