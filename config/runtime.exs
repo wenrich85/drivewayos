@@ -100,6 +100,19 @@ if config_env() == :prod do
   #
   # Check `Plug.SSL` for all available options in `force_ssl`.
 
+  # Platform-tier (DrivewayOS operator) token signing secret. Separate
+  # from any future customer signing secret so each population can be
+  # rotated independently.
+  config :driveway_os,
+    platform_token_signing_secret:
+      System.get_env("PLATFORM_TOKEN_SIGNING_SECRET") ||
+        raise("PLATFORM_TOKEN_SIGNING_SECRET is required")
+
+  # Top-level platform host (e.g. "drivewayos.com"). Tenants live at
+  # `{slug}.<platform_host>`.
+  config :driveway_os,
+    platform_host: System.get_env("PLATFORM_HOST") || "drivewayos.com"
+
   # ## Configuring the mailer
   #
   # In production you need to configure the mailer to use a different adapter.

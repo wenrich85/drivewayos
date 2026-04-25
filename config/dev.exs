@@ -90,3 +90,16 @@ config :phoenix_live_view,
 
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
+
+# Platform-tier (DrivewayOS operator) token signing secret. Separate
+# from the customer token secret so rotating one population doesn't
+# invalidate the other.
+config :driveway_os,
+       :platform_token_signing_secret,
+       System.get_env("PLATFORM_TOKEN_SIGNING_SECRET") ||
+         "dev-only-platform-secret-change-in-production-at-least-64-chars"
+
+# Local subdomain routing — `*.lvh.me` resolves to 127.0.0.1 in public
+# DNS, so no `/etc/hosts` edits needed. `acme.lvh.me:4000` → tenant
+# "acme", `lvh.me:4000` → marketing, `admin.lvh.me:4000` → platform admin.
+config :driveway_os, :platform_host, System.get_env("PLATFORM_HOST") || "lvh.me"

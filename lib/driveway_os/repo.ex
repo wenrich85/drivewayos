@@ -4,8 +4,10 @@ defmodule DrivewayOS.Repo do
 
   def installed_extensions do
     # Ash needs these Postgres extensions; gen_random_uuid() comes from
-    # pgcrypto and citext powers case-insensitive email columns.
-    ["uuid-ossp", "pg_trgm", "citext"]
+    # pgcrypto, citext powers case-insensitive email columns, and
+    # `ash-functions` gives Ash's atomic-update / raise_ash_error
+    # helpers.
+    ["uuid-ossp", "pg_trgm", "citext", "ash-functions"]
   end
 
   def min_pg_version do

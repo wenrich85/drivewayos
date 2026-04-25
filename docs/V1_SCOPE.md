@@ -25,6 +25,15 @@ That's the cut line. Everything else is V2.
 ### Customer-facing booking loop
 - Per-tenant landing page with branding hooks (display name,
   primary color, logo)
+- **Customer auth via AshAuthentication strategies:**
+  - **Sign in with Google** (OAuth2 / OpenID Connect)
+  - **Sign in with Apple** (Sign in with Apple)
+  - **Sign in with Facebook** (OAuth2)
+  - Password (email + password) as fallback
+  - Magic link (email-only) — optional, low priority
+  - Customer is tenant-scoped via JWT `tenant_id` claim — same
+    Google account on two different DrivewayOS tenants creates two
+    independent Customer rows (each with `tenant_id` of that tenant)
 - Service catalog (per tenant; Stripe products live on the tenant's
   Connect account)
 - Booking flow: pick service → pick a block from

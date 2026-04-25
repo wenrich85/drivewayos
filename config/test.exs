@@ -39,3 +39,10 @@ config :phoenix_live_view,
 # Sort query params output of verified routes for robust url comparisons
 config :phoenix,
   sort_verified_routes_query_params: true
+
+# Platform-tier token signing secret (test).
+config :driveway_os,
+       :platform_token_signing_secret,
+       "test-only-platform-secret-change-in-production-at-least-64-chars-long"
+
+config :driveway_os, :platform_host, "lvh.me"
