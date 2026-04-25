@@ -27,6 +27,10 @@ defmodule DrivewayOSWeb.Router do
 
     live "/", LandingLive
     live "/signup", SignupLive
+    live "/sign-in", Auth.SignInLive
+
+    get "/auth/customer/store-token", Auth.SessionController, :store_token
+    get "/auth/customer/sign-out", Auth.SessionController, :sign_out
   end
 
   # Other scopes may use custom stacks.
