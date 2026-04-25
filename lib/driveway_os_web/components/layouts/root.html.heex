@@ -4,7 +4,18 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="csrf-token" content={get_csrf_token()} />
-    <.live_title default="DrivewayOS" suffix=" · Phoenix Framework">
+    <%!-- Title defaults to the tenant's display_name when we're on a
+         tenant subdomain; falls back to "DrivewayOS" on the marketing
+         + admin surfaces. Each LV can still set @page_title to override. --%>
+    <.live_title
+      default={
+        if(assigns[:current_tenant],
+          do: assigns[:current_tenant].display_name,
+          else: "DrivewayOS"
+        )
+      }
+      suffix=""
+    >
       {assigns[:page_title]}
     </.live_title>
     <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
