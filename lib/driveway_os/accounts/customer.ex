@@ -39,9 +39,7 @@ defmodule DrivewayOS.Accounts.Customer do
       require_token_presence_for_authentication? true
       token_lifetime {7, :days}
 
-      signing_secret fn _, _ ->
-        Application.fetch_env(:driveway_os, :token_signing_secret)
-      end
+      signing_secret DrivewayOS.Secrets
     end
 
     strategies do
@@ -50,6 +48,40 @@ defmodule DrivewayOS.Accounts.Customer do
         hashed_password_field :hashed_password
 
         register_action_accept [:name, :phone]
+      end
+
+      # Built-in Google strategy. Credentials sourced from
+      # GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET; redirect URI built
+      # from `:oauth_redirect_base`. When env vars are missing, the
+      # strategy is configured but inert — the redirect endpoint
+      # 500s, but the app boots cleanly.
+      google do
+        client_id DrivewayOS.Secrets
+        client_secret DrivewayOS.Secrets
+        redirect_uri DrivewayOS.Secrets
+      end
+
+      # Generic OAuth2 strategy for Facebook. Pre-filled with FB's
+      # endpoints so only credentials need configuring.
+      oauth2 :facebook do
+        client_id DrivewayOS.Secrets
+        client_secret DrivewayOS.Secrets
+        redirect_uri DrivewayOS.Secrets
+        base_url "https://graph.facebook.com"
+        authorize_url "https://www.facebook.com/v18.0/dialog/oauth"
+        token_url "https://graph.facebook.com/v18.0/oauth/access_token"
+        user_url "https://graph.facebook.com/v18.0/me?fields=id,name,email"
+        auth_method :client_secret_post
+      end
+
+      # Sign in with Apple — uses a JWT-based client_secret minted
+      # from team_id + private_key_id + private_key (P8 file).
+      apple do
+        client_id DrivewayOS.Secrets
+        team_id DrivewayOS.Secrets
+        private_key_id DrivewayOS.Secrets
+        private_key_path DrivewayOS.Secrets
+        redirect_uri DrivewayOS.Secrets
       end
     end
   end
@@ -197,6 +229,45 @@ defmodule DrivewayOS.Accounts.Customer do
 
   actions do
     defaults [:read, update: :*]
+
+    create :register_with_google do
+      argument :user_info, :map, allow_nil?: false
+      argument :oauth_tokens, :map, allow_nil?: false
+
+      upsert? true
+      upsert_identity :unique_email
+      upsert_fields []
+
+      change set_attribute(:role, :customer)
+      change DrivewayOS.Accounts.Changes.SetCustomerFromOAuth
+      change AshAuthentication.GenerateTokenChange
+    end
+
+    create :register_with_facebook do
+      argument :user_info, :map, allow_nil?: false
+      argument :oauth_tokens, :map, allow_nil?: false
+
+      upsert? true
+      upsert_identity :unique_email
+      upsert_fields []
+
+      change set_attribute(:role, :customer)
+      change DrivewayOS.Accounts.Changes.SetCustomerFromOAuth
+      change AshAuthentication.GenerateTokenChange
+    end
+
+    create :register_with_apple do
+      argument :user_info, :map, allow_nil?: false
+      argument :oauth_tokens, :map, allow_nil?: false
+
+      upsert? true
+      upsert_identity :unique_email
+      upsert_fields []
+
+      change set_attribute(:role, :customer)
+      change DrivewayOS.Accounts.Changes.SetCustomerFromOAuth
+      change AshAuthentication.GenerateTokenChange
+    end
   end
 
   defp validate_email_format(email) do
