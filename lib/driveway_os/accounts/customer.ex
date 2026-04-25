@@ -1,0 +1,209 @@
+defmodule DrivewayOS.Accounts.Customer do
+  @moduledoc """
+  Tenant-scoped end customer. Books washes from the tenant they belong
+  to (one Customer row per (tenant, person) — the same human signing
+  in to two DrivewayOS-powered shops gets two separate rows).
+
+  V1 Slice 2A: password authentication only. Slice 2C adds Google,
+  Apple, and Facebook OAuth strategies as additional `strategies do
+  … end` entries. Sign-in flow always happens in a tenant context
+  (the `LoadTenant` plug sets it from the subdomain before the
+  AshAuthentication action runs).
+  """
+  use Ash.Resource,
+    otp_app: :driveway_os,
+    domain: DrivewayOS.Accounts,
+    data_layer: AshPostgres.DataLayer,
+    extensions: [AshAuthentication],
+    authorizers: [Ash.Policy.Authorizer]
+
+  require Ash.Query
+
+  @type t :: %__MODULE__{}
+
+  postgres do
+    table "customers"
+    repo DrivewayOS.Repo
+  end
+
+  multitenancy do
+    strategy :attribute
+    attribute :tenant_id
+    global? false
+  end
+
+  authentication do
+    tokens do
+      enabled? true
+      token_resource DrivewayOS.Accounts.Token
+      require_token_presence_for_authentication? true
+      token_lifetime {7, :days}
+
+      signing_secret fn _, _ ->
+        Application.fetch_env(:driveway_os, :token_signing_secret)
+      end
+    end
+
+    strategies do
+      password :password do
+        identity_field :email
+        hashed_password_field :hashed_password
+
+        register_action_accept [:name, :phone]
+      end
+    end
+  end
+
+  policies do
+    # Authentication actions short-circuit before actor-based policies.
+    # No actor is set during sign-in/registration; the multitenancy
+    # filter still runs (because every action requires `tenant:`),
+    # so isolation is preserved.
+    bypass action(:register_with_password) do
+      authorize_if always()
+    end
+
+    bypass action(:sign_in_with_password) do
+      authorize_if always()
+    end
+
+    bypass action(:sign_in_with_token) do
+      authorize_if always()
+    end
+
+    bypass action(:get_by_subject) do
+      authorize_if always()
+    end
+
+    # Customers can read/update themselves; admins (tenant-scoped) can
+    # read/update any customer in their tenant. Cross-tenant reads are
+    # impossible because multitenancy filters them out at the query
+    # layer.
+    policy action_type(:read) do
+      authorize_if expr(id == ^actor(:id))
+      authorize_if expr(^actor(:role) == :admin)
+    end
+
+    policy action_type(:update) do
+      authorize_if expr(id == ^actor(:id))
+      authorize_if expr(^actor(:role) == :admin)
+    end
+
+    policy action_type(:destroy) do
+      authorize_if expr(^actor(:role) == :admin)
+    end
+  end
+
+  attributes do
+    uuid_primary_key :id
+
+    attribute :tenant_id, :uuid do
+      allow_nil? false
+      public? true
+    end
+
+    attribute :email, :ci_string do
+      allow_nil? false
+      public? true
+    end
+
+    attribute :name, :string do
+      allow_nil? false
+      public? true
+      constraints min_length: 1, max_length: 100
+    end
+
+    attribute :phone, :string do
+      public? true
+      constraints max_length: 30
+    end
+
+    attribute :role, :atom do
+      constraints one_of: [:customer, :technician, :admin, :guest]
+      default :customer
+      allow_nil? false
+      public? true
+    end
+
+    attribute :hashed_password, :string do
+      allow_nil? true
+      sensitive? true
+    end
+
+    # Nil until the user verifies. Soft-gate: unverified accounts are
+    # nudged via banner but not blocked from booking, paying, etc.
+    attribute :email_verified_at, :utc_datetime_usec do
+      public? true
+    end
+
+    create_timestamp :inserted_at
+    update_timestamp :updated_at
+  end
+
+  identities do
+    # Email uniqueness is automatically scoped by tenant_id thanks to
+    # the multitenancy block above — same email can register on two
+    # different tenants without colliding.
+    identity :unique_email, [:email]
+  end
+
+  validations do
+    # Mirrors PlatformUser's password rules. Will be extracted into a
+    # shared `DrivewayOS.Accounts.Validations.Password` if a third
+    # caller appears.
+    validate(
+      fn changeset, _ctx ->
+        case Ash.Changeset.get_argument(changeset, :password) do
+          nil ->
+            :ok
+
+          password when is_binary(password) ->
+            cond do
+              String.length(password) < 10 ->
+                {:error, field: :password, message: "must be at least 10 characters"}
+
+              not String.match?(password, ~r/[A-Z]/) ->
+                {:error, field: :password, message: "must contain at least one uppercase letter"}
+
+              not String.match?(password, ~r/[a-z]/) ->
+                {:error, field: :password, message: "must contain at least one lowercase letter"}
+
+              not String.match?(password, ~r/[0-9]/) ->
+                {:error, field: :password, message: "must contain at least one number"}
+
+              true ->
+                :ok
+            end
+
+          _ ->
+            :ok
+        end
+      end,
+      on: [:create]
+    )
+
+    # Reject obvious email garbage. Permissive enough to allow normal
+    # addresses, strict enough to catch input like "haha" or
+    # "@example.com" before AshAuthentication tries to mail it.
+    validate fn changeset, _ctx ->
+      case Ash.Changeset.get_attribute(changeset, :email) do
+        nil -> :ok
+        %Ash.CiString{} = ci -> validate_email_format(to_string(ci))
+        email when is_binary(email) -> validate_email_format(email)
+        _ -> :ok
+      end
+    end
+  end
+
+  actions do
+    defaults [:read, update: :*]
+  end
+
+  defp validate_email_format(email) do
+    if String.match?(email, ~r/^[^\s@]+@[^\s@]+\.[^\s@]+$/) do
+      :ok
+    else
+      {:error, field: :email, message: "must be a valid email address"}
+    end
+  end
+end

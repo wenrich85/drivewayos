@@ -45,4 +45,9 @@ config :driveway_os,
        :platform_token_signing_secret,
        "test-only-platform-secret-change-in-production-at-least-64-chars-long"
 
+# Customer-tier token signing secret (test).
+config :driveway_os,
+       :token_signing_secret,
+       "test-only-customer-secret-change-in-production-at-least-64-chars-long"
+
 config :driveway_os, :platform_host, "lvh.me"

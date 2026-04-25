@@ -14,7 +14,7 @@ config :driveway_os,
   # Ash domains live here. Each domain module is registered as it's
   # added — V1 starts with Platform (Tenant + PlatformUser) in the
   # first slice.
-  ash_domains: [DrivewayOS.Platform]
+  ash_domains: [DrivewayOS.Platform, DrivewayOS.Accounts]
 
 # Ash conventions
 config :ash,

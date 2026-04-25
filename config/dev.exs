@@ -99,6 +99,14 @@ config :driveway_os,
        System.get_env("PLATFORM_TOKEN_SIGNING_SECRET") ||
          "dev-only-platform-secret-change-in-production-at-least-64-chars"
 
+# Customer-tier token signing secret. End-customers signing in to a
+# tenant's branded shop. Separate from the platform secret so each
+# population can rotate independently.
+config :driveway_os,
+       :token_signing_secret,
+       System.get_env("TOKEN_SIGNING_SECRET") ||
+         "dev-only-customer-secret-change-in-production-at-least-64-chars"
+
 # Local subdomain routing — `*.lvh.me` resolves to 127.0.0.1 in public
 # DNS, so no `/etc/hosts` edits needed. `acme.lvh.me:4000` → tenant
 # "acme", `lvh.me:4000` → marketing, `admin.lvh.me:4000` → platform admin.

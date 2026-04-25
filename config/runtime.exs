@@ -108,6 +108,12 @@ if config_env() == :prod do
       System.get_env("PLATFORM_TOKEN_SIGNING_SECRET") ||
         raise("PLATFORM_TOKEN_SIGNING_SECRET is required")
 
+  # Customer-tier token signing secret. End-customers signing in to a
+  # tenant's branded shop.
+  config :driveway_os,
+    token_signing_secret:
+      System.get_env("TOKEN_SIGNING_SECRET") || raise("TOKEN_SIGNING_SECRET is required")
+
   # Top-level platform host (e.g. "drivewayos.com"). Tenants live at
   # `{slug}.<platform_host>`.
   config :driveway_os,
