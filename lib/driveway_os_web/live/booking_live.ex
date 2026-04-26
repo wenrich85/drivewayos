@@ -473,7 +473,8 @@ defmodule DrivewayOSWeb.BookingLive do
       "vehicle_description" => "",
       "address_id" => nil,
       "service_address" => "",
-      "notes" => ""
+      "notes" => "",
+      "acquisition_channel" => ""
     }
   end
 
@@ -608,9 +609,35 @@ defmodule DrivewayOSWeb.BookingLive do
 
   defp merge_schedule_step(data, params) do
     Map.merge(data, %{
-      "notes" => params["notes"] || data["notes"] || ""
+      "notes" => params["notes"] || data["notes"] || "",
+      "acquisition_channel" =>
+        params["acquisition_channel"] || data["acquisition_channel"] || ""
     })
   end
+
+  # Fixed list for the V1 wizard. Values are stored as the literal
+  # string in `Appointment.acquisition_channel` so simple aggregate
+  # queries on the operator side work without a join.
+  @acquisition_channels [
+    "Friend / family",
+    "Google",
+    "Instagram / Facebook",
+    "Drove by",
+    "Returning customer",
+    "Other"
+  ]
+
+  defp acquisition_channels, do: @acquisition_channels
+
+  defp presence(""), do: nil
+  defp presence(nil), do: nil
+  defp presence(s) when is_binary(s) do
+    case String.trim(s) do
+      "" -> nil
+      v -> v
+    end
+  end
+  defp presence(other), do: other
 
   defp noreply(socket), do: {:noreply, socket}
 
@@ -688,7 +715,8 @@ defmodule DrivewayOSWeb.BookingLive do
         vehicle_description: data["vehicle_description"] |> to_string() |> String.trim(),
         address_id: data["address_id"],
         service_address: data["service_address"] |> to_string() |> String.trim(),
-        notes: data["notes"]
+        notes: data["notes"],
+        acquisition_channel: data["acquisition_channel"] |> presence()
       },
       tenant: tenant.id
     )
@@ -1279,6 +1307,27 @@ defmodule DrivewayOSWeb.BookingLive do
               placeholder="Gate code, special requests, etc."
               class="textarea textarea-bordered w-full"
             >{@wizard_data["notes"]}</textarea>
+          </div>
+
+          <div>
+            <label class="label" for="booking-acquisition">
+              <span class="label-text font-medium">How did you hear about us?</span>
+              <span class="label-text-alt text-base-content/50">Optional</span>
+            </label>
+            <select
+              id="booking-acquisition"
+              name="booking[acquisition_channel]"
+              class="select select-bordered w-full"
+            >
+              <option value="">— Skip —</option>
+              <option
+                :for={channel <- acquisition_channels()}
+                value={channel}
+                selected={@wizard_data["acquisition_channel"] == channel}
+              >
+                {channel}
+              </option>
+            </select>
           </div>
 
           <div class="flex justify-between pt-2">

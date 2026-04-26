@@ -132,6 +132,15 @@ defmodule DrivewayOS.Scheduling.Appointment do
       public? true
     end
 
+    # Optional self-reported channel from the booking wizard
+    # ("How did you hear about us?"). Free-form string so future
+    # tenant-customized values land cleanly; the V1 wizard renders
+    # a fixed dropdown defined in BookingLive.@acquisition_channels.
+    attribute :acquisition_channel, :string do
+      public? true
+      constraints max_length: 60
+    end
+
     create_timestamp :inserted_at
     update_timestamp :updated_at
   end
@@ -180,7 +189,8 @@ defmodule DrivewayOS.Scheduling.Appointment do
         :service_address,
         :notes,
         :vehicle_id,
-        :address_id
+        :address_id,
+        :acquisition_channel
       ]
 
       validate compare(:scheduled_at, greater_than: &DateTime.utc_now/0),

@@ -708,6 +708,95 @@ defmodule DrivewayOSWeb.BookingLiveTest do
     end
   end
 
+  describe "acquisition channel" do
+    test "schedule step renders the dropdown + persists the value", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/book")
+
+      service_id = extract_service_id(html, "basic")
+
+      lv
+      |> form("#step-service-form", %{"booking" => %{"service_type_id" => service_id}})
+      |> render_submit()
+
+      lv
+      |> form("#step-vehicle-text-form", %{
+        "booking" => %{"vehicle_description" => "Wagon"}
+      })
+      |> render_submit()
+
+      html =
+        lv
+        |> form("#step-address-text-form", %{
+          "booking" => %{"service_address" => "1 Main"}
+        })
+        |> render_submit()
+
+      assert html =~ "How did you hear about us?"
+      assert html =~ "Friend / family"
+      assert html =~ "Drove by"
+
+      future = DateTime.utc_now() |> DateTime.add(2 * 86_400, :second)
+
+      lv
+      |> form("#booking-form", %{
+        "booking" => %{
+          "scheduled_at" => DateTime.to_iso8601(future) |> String.slice(0, 16),
+          "acquisition_channel" => "Google"
+        }
+      })
+      |> render_submit()
+
+      {:ok, [appt]} =
+        Appointment |> Ash.Query.set_tenant(ctx.tenant.id) |> Ash.read(authorize?: false)
+
+      assert appt.acquisition_channel == "Google"
+    end
+
+    test "blank acquisition_channel saves as nil, not empty string", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/book")
+
+      service_id = extract_service_id(html, "basic")
+
+      lv
+      |> form("#step-service-form", %{"booking" => %{"service_type_id" => service_id}})
+      |> render_submit()
+
+      lv
+      |> form("#step-vehicle-text-form", %{
+        "booking" => %{"vehicle_description" => "Wagon"}
+      })
+      |> render_submit()
+
+      lv
+      |> form("#step-address-text-form", %{
+        "booking" => %{"service_address" => "1 Main"}
+      })
+      |> render_submit()
+
+      future = DateTime.utc_now() |> DateTime.add(2 * 86_400, :second)
+
+      lv
+      |> form("#booking-form", %{
+        "booking" => %{
+          "scheduled_at" => DateTime.to_iso8601(future) |> String.slice(0, 16),
+          "acquisition_channel" => ""
+        }
+      })
+      |> render_submit()
+
+      {:ok, [appt]} =
+        Appointment |> Ash.Query.set_tenant(ctx.tenant.id) |> Ash.read(authorize?: false)
+
+      assert appt.acquisition_channel == nil
+    end
+  end
+
   describe "rebook from a prior appointment" do
     test "?from=<id> prefills the wizard at :vehicle with prior service + address", ctx do
       # Promote tenant to Pro so saved-vehicle path is exercised. Add
