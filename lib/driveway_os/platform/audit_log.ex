@@ -38,6 +38,7 @@ defmodule DrivewayOS.Platform.AuditLog do
     :tenant_impersonated,
     # Tenant-side (initiated by tenant admin)
     :appointment_refunded,
+    :appointment_payment_failed,
     :appointment_confirmed,
     :appointment_cancelled,
     :tenant_branding_updated,

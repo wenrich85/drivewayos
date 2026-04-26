@@ -107,9 +107,70 @@ defmodule DrivewayOSWeb.StripeWebhookController do
                |> Ash.Query.set_tenant(tenant.id)
                |> Ash.read(authorize?: false) do
             {:ok, [appt | _]} ->
+              # Idempotent: if the admin-side refund button already
+              # flipped this row, the second flip is a no-op. We
+              # still log an audit entry — the Stripe-initiated
+              # path is distinct from the admin path even though
+              # the resulting state matches.
+              if appt.payment_status != :refunded do
+                appt
+                |> Ash.Changeset.for_update(:mark_refunded, %{})
+                |> Ash.update!(authorize?: false, tenant: tenant.id)
+              end
+
+              Platform.log_audit!(%{
+                action: :appointment_refunded,
+                tenant_id: tenant.id,
+                target_type: "Appointment",
+                target_id: appt.id,
+                payload: %{
+                  "source" => "stripe_webhook",
+                  "stripe_payment_intent_id" => pi_id,
+                  "amount_refunded_cents" => get_in(data, ["object", "amount_refunded"])
+                }
+              })
+
+            _ ->
+              :ok
+          end
+        end
+
+        :ok
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp process_event(
+         %{"type" => "payment_intent.payment_failed", "account" => account_id, "data" => data}
+       ) do
+    case Platform.get_tenant_by_stripe_account(account_id) do
+      {:ok, tenant} ->
+        pi_id = get_in(data, ["object", "id"])
+
+        if is_binary(pi_id) do
+          case Appointment
+               |> Ash.Query.for_read(:by_payment_intent, %{payment_intent_id: pi_id})
+               |> Ash.Query.set_tenant(tenant.id)
+               |> Ash.read(authorize?: false) do
+            {:ok, [appt | _]} ->
               appt
-              |> Ash.Changeset.for_update(:mark_refunded, %{})
+              |> Ash.Changeset.for_update(:mark_payment_failed, %{})
               |> Ash.update!(authorize?: false, tenant: tenant.id)
+
+              Platform.log_audit!(%{
+                action: :appointment_payment_failed,
+                tenant_id: tenant.id,
+                target_type: "Appointment",
+                target_id: appt.id,
+                payload: %{
+                  "source" => "stripe_webhook_payment_failed",
+                  "stripe_payment_intent_id" => pi_id,
+                  "failure_message" =>
+                    get_in(data, ["object", "last_payment_error", "message"]) || "unknown"
+                }
+              })
 
             _ ->
               :ok

@@ -114,7 +114,12 @@ defmodule DrivewayOS.Scheduling.Appointment do
     end
 
     attribute :payment_status, :atom do
-      constraints one_of: [:unpaid, :pending, :paid, :refunded]
+      # `:failed` is set by the `payment_intent.payment_failed`
+      # webhook (or any other declined-charge signal). The customer
+      # can retry by re-running the booking; we don't auto-retry on
+      # the operator's behalf because Stripe's own retry rules
+      # already handle transient declines.
+      constraints one_of: [:unpaid, :pending, :paid, :refunded, :failed]
       default :unpaid
       allow_nil? false
       public? true
@@ -265,6 +270,22 @@ defmodule DrivewayOS.Scheduling.Appointment do
 
     update :mark_refunded do
       change set_attribute(:payment_status, :refunded)
+    end
+
+    update :mark_payment_failed do
+      change set_attribute(:payment_status, :failed)
+    end
+
+    read :by_payment_intent_or_session do
+      argument :payment_intent_id, :string
+      argument :session_id, :string
+
+      filter expr(
+               (not is_nil(^arg(:payment_intent_id)) and
+                  stripe_payment_intent_id == ^arg(:payment_intent_id)) or
+                 (not is_nil(^arg(:session_id)) and
+                    stripe_checkout_session_id == ^arg(:session_id))
+             )
     end
 
     update :mark_reminder_sent do
