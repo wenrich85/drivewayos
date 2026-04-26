@@ -27,7 +27,10 @@ defmodule DrivewayOSWeb.Features.EndToEndTest do
     feature "landing page renders DrivewayOS branding", %{session: session} do
       session
       |> visit(marketing_url("/"))
-      |> assert_has(css("h1", text: "DrivewayOS"))
+      # Post design-system refactor: h1 is the value-prop ("operating
+      # system for mobile detail shops"); brand name appears in the
+      # eyebrow + page title instead.
+      |> assert_has(css("h1", text: "operating system for mobile detail shops"))
       |> assert_has(link("Start your shop"))
     end
 
@@ -142,42 +145,62 @@ defmodule DrivewayOSWeb.Features.EndToEndTest do
 
       sign_in_as(session, tenant, email)
 
+      # Step 1: service picker. Wallaby's `fill_in` types keystrokes —
+      # wrong for `<select>` (no input event), so we set value via
+      # JS + dispatch change. Then click Next.
       session
       |> visit(tenant_url(tenant, "/book"))
       |> assert_has(css("h1", text: "Book a wash"))
       |> assert_has(css("option", text: "Basic Wash"))
 
-      # Wallaby's `fill_in` types keystrokes — that's wrong for
-      # `<select>` (no input event) and wrong for `<input
-      # type="datetime-local">` (the browser interprets each digit
-      # against the localized MM/DD/YYYY mask, giving us garbage like
-      # year 60428). For both, set the value via JS + dispatch
-      # change so LV's form serializer picks it up at submit time.
       Wallaby.Browser.execute_script(session, """
         (function() {
           const sel = document.querySelector('select[name="booking[service_type_id]"]');
           const opt = Array.from(sel.options).find(o => o.text.includes('Basic Wash'));
           sel.value = opt.value;
           sel.dispatchEvent(new Event('change', { bubbles: true }));
+        })();
+      """)
 
+      session |> click(button("Next"))
+
+      # Step 2: vehicle. Pro+ (default) tenant + no saved vehicles →
+      # render the structured `:new` form. Fill required fields.
+      session
+      |> assert_has(css("form#step-vehicle-new-form"))
+      |> fill_in(fillable_field("vehicle[year]"), with: "2022")
+      |> fill_in(fillable_field("vehicle[color]"), with: "Blue")
+      |> fill_in(fillable_field("vehicle[make]"), with: "Subaru")
+      |> fill_in(fillable_field("vehicle[model]"), with: "Outback")
+      |> click(button("Save & continue"))
+
+      # Step 3: address. Same pattern — structured `:new` form.
+      session
+      |> assert_has(css("form#step-address-new-form"))
+      |> fill_in(fillable_field("address[street_line1]"), with: "123 Cedar St")
+      |> fill_in(fillable_field("address[city]"), with: "San Antonio")
+      |> fill_in(fillable_field("address[state]"), with: "TX")
+      |> fill_in(fillable_field("address[zip]"), with: "78261")
+      |> click(button("Save & continue"))
+
+      # Step 4: schedule. datetime-local has the same keystroke
+      # problem; set via JS.
+      session
+      |> assert_has(css("form#booking-form"))
+
+      Wallaby.Browser.execute_script(session, """
+        (function() {
           const dt = document.querySelector('input[name="booking[scheduled_at]"]');
           dt.value = '#{future_str}';
           dt.dispatchEvent(new Event('change', { bubbles: true }));
         })();
       """)
 
-      session
-      |> fill_in(fillable_field("booking[vehicle_description]"),
-        with: "Blue 2022 Subaru Outback"
-      )
-      |> fill_in(fillable_field("booking[service_address]"),
-        with: "123 Cedar St, San Antonio TX 78261"
-      )
-      |> click(button("Book it"))
+      session |> click(button("Book it"))
 
       # Lands on confirmation page.
       assert_has(session, css("h1", text: "Your booking is in"))
-      assert_has(session, css("body", text: "Blue 2022 Subaru Outback"))
+      assert_has(session, css("body", text: "2022 Subaru Outback"))
     end
   end
 
@@ -225,9 +248,13 @@ defmodule DrivewayOSWeb.Features.EndToEndTest do
 
       session
       |> visit(tenant_url(tenant, "/admin"))
-      |> assert_has(css("h1", text: "Admin · Owned & Operated"))
-      |> assert_has(css(".stat-title", text: "Pending"))
-      |> assert_has(css(".stat-title", text: "Customers"))
+      # Post design-system refactor: tenant display_name is the h1
+      # ("Admin" is an eyebrow caption above it). Stat-title labels
+      # are rendered uppercased via Tailwind's `uppercase` class —
+      # Wallaby reads the rendered text, not the DOM source.
+      |> assert_has(css("h1", text: "Owned & Operated"))
+      |> assert_has(css(".stat-title", text: "PENDING"))
+      |> assert_has(css(".stat-title", text: "CUSTOMERS"))
     end
   end
 
