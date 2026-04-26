@@ -55,65 +55,84 @@ defmodule DrivewayOSWeb.Auth.SignInLive do
   def render(assigns) do
     ~H"""
     <main class="min-h-screen flex items-center justify-center bg-base-200 px-4 py-12">
-      <div class="card w-full max-w-md bg-base-100 shadow-lg">
-        <div class="card-body">
-          <h1 class="card-title text-2xl">Sign in</h1>
-          <p class="text-base-content/70 mb-2">
-            Welcome back to {@current_tenant.display_name}.
+      <div class="w-full max-w-md space-y-6">
+        <header class="text-center space-y-2">
+          <h1 class="text-3xl font-bold tracking-tight">Sign in</h1>
+          <p class="text-sm text-base-content/70">
+            Welcome back to <span class="font-semibold">{@current_tenant.display_name}</span>.
           </p>
+        </header>
 
-          <div :if={@error} class="alert alert-error text-sm">{@error}</div>
-
-          <form id="sign-in-form" phx-submit="submit" class="space-y-4">
-            <div>
-              <label class="label" for="signin-email">
-                <span class="label-text">Email</span>
-              </label>
-              <input
-                id="signin-email"
-                type="email"
-                name="signin[email]"
-                value={@form_email}
-                class="input input-bordered w-full"
-                required
-              />
+        <section class="card bg-base-100 shadow-sm border border-base-300">
+          <div class="card-body p-6 space-y-4">
+            <div :if={@error} role="alert" class="alert alert-error">
+              <span class="hero-exclamation-circle w-5 h-5 shrink-0" aria-hidden="true"></span>
+              <span class="text-sm">{@error}</span>
             </div>
 
-            <div>
-              <label class="label" for="signin-password">
-                <span class="label-text">Password</span>
-              </label>
-              <input
-                id="signin-password"
-                type="password"
-                name="signin[password]"
-                class="input input-bordered w-full"
-                required
-              />
+            <form id="sign-in-form" phx-submit="submit" class="space-y-4">
+              <div>
+                <label class="label" for="signin-email">
+                  <span class="label-text font-medium">Email</span>
+                </label>
+                <input
+                  id="signin-email"
+                  type="email"
+                  name="signin[email]"
+                  value={@form_email}
+                  autocomplete="email"
+                  class="input input-bordered w-full"
+                  required
+                />
+              </div>
+
+              <div>
+                <label class="label" for="signin-password">
+                  <span class="label-text font-medium">Password</span>
+                </label>
+                <input
+                  id="signin-password"
+                  type="password"
+                  name="signin[password]"
+                  autocomplete="current-password"
+                  class="input input-bordered w-full"
+                  required
+                />
+              </div>
+
+              <button type="submit" class="btn btn-primary w-full gap-2">
+                <span class="hero-arrow-right-on-rectangle w-5 h-5" aria-hidden="true"></span>
+                Sign in
+              </button>
+            </form>
+
+            <div class="divider text-xs my-2">or</div>
+
+            <a href="/magic-link" class="btn btn-ghost w-full gap-2">
+              <span class="hero-envelope w-5 h-5" aria-hidden="true"></span>
+              Email me a sign-in link
+            </a>
+
+            <div class="divider text-xs my-2">or continue with</div>
+
+            <div class="grid grid-cols-3 gap-2">
+              <a href="/auth/customer/google" class="btn btn-outline btn-sm" aria-label="Sign in with Google">
+                <span class="hero-globe-alt w-4 h-4" aria-hidden="true"></span> Google
+              </a>
+              <a href="/auth/customer/facebook" class="btn btn-outline btn-sm" aria-label="Sign in with Facebook">
+                Facebook
+              </a>
+              <a href="/auth/customer/apple" class="btn btn-outline btn-sm" aria-label="Sign in with Apple">
+                Apple
+              </a>
             </div>
-
-            <button type="submit" class="btn btn-primary w-full">Sign in</button>
-          </form>
-
-          <div class="divider text-xs">or</div>
-
-          <a href="/magic-link" class="btn btn-ghost btn-sm">
-            Email me a sign-in link instead
-          </a>
-
-          <div class="divider text-xs">or continue with</div>
-
-          <div class="space-y-2">
-            <a href="/auth/customer/google" class="btn btn-outline w-full">Google</a>
-            <a href="/auth/customer/facebook" class="btn btn-outline w-full">Facebook</a>
-            <a href="/auth/customer/apple" class="btn btn-outline w-full">Apple</a>
           </div>
+        </section>
 
-          <%!-- Customer self-registration form lands in a follow-up
-               slice. For now, OAuth providers above (when configured)
-               handle new-user signup as a side effect of first sign-in
-               via the `:register_with_*` upserting actions. --%>
-        </div>
+        <p class="text-center text-sm text-base-content/60">
+          Don't have an account yet?
+          <a href="/register" class="link link-primary font-medium">Create one</a>
+        </p>
       </div>
     </main>
     """

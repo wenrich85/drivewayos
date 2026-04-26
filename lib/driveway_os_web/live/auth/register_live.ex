@@ -73,86 +73,102 @@ defmodule DrivewayOSWeb.Auth.RegisterLive do
   def render(assigns) do
     ~H"""
     <main class="min-h-screen flex items-center justify-center bg-base-200 px-4 py-12">
-      <div class="card w-full max-w-md bg-base-100 shadow-lg">
-        <div class="card-body">
-          <h1 class="card-title text-2xl">Create your account</h1>
-          <p class="text-base-content/70 mb-2">
-            Sign up to book at {@current_tenant.display_name}.
+      <div class="w-full max-w-md space-y-6">
+        <header class="text-center space-y-2">
+          <h1 class="text-3xl font-bold tracking-tight">Create your account</h1>
+          <p class="text-sm text-base-content/70">
+            Sign up to book at <span class="font-semibold">{@current_tenant.display_name}</span>.
           </p>
+        </header>
 
-          <div :if={@errors[:base]} class="alert alert-error text-sm">{@errors[:base]}</div>
-
-          <form id="register-form" phx-submit="submit" class="space-y-4">
-            <div>
-              <label class="label" for="register-name">
-                <span class="label-text">Your name</span>
-              </label>
-              <input
-                id="register-name"
-                type="text"
-                name="register[name]"
-                value={@form["name"]}
-                class="input input-bordered w-full"
-                required
-              />
-              <p :if={@errors[:name]} class="text-error text-sm mt-1">{@errors[:name]}</p>
+        <section class="card bg-base-100 shadow-sm border border-base-300">
+          <div class="card-body p-6 space-y-4">
+            <div :if={@errors[:base]} role="alert" class="alert alert-error">
+              <span class="hero-exclamation-circle w-5 h-5 shrink-0" aria-hidden="true"></span>
+              <span class="text-sm">{@errors[:base]}</span>
             </div>
 
-            <div>
-              <label class="label" for="register-email">
-                <span class="label-text">Email</span>
-              </label>
-              <input
-                id="register-email"
-                type="email"
-                name="register[email]"
-                value={@form["email"]}
-                class="input input-bordered w-full"
-                required
-              />
-              <p :if={@errors[:email]} class="text-error text-sm mt-1">{@errors[:email]}</p>
-            </div>
+            <form id="register-form" phx-submit="submit" class="space-y-4">
+              <div>
+                <label class="label" for="register-name">
+                  <span class="label-text font-medium">Your name</span>
+                </label>
+                <input
+                  id="register-name"
+                  type="text"
+                  name="register[name]"
+                  value={@form["name"]}
+                  autocomplete="name"
+                  class="input input-bordered w-full"
+                  required
+                />
+                <p :if={@errors[:name]} class="text-error text-xs mt-1">{@errors[:name]}</p>
+              </div>
 
-            <div>
-              <label class="label" for="register-phone">
-                <span class="label-text">Phone (optional)</span>
-              </label>
-              <input
-                id="register-phone"
-                type="tel"
-                name="register[phone]"
-                value={@form["phone"]}
-                placeholder="+1 512 555 0100"
-                class="input input-bordered w-full"
-              />
-            </div>
+              <div>
+                <label class="label" for="register-email">
+                  <span class="label-text font-medium">Email</span>
+                </label>
+                <input
+                  id="register-email"
+                  type="email"
+                  name="register[email]"
+                  value={@form["email"]}
+                  autocomplete="email"
+                  class="input input-bordered w-full"
+                  required
+                />
+                <p :if={@errors[:email]} class="text-error text-xs mt-1">{@errors[:email]}</p>
+              </div>
 
-            <div>
-              <label class="label" for="register-password">
-                <span class="label-text">Password</span>
-              </label>
-              <input
-                id="register-password"
-                type="password"
-                name="register[password]"
-                class="input input-bordered w-full"
-                required
-              />
-              <p class="text-xs text-base-content/60 mt-1">
-                10+ chars, at least one upper, one lower, one digit.
-              </p>
-              <p :if={@errors[:password]} class="text-error text-sm mt-1">
-                {@errors[:password]}
-              </p>
-            </div>
+              <div>
+                <label class="label" for="register-phone">
+                  <span class="label-text font-medium">Phone</span>
+                  <span class="label-text-alt text-base-content/50">Optional</span>
+                </label>
+                <input
+                  id="register-phone"
+                  type="tel"
+                  name="register[phone]"
+                  value={@form["phone"]}
+                  autocomplete="tel"
+                  placeholder="+1 512 555 0100"
+                  class="input input-bordered w-full"
+                />
+              </div>
 
-            <button type="submit" class="btn btn-primary w-full">Create account</button>
-          </form>
+              <div>
+                <label class="label" for="register-password">
+                  <span class="label-text font-medium">Password</span>
+                </label>
+                <input
+                  id="register-password"
+                  type="password"
+                  name="register[password]"
+                  autocomplete="new-password"
+                  class="input input-bordered w-full"
+                  required
+                />
+                <p class="text-xs text-base-content/60 mt-1">
+                  10+ characters · at least one upper, one lower, one digit.
+                </p>
+                <p :if={@errors[:password]} class="text-error text-xs mt-1">
+                  {@errors[:password]}
+                </p>
+              </div>
 
-          <p class="text-sm text-center text-base-content/70 mt-4">
-            Already have an account? <.link patch={~p"/sign-in"} class="link">Sign in</.link>
-          </p>
-        </div>
+              <button type="submit" class="btn btn-primary w-full gap-2">
+                <span class="hero-user-plus w-5 h-5" aria-hidden="true"></span>
+                Create account
+              </button>
+            </form>
+          </div>
+        </section>
+
+        <p class="text-center text-sm text-base-content/60">
+          Already have an account?
+          <.link patch={~p"/sign-in"} class="link link-primary font-medium">Sign in</.link>
+        </p>
       </div>
     </main>
     """

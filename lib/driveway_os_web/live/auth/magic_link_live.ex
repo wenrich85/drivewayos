@@ -109,36 +109,56 @@ defmodule DrivewayOSWeb.Auth.MagicLinkLive do
   def render(assigns) do
     ~H"""
     <main class="min-h-screen flex items-center justify-center bg-base-200 px-4 py-12">
-      <div class="card w-full max-w-md bg-base-100 shadow-lg">
-        <div class="card-body">
-          <h1 class="card-title text-2xl">Email me a sign-in link</h1>
-          <p class="text-base-content/70 mb-2">
-            We'll send you a one-click link to {@current_tenant.display_name}.
+      <div class="w-full max-w-md space-y-6">
+        <header class="text-center space-y-2">
+          <h1 class="text-3xl font-bold tracking-tight">Email me a sign-in link</h1>
+          <p class="text-sm text-base-content/70">
+            One-click access to <span class="font-semibold">{@current_tenant.display_name}</span>.
+            No password needed.
           </p>
+        </header>
 
-          <div :if={@sent?} class="alert alert-success text-sm">
-            Check your email. If your address is on file, you'll have a sign-in link in a few seconds.
-          </div>
-
-          <form :if={not @sent?} id="magic-link-form" phx-submit="submit" class="space-y-4">
-            <div>
-              <label class="label" for="ml-email">
-                <span class="label-text">Email</span>
-              </label>
-              <input
-                id="ml-email"
-                type="email"
-                name="signin[email]"
-                class="input input-bordered w-full"
-                required
-              />
+        <section class="card bg-base-100 shadow-sm border border-base-300">
+          <div class="card-body p-6 space-y-4">
+            <div :if={@sent?} role="alert" class="alert alert-success">
+              <span class="hero-check-circle w-5 h-5 shrink-0" aria-hidden="true"></span>
+              <div class="flex-1 text-sm">
+                <div class="font-semibold">Check your email</div>
+                <div class="opacity-80">
+                  If your address is on file, you'll have a sign-in link in a few seconds.
+                </div>
+              </div>
             </div>
-            <button type="submit" class="btn btn-primary w-full">Email me a link</button>
-          </form>
 
-          <div class="divider text-xs">or</div>
-          <a href={~p"/sign-in"} class="btn btn-ghost btn-sm">Sign in with password instead</a>
-        </div>
+            <form :if={not @sent?} id="magic-link-form" phx-submit="submit" class="space-y-4">
+              <div>
+                <label class="label" for="ml-email">
+                  <span class="label-text font-medium">Email</span>
+                </label>
+                <input
+                  id="ml-email"
+                  type="email"
+                  name="signin[email]"
+                  autocomplete="email"
+                  class="input input-bordered w-full"
+                  required
+                />
+              </div>
+
+              <button type="submit" class="btn btn-primary w-full gap-2">
+                <span class="hero-envelope w-5 h-5" aria-hidden="true"></span>
+                Email me a link
+              </button>
+            </form>
+
+            <div class="divider text-xs my-2">or</div>
+
+            <a href={~p"/sign-in"} class="btn btn-ghost w-full gap-2">
+              <span class="hero-key w-5 h-5" aria-hidden="true"></span>
+              Sign in with password
+            </a>
+          </div>
+        </section>
       </div>
     </main>
     """
