@@ -137,7 +137,10 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
               Welcome back, {@current_customer.name}.
             </p>
           </div>
-          <div class="flex gap-2">
+          <div class="flex gap-2 flex-wrap">
+            <a href="/admin/appointments" class="btn btn-ghost btn-sm">Appointments</a>
+            <a href="/admin/customers" class="btn btn-ghost btn-sm">Customers</a>
+            <a href="/admin/services" class="btn btn-ghost btn-sm">Services</a>
             <a href="/admin/schedule" class="btn btn-ghost btn-sm">Schedule</a>
             <a href="/admin/domains" class="btn btn-ghost btn-sm">Domains</a>
             <a href="/auth/customer/sign-out" class="btn btn-ghost btn-sm">Sign out</a>
