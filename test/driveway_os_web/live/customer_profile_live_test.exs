@@ -138,6 +138,39 @@ defmodule DrivewayOSWeb.CustomerProfileLiveTest do
     end
   end
 
+  describe "email verification banner" do
+    test "shows when current_customer.email_verified_at is nil", %{
+      conn: conn,
+      tenant: tenant,
+      customer: customer
+    } do
+      conn = sign_in(conn, customer)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{tenant.slug}.lvh.me") |> live(~p"/me")
+
+      assert html =~ "Verify your email"
+      assert html =~ "/auth/customer/resend-verification"
+    end
+
+    test "hides once email_verified_at is set", %{
+      conn: conn,
+      tenant: tenant,
+      customer: customer
+    } do
+      customer
+      |> Ash.Changeset.for_update(:verify_email, %{})
+      |> Ash.update!(authorize?: false)
+
+      conn = sign_in(conn, customer)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{tenant.slug}.lvh.me") |> live(~p"/me")
+
+      refute html =~ "Verify your email"
+    end
+  end
+
   describe "edit profile (name/phone)" do
     test "Edit toggles inline form, save persists name + phone", ctx do
       conn = sign_in(ctx.conn, ctx.customer)

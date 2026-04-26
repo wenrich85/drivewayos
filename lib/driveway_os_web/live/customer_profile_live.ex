@@ -241,6 +241,26 @@ defmodule DrivewayOSWeb.CustomerProfileLive do
           </nav>
         </header>
 
+        <div
+          :if={is_nil(@current_customer.email_verified_at)}
+          class="alert alert-warning shadow-sm"
+          role="alert"
+        >
+          <span class="hero-exclamation-triangle w-5 h-5 shrink-0" aria-hidden="true"></span>
+          <div class="flex-1 text-sm">
+            <span class="font-semibold">Verify your email</span>
+            — check your inbox for the link we sent when you signed up.
+          </div>
+          <form action="/auth/customer/resend-verification" method="post" class="m-0">
+            <input
+              type="hidden"
+              name="_csrf_token"
+              value={Phoenix.Controller.get_csrf_token()}
+            />
+            <button class="btn btn-sm" type="submit">Resend</button>
+          </form>
+        </div>
+
         <section class="card bg-base-100 shadow-sm border border-base-300">
           <div class="card-body p-6">
             <div class="flex items-center justify-between gap-2">
