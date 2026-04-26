@@ -55,6 +55,7 @@ config :driveway_os,
        "test-only-customer-secret-change-in-production-at-least-64-chars-long"
 
 config :driveway_os, :platform_host, "lvh.me"
+config :driveway_os, :session_cookie_domain, ".lvh.me"
 
 # Stripe placeholders (test env). Mox replaces all real API calls.
 config :driveway_os, :stripe_client_id, "ca_test_placeholder"

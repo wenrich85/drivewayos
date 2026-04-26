@@ -111,3 +111,11 @@ config :driveway_os,
 # DNS, so no `/etc/hosts` edits needed. `acme.lvh.me:4000` → tenant
 # "acme", `lvh.me:4000` → marketing, `admin.lvh.me:4000` → platform admin.
 config :driveway_os, :platform_host, System.get_env("PLATFORM_HOST") || "lvh.me"
+
+# Session cookie domain — leading-dot scope so the cookie set on
+# `admin.lvh.me` is also sent to `<slug>.lvh.me`. Load-bearing for
+# platform-admin impersonation: the controller writes a customer
+# token on the platform host then redirects to the tenant subdomain;
+# without a shared cookie domain that token is dropped on the floor
+# and the operator lands on a sign-in page instead of /admin.
+config :driveway_os, :session_cookie_domain, ".lvh.me"

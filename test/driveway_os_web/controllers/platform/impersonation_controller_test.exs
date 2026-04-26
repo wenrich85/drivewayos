@@ -77,4 +77,19 @@ defmodule DrivewayOSWeb.Platform.ImpersonationControllerTest do
                (conn.status == 302 and redirected_to(conn) != tenant.slug)
     end
   end
+
+  describe "session cookie domain" do
+    # Load-bearing for impersonation: the cookie set on
+    # admin.<host> must be readable on <slug>.<host>. Phoenix's
+    # Plug.Session reads :domain from compile-time options; a
+    # missing or wrong domain silently scopes the cookie to the
+    # exact admin host, which would bounce the operator straight
+    # back to /sign-in on the tenant subdomain (looks like a
+    # crash from the user's POV).
+    test "is configured to span subdomains so impersonation can carry across" do
+      domain = Application.fetch_env!(:driveway_os, :session_cookie_domain)
+      assert is_binary(domain)
+      assert String.starts_with?(domain, ".")
+    end
+  end
 end

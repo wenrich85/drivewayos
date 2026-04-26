@@ -4,11 +4,23 @@ defmodule DrivewayOSWeb.Endpoint do
   # The session will be stored in the cookie and signed,
   # this means its contents can be read but not tampered with.
   # Set :encryption_salt if you would also like to encrypt it.
+  #
+  # `:domain` is scoped to the parent host so the same session
+  # carries across `admin.<host>`, `<tenant>.<host>`, and the bare
+  # `<host>` — load-bearing for platform-admin impersonation, which
+  # writes a customer_token on `admin.<host>` and redirects to
+  # `<slug>.<host>`. Without the leading-dot domain, that cookie
+  # would not be sent to the tenant subdomain and the operator
+  # would land on a sign-in page instead of the impersonated
+  # admin dashboard.
   @session_options [
     store: :cookie,
     key: "_driveway_os_key",
     signing_salt: "GKP6qHMT",
-    same_site: "Lax"
+    same_site: "Lax",
+    domain:
+      Application.compile_env(:driveway_os, :session_cookie_domain) ||
+        ".lvh.me"
   ]
 
   socket "/live", Phoenix.LiveView.Socket,
