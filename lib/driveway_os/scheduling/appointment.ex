@@ -124,6 +124,14 @@ defmodule DrivewayOS.Scheduling.Appointment do
       public? true
     end
 
+    # Stamped by the ReminderScheduler GenServer right after it
+    # dispatches the 24h-before-the-appointment reminder email.
+    # Set-once: queries find the next batch by `is_nil(reminder_sent_at)`,
+    # so reprocessing the same row is impossible.
+    attribute :reminder_sent_at, :utc_datetime_usec do
+      public? true
+    end
+
     create_timestamp :inserted_at
     update_timestamp :updated_at
   end
@@ -247,6 +255,22 @@ defmodule DrivewayOS.Scheduling.Appointment do
 
     update :mark_refunded do
       change set_attribute(:payment_status, :refunded)
+    end
+
+    update :mark_reminder_sent do
+      change set_attribute(:reminder_sent_at, &DateTime.utc_now/0)
+    end
+
+    read :due_for_reminder do
+      argument :window_start, :utc_datetime_usec, allow_nil?: false
+      argument :window_end, :utc_datetime_usec, allow_nil?: false
+
+      filter expr(
+               is_nil(reminder_sent_at) and
+                 status in [:pending, :confirmed] and
+                 scheduled_at >= ^arg(:window_start) and
+                 scheduled_at <= ^arg(:window_end)
+             )
     end
 
     read :by_stripe_session do

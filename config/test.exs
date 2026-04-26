@@ -57,6 +57,10 @@ config :driveway_os,
 config :driveway_os, :platform_host, "lvh.me"
 config :driveway_os, :session_cookie_domain, ".lvh.me"
 
+# Don't start the reminder scheduler GenServer in test — tests
+# drive its dispatch path directly with a deterministic `now`.
+config :driveway_os, :start_schedulers?, false
+
 # Stripe placeholders (test env). Mox replaces all real API calls.
 config :driveway_os, :stripe_client_id, "ca_test_placeholder"
 config :driveway_os, :stripe_secret_key, "sk_test_placeholder"

@@ -110,6 +110,43 @@ defmodule DrivewayOS.Notifications.BookingEmail do
   end
 
   @doc """
+  Customer-side reminder: appointment is ~24h out. Fired by the
+  ReminderScheduler GenServer; the appointment row is then marked
+  `reminder_sent_at` so we never double-send.
+  """
+  @spec reminder(Tenant.t(), Customer.t(), Appointment.t(), ServiceType.t()) ::
+          Swoosh.Email.t()
+  def reminder(
+        %Tenant{} = tenant,
+        %Customer{} = customer,
+        %Appointment{} = appt,
+        %ServiceType{} = service
+      ) do
+    new()
+    |> to({customer.name, to_string(customer.email)})
+    |> from(Branding.from_address(tenant))
+    |> subject("Reminder: #{service.name} tomorrow at #{format_time(appt.scheduled_at)}")
+    |> text_body("""
+    Hey #{customer.name},
+
+    Just a reminder that #{Branding.display_name(tenant)} is
+    scheduled to wash your vehicle tomorrow.
+
+      Service:  #{service.name}
+      When:     #{format_when(appt.scheduled_at)}
+      Vehicle:  #{appt.vehicle_description}
+      Where:    #{appt.service_address}
+
+    If anything's changed, reply to this email or cancel from your
+    appointment page so we can re-shuffle the route.
+
+    -- #{Branding.display_name(tenant)}
+    """)
+  end
+
+  defp format_time(%DateTime{} = dt), do: Calendar.strftime(dt, "%-I:%M %p UTC")
+
+  @doc """
   Customer-side notification: appointment was cancelled. Sent for
   cancellations from either side (admin or customer); the
   cancellation_reason on the appointment captures who.
