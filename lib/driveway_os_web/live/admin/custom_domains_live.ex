@@ -63,7 +63,15 @@ defmodule DrivewayOSWeb.Admin.CustomDomainsLive do
   @impl true
   def handle_event("add_domain", %{"domain" => %{"hostname" => hostname}}, socket) do
     case Platform.add_custom_domain(socket.assigns.current_tenant, hostname) do
-      {:ok, _} ->
+      {:ok, cd} ->
+        Platform.log_audit!(%{
+          action: :custom_domain_added,
+          tenant_id: socket.assigns.current_tenant.id,
+          target_type: "CustomDomain",
+          target_id: cd.id,
+          payload: %{"hostname" => cd.hostname}
+        })
+
         {:noreply,
          socket
          |> assign(:form_error, nil)
@@ -93,7 +101,15 @@ defmodule DrivewayOSWeb.Admin.CustomDomainsLive do
          |> Ash.read_one(authorize?: false) do
       {:ok, %CustomDomain{} = cd} ->
         case Platform.verify_custom_domain(cd) do
-          {:ok, _} ->
+          {:ok, verified} ->
+            Platform.log_audit!(%{
+              action: :custom_domain_verified,
+              tenant_id: tenant_id,
+              target_type: "CustomDomain",
+              target_id: verified.id,
+              payload: %{"hostname" => verified.hostname}
+            })
+
             {:noreply,
              socket
              |> assign(:form_error, nil)
@@ -124,6 +140,15 @@ defmodule DrivewayOSWeb.Admin.CustomDomainsLive do
          |> Ash.read_one(authorize?: false) do
       {:ok, %CustomDomain{} = cd} ->
         Ash.destroy!(cd, authorize?: false)
+
+        Platform.log_audit!(%{
+          action: :custom_domain_removed,
+          tenant_id: tenant_id,
+          target_type: "CustomDomain",
+          target_id: cd.id,
+          payload: %{"hostname" => cd.hostname}
+        })
+
         {:noreply, load_domains(socket)}
 
       _ ->

@@ -18,6 +18,8 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
 
   alias DrivewayOS.Accounts.Customer
   alias DrivewayOS.Billing.StripeClient
+  alias DrivewayOS.Mailer
+  alias DrivewayOS.Notifications.BookingEmail
   alias DrivewayOS.Scheduling.{Appointment, ServiceType}
 
   @impl true
@@ -88,6 +90,28 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
     end
   end
 
+  def handle_event("resend_email", _, socket) do
+    if socket.assigns.current_customer.role == :admin do
+      do_resend_email(socket)
+    else
+      {:noreply, socket}
+    end
+  end
+
+  defp do_resend_email(socket) do
+    socket.assigns.current_tenant
+    |> BookingEmail.confirmation(
+      socket.assigns.booker,
+      socket.assigns.appt,
+      socket.assigns.service
+    )
+    |> Mailer.deliver()
+
+    {:noreply, assign(socket, :flash_msg, "Confirmation email re-sent.")}
+  rescue
+    _ -> {:noreply, assign(socket, :flash_msg, "Couldn't send the email — try again.")}
+  end
+
   defp do_refund(socket) do
     tenant = socket.assigns.current_tenant
     appt = socket.assigns.appt
@@ -107,13 +131,25 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
                tenant.stripe_account_id,
                appt.stripe_payment_intent_id
              ) do
-          {:ok, _} ->
+          {:ok, refund} ->
             # Flip locally — Stripe will also send a charge.refunded
             # webhook; the resource action is idempotent.
             updated =
               appt
               |> Ash.Changeset.for_update(:mark_refunded, %{})
               |> Ash.update!(authorize?: false, tenant: tenant.id)
+
+            DrivewayOS.Platform.log_audit!(%{
+              action: :appointment_refunded,
+              tenant_id: tenant.id,
+              target_type: "Appointment",
+              target_id: appt.id,
+              payload: %{
+                "stripe_refund_id" => refund.id,
+                "stripe_payment_intent_id" => appt.stripe_payment_intent_id,
+                "amount_cents" => appt.price_cents
+              }
+            })
 
             {:noreply,
              socket
@@ -261,6 +297,15 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
                 class="btn btn-success btn-sm gap-1"
               >
                 <span class="hero-check-circle w-4 h-4" aria-hidden="true"></span> Mark complete
+              </button>
+
+              <%!-- Resend confirmation: admin only, while the appointment isn't cancelled/done --%>
+              <button
+                :if={admin?(@current_customer) and @appt.status not in [:completed, :cancelled]}
+                phx-click="resend_email"
+                class="btn btn-ghost btn-sm gap-1"
+              >
+                <span class="hero-envelope w-4 h-4" aria-hidden="true"></span> Resend email
               </button>
 
               <%!-- Refund: admin only, only on a paid appointment with a known PI --%>

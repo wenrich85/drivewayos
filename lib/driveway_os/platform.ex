@@ -22,6 +22,7 @@ defmodule DrivewayOS.Platform do
   require Ash.Query
 
   alias DrivewayOS.Platform.{
+    AuditLog,
     CustomDomain,
     OauthState,
     PlatformToken,
@@ -37,6 +38,7 @@ defmodule DrivewayOS.Platform do
     resource TenantSubscription
     resource CustomDomain
     resource OauthState
+    resource AuditLog
   end
 
   @doc """
@@ -170,6 +172,62 @@ defmodule DrivewayOS.Platform do
 
       _ ->
         {:error, :not_found}
+    end
+  end
+
+  @doc """
+  Append an entry to the platform audit log. Returns
+  `{:ok, entry}` on success or `{:error, reason}`.
+
+  Callers should typically use `log_audit!/1` so a failed audit
+  insert doesn't take down the action it's auditing — the
+  rescue-style wrapper logs to Logger and moves on.
+  """
+  @spec log_audit(map()) :: {:ok, AuditLog.t()} | {:error, term()}
+  def log_audit(%{} = attrs) do
+    AuditLog
+    |> Ash.Changeset.for_create(:log, normalize_audit_attrs(attrs))
+    |> Ash.create(authorize?: false)
+  end
+
+  @doc """
+  Best-effort audit log insert — never raises and never returns
+  an error. If the insert fails, logs to Logger and returns `:ok`.
+  Use this from any user-action handler so a transient DB hiccup
+  doesn't fail the user-visible action.
+  """
+  @spec log_audit!(map()) :: :ok
+  def log_audit!(%{} = attrs) do
+    case log_audit(attrs) do
+      {:ok, _} ->
+        :ok
+
+      {:error, reason} ->
+        require Logger
+        Logger.warning("[audit] failed to insert: #{inspect(reason)} attrs=#{inspect(attrs)}")
+        :ok
+    end
+  end
+
+  defp normalize_audit_attrs(attrs) do
+    attrs
+    |> Map.new(fn {k, v} -> {to_atom_key(k), v} end)
+    |> Map.update(:payload, %{}, fn p -> p || %{} end)
+  end
+
+  defp to_atom_key(k) when is_atom(k), do: k
+  defp to_atom_key(k) when is_binary(k), do: String.to_existing_atom(k)
+
+  @doc """
+  List the most recent audit log entries for a tenant, newest first.
+  """
+  @spec recent_audit_for_tenant(binary(), pos_integer()) :: [AuditLog.t()]
+  def recent_audit_for_tenant(tenant_id, limit \\ 50) when is_binary(tenant_id) do
+    case AuditLog
+         |> Ash.Query.for_read(:recent_for_tenant, %{tenant_id: tenant_id, limit: limit})
+         |> Ash.read(authorize?: false) do
+      {:ok, entries} -> entries
+      _ -> []
     end
   end
 

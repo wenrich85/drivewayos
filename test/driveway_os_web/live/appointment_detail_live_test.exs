@@ -151,6 +151,36 @@ defmodule DrivewayOSWeb.AppointmentDetailLiveTest do
       assert reloaded.status == :cancelled
     end
 
+    test "admin can resend the booking confirmation email", ctx do
+      import Swoosh.TestAssertions
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, _} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/appointments/#{ctx.appt.id}")
+
+      lv |> element("button[phx-click='resend_email']") |> render_click()
+
+      assert_email_sent(fn email ->
+        assert email.subject =~ ctx.tenant.display_name
+        # The booker is a regular customer; the email goes to them.
+        assert email.to == [{ctx.customer.name, to_string(ctx.customer.email)}]
+      end)
+    end
+
+    test "non-admin doesn't see the resend button", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, _lv, html} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/appointments/#{ctx.appt.id}")
+
+      refute html =~ ~s(phx-click="resend_email")
+    end
+
     test "admin can refund a paid appointment", ctx do
       # Set up: tenant has Stripe Connect, appointment is paid + confirmed
       ctx.tenant

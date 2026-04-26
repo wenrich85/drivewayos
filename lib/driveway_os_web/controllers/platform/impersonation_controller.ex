@@ -17,6 +17,7 @@ defmodule DrivewayOSWeb.Platform.ImpersonationController do
   require Logger
 
   alias DrivewayOS.Accounts.Customer
+  alias DrivewayOS.Platform
   alias DrivewayOS.Platform.Tenant
 
   def start(conn, %{"id" => tenant_id}) do
@@ -40,6 +41,16 @@ defmodule DrivewayOSWeb.Platform.ImpersonationController do
         "[impersonation start] platform_user=#{conn.assigns.current_platform_user.id} " <>
           "tenant=#{tenant.slug} target_customer=#{target_admin.id}"
       )
+
+      :ok =
+        Platform.log_audit!(%{
+          action: :tenant_impersonated,
+          tenant_id: tenant.id,
+          platform_user_id: conn.assigns.current_platform_user.id,
+          target_type: "Customer",
+          target_id: target_admin.id,
+          payload: %{"target_customer_email" => to_string(target_admin.email)}
+        })
 
       conn
       |> put_session(:customer_token, token)

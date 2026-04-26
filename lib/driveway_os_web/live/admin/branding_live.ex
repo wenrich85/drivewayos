@@ -56,6 +56,14 @@ defmodule DrivewayOSWeb.Admin.BrandingLive do
          |> Ash.Changeset.for_update(:update, attrs)
          |> Ash.update(authorize?: false) do
       {:ok, updated} ->
+        DrivewayOS.Platform.log_audit!(%{
+          action: :tenant_branding_updated,
+          tenant_id: tenant.id,
+          target_type: "Tenant",
+          target_id: tenant.id,
+          payload: %{"changed_fields" => attrs |> Map.keys() |> Enum.map(&to_string/1)}
+        })
+
         {:noreply,
          socket
          |> assign(:current_tenant, updated)

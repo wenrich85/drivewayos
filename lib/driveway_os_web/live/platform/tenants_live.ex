@@ -12,6 +12,7 @@ defmodule DrivewayOSWeb.Platform.TenantsLive do
   on_mount DrivewayOSWeb.LoadTenantHook
   on_mount DrivewayOSWeb.LoadPlatformUserHook
 
+  alias DrivewayOS.Platform
   alias DrivewayOS.Platform.Tenant
 
   require Ash.Query
@@ -49,12 +50,26 @@ defmodule DrivewayOSWeb.Platform.TenantsLive do
         |> Ash.Changeset.for_update(action, %{})
         |> Ash.update!(authorize?: false)
 
+        Platform.log_audit!(%{
+          action: audit_action_for(action),
+          tenant_id: tenant.id,
+          platform_user_id: socket.assigns.current_platform_user.id,
+          target_type: "Tenant",
+          target_id: tenant.id,
+          payload: %{"slug" => to_string(tenant.slug)}
+        })
+
         {:noreply, load_tenants(socket)}
 
       _ ->
         {:noreply, socket}
     end
   end
+
+  defp audit_action_for(:suspend), do: :tenant_suspended
+  defp audit_action_for(:reactivate), do: :tenant_reactivated
+  defp audit_action_for(:archive), do: :tenant_archived
+  defp audit_action_for(_), do: :tenant_suspended
 
   defp load_tenants(socket) do
     tenants =
