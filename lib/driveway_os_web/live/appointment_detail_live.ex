@@ -301,6 +301,7 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
               <span class={"badge badge-sm " <> status_badge(@appt.status)}>{@appt.status}</span>
               <span :if={@appt.payment_status == :paid} class="badge badge-sm badge-success">Paid</span>
               <span :if={@appt.payment_status == :pending} class="badge badge-sm badge-warning">Payment pending</span>
+              <span :if={@appt.payment_status == :failed} class="badge badge-sm badge-error">Payment failed</span>
               <span :if={@appt.payment_status == :refunded} class="badge badge-sm badge-ghost">Refunded</span>
               <span class="text-sm text-base-content/70 ml-1">{fmt_when(@appt.scheduled_at)}</span>
             </div>

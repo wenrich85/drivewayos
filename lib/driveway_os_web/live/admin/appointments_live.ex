@@ -272,6 +272,7 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLive do
                     <td>
                       <span :if={a.payment_status == :paid} class="badge badge-success badge-sm">Paid</span>
                       <span :if={a.payment_status == :pending} class="badge badge-warning badge-sm">Pending</span>
+                      <span :if={a.payment_status == :failed} class="badge badge-error badge-sm">Failed</span>
                       <span :if={a.payment_status == :unpaid} class="badge badge-ghost badge-sm">Unpaid</span>
                       <span :if={a.payment_status == :refunded} class="badge badge-ghost badge-sm">Refunded</span>
                     </td>
