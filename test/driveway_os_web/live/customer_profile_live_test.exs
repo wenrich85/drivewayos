@@ -17,6 +17,8 @@ defmodule DrivewayOSWeb.CustomerProfileLiveTest do
   alias DrivewayOS.Fleet.{Address, Vehicle}
   alias DrivewayOS.Platform.Tenant
 
+  require Ash.Query
+
   setup do
     {:ok, tenant} =
       Tenant
@@ -133,6 +135,183 @@ defmodule DrivewayOSWeb.CustomerProfileLiveTest do
 
       assert html =~ "No saved vehicles" or html =~ "No vehicles saved"
       assert html =~ "No saved addresses" or html =~ "No addresses saved"
+    end
+  end
+
+  describe "edit profile (name/phone)" do
+    test "Edit toggles inline form, save persists name + phone", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, _html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/me")
+
+      html = render_click(lv, "edit_profile")
+      assert html =~ "profile-edit-form"
+
+      lv
+      |> form("#profile-edit-form", %{
+        "profile" => %{"name" => "Alice Updated", "phone" => "+15125559999"}
+      })
+      |> render_submit()
+
+      {:ok, reloaded} = Ash.get(Customer, ctx.customer.id, tenant: ctx.tenant.id, authorize?: false)
+      assert reloaded.name == "Alice Updated"
+      assert reloaded.phone == "+15125559999"
+    end
+
+    test "Cancel returns to read mode without changing the row", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, _html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/me")
+
+      render_click(lv, "edit_profile")
+      html = render_click(lv, "cancel_edit_profile")
+
+      refute html =~ "profile-edit-form"
+
+      {:ok, reloaded} = Ash.get(Customer, ctx.customer.id, tenant: ctx.tenant.id, authorize?: false)
+      assert reloaded.name == "Alice Anderson"
+    end
+  end
+
+  describe "add vehicle inline" do
+    test "form submit creates a Vehicle row and shows it in the list", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, _html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/me")
+
+      render_click(lv, "add_vehicle")
+
+      html =
+        lv
+        |> form("#vehicle-add-form", %{
+          "vehicle" => %{
+            "year" => "2018",
+            "make" => "Toyota",
+            "model" => "Tacoma",
+            "color" => "Silver"
+          }
+        })
+        |> render_submit()
+
+      assert html =~ "2018 Toyota Tacoma"
+
+      {:ok, [v]} =
+        Vehicle
+        |> Ash.Query.set_tenant(ctx.tenant.id)
+        |> Ash.read(authorize?: false)
+
+      assert v.make == "Toyota"
+      assert v.customer_id == ctx.customer.id
+    end
+  end
+
+  describe "delete vehicle" do
+    test "Delete button removes the row", ctx do
+      {:ok, vehicle} =
+        Vehicle
+        |> Ash.Changeset.for_create(
+          :add,
+          %{
+            customer_id: ctx.customer.id,
+            year: 2022,
+            make: "Subaru",
+            model: "Outback",
+            color: "Blue"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/me")
+
+      assert html =~ "2022 Subaru Outback"
+
+      html = render_click(lv, "delete_vehicle", %{"id" => vehicle.id})
+
+      refute html =~ "2022 Subaru Outback"
+
+      {:ok, vehicles} =
+        Vehicle
+        |> Ash.Query.set_tenant(ctx.tenant.id)
+        |> Ash.read(authorize?: false)
+
+      assert vehicles == []
+    end
+  end
+
+  describe "add address inline" do
+    test "form submit creates an Address row and shows it in the list", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, _html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/me")
+
+      render_click(lv, "add_address")
+
+      html =
+        lv
+        |> form("#address-add-form", %{
+          "address" => %{
+            "street_line1" => "1 Main",
+            "city" => "SA",
+            "state" => "TX",
+            "zip" => "78261"
+          }
+        })
+        |> render_submit()
+
+      assert html =~ "1 Main"
+
+      {:ok, [a]} =
+        Address
+        |> Ash.Query.set_tenant(ctx.tenant.id)
+        |> Ash.read(authorize?: false)
+
+      assert a.city == "SA"
+      assert a.customer_id == ctx.customer.id
+    end
+  end
+
+  describe "delete address" do
+    test "Delete button removes the row", ctx do
+      {:ok, addr} =
+        Address
+        |> Ash.Changeset.for_create(
+          :add,
+          %{
+            customer_id: ctx.customer.id,
+            street_line1: "9 Oak",
+            city: "SA",
+            state: "TX",
+            zip: "78261"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/me")
+
+      assert html =~ "9 Oak"
+
+      html = render_click(lv, "delete_address", %{"id" => addr.id})
+
+      refute html =~ "9 Oak"
+
+      {:ok, addresses} =
+        Address
+        |> Ash.Query.set_tenant(ctx.tenant.id)
+        |> Ash.read(authorize?: false)
+
+      assert addresses == []
     end
   end
 
