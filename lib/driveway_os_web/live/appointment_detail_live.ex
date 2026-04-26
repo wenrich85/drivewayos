@@ -55,7 +55,8 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
        |> assign(:appt, appt)
        |> assign(:service, service)
        |> assign(:booker, booker)
-       |> assign(:flash_msg, nil)}
+       |> assign(:flash_msg, nil)
+       |> assign(:cancel_form_open?, false)}
     else
       _ -> {:ok, push_navigate(socket, to: ~p"/appointments")}
     end
@@ -70,8 +71,24 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
     transition(socket, :confirm, %{})
   end
 
+  # Customer-side cancel arrives with a structured reason from the
+  # inline form (one of the @cancel_reasons + an optional "other"
+  # free-text); admin-side comes through with no params.
+  def handle_event("cancel", %{"cancel" => params}, socket) do
+    reason = format_cancel_reason(params)
+    transition(socket, :cancel, %{cancellation_reason: reason})
+  end
+
   def handle_event("cancel", _, socket) do
     transition(socket, :cancel, %{cancellation_reason: cancel_reason(socket)})
+  end
+
+  def handle_event("show_cancel_form", _, socket) do
+    {:noreply, assign(socket, :cancel_form_open?, true)}
+  end
+
+  def handle_event("hide_cancel_form", _, socket) do
+    {:noreply, assign(socket, :cancel_form_open?, false)}
   end
 
   def handle_event("start_wash", _, socket) do
@@ -168,6 +185,29 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
     else
       "Cancelled by customer"
     end
+  end
+
+  @cancel_reasons [
+    {"schedule_conflict", "Schedule conflict"},
+    {"service_not_needed", "Service no longer needed"},
+    {"weather", "Bad weather"},
+    {"changed_provider", "Going with another provider"},
+    {"other", "Other"}
+  ]
+
+  defp format_cancel_reason(%{"reason" => key, "details" => details}) do
+    label = lookup_cancel_label(key)
+
+    case String.trim(details || "") do
+      "" -> "Customer: #{label}"
+      d -> "Customer: #{label} — #{d}"
+    end
+  end
+
+  defp format_cancel_reason(_), do: "Cancelled by customer"
+
+  defp lookup_cancel_label(key) do
+    Enum.find_value(@cancel_reasons, "Other", fn {k, l} -> if k == key, do: l end)
   end
 
   defp transition(socket, action, args) do
@@ -370,11 +410,25 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
                 <span class="hero-arrow-uturn-left w-4 h-4" aria-hidden="true"></span> Refund
               </button>
 
-              <%!-- Cancel: anyone in scope, while it's still cancellable --%>
+              <%!-- Admin cancel: bare confirm dialog. Customer cancel:
+                   inline form with reason picker (handled below). --%>
               <button
-                :if={@appt.status in [:pending, :confirmed]}
+                :if={
+                  admin?(@current_customer) and @appt.status in [:pending, :confirmed]
+                }
                 phx-click="cancel"
                 data-confirm="Cancel this appointment?"
+                class="btn btn-ghost btn-sm text-error gap-1"
+              >
+                <span class="hero-x-mark w-4 h-4" aria-hidden="true"></span> Cancel
+              </button>
+
+              <button
+                :if={
+                  not admin?(@current_customer) and @appt.status in [:pending, :confirmed] and
+                    not @cancel_form_open?
+                }
+                phx-click="show_cancel_form"
                 class="btn btn-ghost btn-sm text-error gap-1"
               >
                 <span class="hero-x-mark w-4 h-4" aria-hidden="true"></span> Cancel
@@ -387,6 +441,56 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
                 No further actions — this appointment is {@appt.status}.
               </p>
             </div>
+
+            <form
+              :if={@cancel_form_open? and @appt.status in [:pending, :confirmed]}
+              id="cancel-appointment-form"
+              phx-submit="cancel"
+              class="mt-4 border-t border-base-200 pt-4 space-y-3"
+            >
+              <p class="text-sm font-medium">Why are you cancelling?</p>
+
+              <div class="space-y-2">
+                <label
+                  :for={
+                    {value, label} <-
+                      [
+                        {"schedule_conflict", "Schedule conflict"},
+                        {"service_not_needed", "Service no longer needed"},
+                        {"weather", "Bad weather"},
+                        {"changed_provider", "Going with another provider"},
+                        {"other", "Other"}
+                      ]
+                  }
+                  class="flex items-center gap-2 text-sm cursor-pointer"
+                >
+                  <input
+                    type="radio"
+                    name="cancel[reason]"
+                    value={value}
+                    class="radio radio-sm"
+                    required
+                  />
+                  {label}
+                </label>
+              </div>
+
+              <textarea
+                name="cancel[details]"
+                rows="2"
+                placeholder="Anything else we should know? (optional)"
+                class="textarea textarea-bordered w-full text-sm"
+              ></textarea>
+
+              <div class="flex justify-end gap-2">
+                <button type="button" phx-click="hide_cancel_form" class="btn btn-ghost btn-sm">
+                  Back
+                </button>
+                <button type="submit" class="btn btn-error btn-sm">
+                  Cancel booking
+                </button>
+              </div>
+            </form>
           </div>
         </section>
       </div>

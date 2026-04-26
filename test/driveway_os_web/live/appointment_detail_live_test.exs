@@ -137,7 +137,7 @@ defmodule DrivewayOSWeb.AppointmentDetailLiveTest do
   end
 
   describe "actions" do
-    test "owning customer can cancel", ctx do
+    test "owning customer can cancel through the reason form", ctx do
       conn = sign_in(ctx.conn, ctx.customer)
 
       {:ok, lv, _} =
@@ -145,7 +145,13 @@ defmodule DrivewayOSWeb.AppointmentDetailLiveTest do
         |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
         |> live(~p"/appointments/#{ctx.appt.id}")
 
-      lv |> element("button[phx-click='cancel']") |> render_click()
+      render_click(lv, "show_cancel_form")
+
+      lv
+      |> form("#cancel-appointment-form", %{
+        "cancel" => %{"reason" => "schedule_conflict", "details" => ""}
+      })
+      |> render_submit()
 
       reloaded = Ash.get!(Appointment, ctx.appt.id, tenant: ctx.tenant.id, authorize?: false)
       assert reloaded.status == :cancelled
@@ -254,6 +260,63 @@ defmodule DrivewayOSWeb.AppointmentDetailLiveTest do
 
       reloaded = Ash.get!(Appointment, ctx.appt.id, tenant: ctx.tenant.id, authorize?: false)
       assert reloaded.status == :confirmed
+    end
+  end
+
+  describe "customer cancellation with reason" do
+    test "Cancel opens the inline reason form", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, _html} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/appointments/#{ctx.appt.id}")
+
+      html = render_click(lv, "show_cancel_form")
+
+      assert html =~ "cancel-appointment-form"
+      assert html =~ "Schedule conflict"
+      assert html =~ "Bad weather"
+    end
+
+    test "submitting the form cancels with a structured reason", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, _} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/appointments/#{ctx.appt.id}")
+
+      render_click(lv, "show_cancel_form")
+
+      lv
+      |> form("#cancel-appointment-form", %{
+        "cancel" => %{
+          "reason" => "weather",
+          "details" => "Forecast says thunderstorms"
+        }
+      })
+      |> render_submit()
+
+      reloaded = Ash.get!(Appointment, ctx.appt.id, tenant: ctx.tenant.id, authorize?: false)
+      assert reloaded.status == :cancelled
+      assert reloaded.cancellation_reason =~ "Bad weather"
+      assert reloaded.cancellation_reason =~ "thunderstorms"
+    end
+
+    test "admin cancel still uses the bare confirm + 'Cancelled by admin' reason", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, _} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/appointments/#{ctx.appt.id}")
+
+      lv |> element("button[phx-click='cancel']") |> render_click()
+
+      reloaded = Ash.get!(Appointment, ctx.appt.id, tenant: ctx.tenant.id, authorize?: false)
+      assert reloaded.status == :cancelled
+      assert reloaded.cancellation_reason == "Cancelled by admin"
     end
   end
 end
