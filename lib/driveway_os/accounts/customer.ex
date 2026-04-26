@@ -168,6 +168,15 @@ defmodule DrivewayOS.Accounts.Customer do
       public? true
     end
 
+    # Free-text admin notes about this customer (gate code, vehicle
+    # quirks, "always wants the deluxe wax", etc.). Visible only to
+    # tenant admins. V2 splits into a CustomerNote resource if we
+    # need timestamped, multi-author entries.
+    attribute :admin_notes, :string do
+      public? true
+      constraints max_length: 5000
+    end
+
     create_timestamp :inserted_at
     update_timestamp :updated_at
   end

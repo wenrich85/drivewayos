@@ -92,7 +92,11 @@ defmodule DrivewayOSWeb.Admin.CustomersLive do
                 </thead>
                 <tbody>
                   <tr :for={c <- @customers}>
-                    <td class="font-semibold">{c.name}</td>
+                    <td class="font-semibold">
+                      <.link navigate={~p"/admin/customers/#{c.id}"} class="link link-hover">
+                        {c.name}
+                      </.link>
+                    </td>
                     <td>{to_string(c.email)}</td>
                     <td>
                       <span :if={c.role == :admin} class="badge badge-primary badge-sm">Admin</span>

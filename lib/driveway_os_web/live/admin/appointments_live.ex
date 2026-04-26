@@ -135,7 +135,11 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLive do
                 </thead>
                 <tbody>
                   <tr :for={a <- @appointments}>
-                    <td class="text-sm">{fmt_when(a.scheduled_at)}</td>
+                    <td class="text-sm">
+                      <.link navigate={~p"/appointments/#{a.id}"} class="link link-hover">
+                        {fmt_when(a.scheduled_at)}
+                      </.link>
+                    </td>
                     <td>{(@customer_map[a.customer_id] || %{name: "—"}).name}</td>
                     <td>{(@service_map[a.service_type_id] || %{name: "—"}).name}</td>
                     <td class="text-xs text-base-content/70">{a.vehicle_description}</td>

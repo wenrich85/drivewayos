@@ -94,29 +94,31 @@ defmodule DrivewayOSWeb.AppointmentsLive do
 
         <ul :if={@appointments != []} class="space-y-3">
           <li :for={a <- @appointments} class="card bg-base-100 shadow">
-            <div class="card-body p-5">
-              <div class="flex justify-between items-start gap-3 flex-wrap">
-                <div class="flex-1">
-                  <div class="font-semibold">
-                    {service_name(@services, a.service_type_id)}
+            <.link navigate={~p"/appointments/#{a.id}"} class="block hover:bg-base-200/40 rounded-2xl">
+              <div class="card-body p-5">
+                <div class="flex justify-between items-start gap-3 flex-wrap">
+                  <div class="flex-1">
+                    <div class="font-semibold">
+                      {service_name(@services, a.service_type_id)}
+                    </div>
+                    <div class="text-sm text-base-content/70">
+                      {fmt_when(a.scheduled_at)}
+                    </div>
+                    <div class="text-sm text-base-content/70 mt-1">
+                      {a.vehicle_description} · {a.service_address}
+                    </div>
                   </div>
-                  <div class="text-sm text-base-content/70">
-                    {fmt_when(a.scheduled_at)}
-                  </div>
-                  <div class="text-sm text-base-content/70 mt-1">
-                    {a.vehicle_description} · {a.service_address}
-                  </div>
-                </div>
-                <div class="text-right">
-                  <span class={"badge " <> status_badge_class(a.status)}>
-                    {a.status}
-                  </span>
-                  <div class="text-sm text-base-content/70 mt-1">
-                    {fmt_price(a.price_cents)}
+                  <div class="text-right">
+                    <span class={"badge " <> status_badge_class(a.status)}>
+                      {a.status}
+                    </span>
+                    <div class="text-sm text-base-content/70 mt-1">
+                      {fmt_price(a.price_cents)}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            </.link>
           </li>
         </ul>
       </div>
