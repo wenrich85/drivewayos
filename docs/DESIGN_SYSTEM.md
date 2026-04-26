@@ -286,7 +286,7 @@ status              | class
 
 ```heex
 <div role="alert" class={"alert " <> level_class}>
-  <Heroicons.LiveView.icon name={icon_name} class="w-5 h-5 shrink-0" />
+  <span class={"#{icon_class} w-5 h-5 shrink-0"} aria-hidden="true"></span>
   <div class="flex-1">
     <div class="font-semibold">{title}</div>
     <div class="text-sm opacity-80">{body}</div>
@@ -301,7 +301,10 @@ status              | class
 
 ```heex
 <div class="text-center py-12 px-4">
-  <Heroicons.LiveView.icon name="document-text" class="w-12 h-12 mx-auto text-base-content/30" />
+  <span
+    class="hero-document-text w-12 h-12 mx-auto text-base-content/30"
+    aria-hidden="true"
+  ></span>
   <h3 class="mt-4 text-lg font-semibold">{title}</h3>
   <p class="mt-1 text-sm text-base-content/60 max-w-sm mx-auto">{description}</p>
   <a :if={cta} href={cta_href} class="btn btn-primary btn-sm mt-4">{cta}</a>
@@ -344,11 +347,23 @@ Wrap whole row in `<.link navigate={...}>` only when the entire row is one click
 
 ## 7. Icons
 
-**Heroicons only** (already a project dep).
+**Heroicons only** (already a project dep, exposed as a Tailwind plugin
+in `assets/vendor/heroicons.js`). Render with the `hero-{name}` class
+on a `<span>`:
 
 ```heex
-<Heroicons.LiveView.icon name="check-circle" class="w-5 h-5" />
+<span class="hero-check-circle w-5 h-5" aria-hidden="true"></span>
 ```
+
+Variants:
+- `hero-{name}` — 24px outline (default)
+- `hero-{name}-solid` — 24px solid
+- `hero-{name}-mini` — 20px solid
+- `hero-{name}-micro` — 16px solid
+
+Always pair with `aria-hidden="true"` when the icon is decorative
+(text label adjacent). Drop the aria-hidden if the icon stands
+alone — and add `aria-label` to the parent button instead.
 
 | Concept | Icon name |
 |---|---|
