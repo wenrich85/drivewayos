@@ -83,6 +83,32 @@ defmodule DrivewayOSWeb.AdminDashboardTest do
       assert html =~ "Define your availability"
     end
 
+    test "shows 'Customize your services' for fresh tenants with default seeds", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
+
+      assert html =~ "Customize your services"
+    end
+
+    test "hides 'Customize your services' once the operator renames a default service",
+         ctx do
+      {:ok, [first | _]} =
+        ServiceType |> Ash.Query.set_tenant(ctx.tenant.id) |> Ash.read(authorize?: false)
+
+      first
+      |> Ash.Changeset.for_update(:update, %{slug: "express-wash", name: "Express Wash"})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
+
+      refute html =~ "Customize your services"
+    end
+
     test "hides items that are done", ctx do
       # Mark Stripe connected + add a block template; both items should
       # disappear from the checklist.

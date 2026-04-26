@@ -143,7 +143,11 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
       |> Ash.Query.filter(tenant_id == ^tenant_id)
       |> Ash.read(authorize?: false)
 
-    checklist = build_checklist(socket.assigns.current_tenant, blocks, custom_domains)
+    {:ok, all_services} =
+      ServiceType |> Ash.Query.set_tenant(tenant_id) |> Ash.read(authorize?: false)
+
+    checklist =
+      build_checklist(socket.assigns.current_tenant, blocks, custom_domains, all_services)
 
     socket
     |> assign(:page_title, "Admin · #{socket.assigns.current_tenant.display_name}")
@@ -240,10 +244,14 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
   # Returns a list of `{title, blurb, href}` for the open onboarding
   # items only — completed ones drop out, so when everything's done
   # the checklist is just `[]` and the card hides itself.
-  defp build_checklist(tenant, blocks, custom_domains) do
+  defp build_checklist(tenant, blocks, custom_domains, services) do
     [
       is_nil(tenant.stripe_account_id) &&
         {"Connect Stripe", "Take payment for bookings.", "/onboarding/stripe/start"},
+      using_default_services?(services) &&
+        {"Customize your services",
+         "Tweak the seeded Basic Wash + Deep Clean to match your real menu, or add new ones.",
+         "/admin/services"},
       Enum.empty?(blocks) &&
         {"Define your availability",
          "Customers see concrete time slots once you've added at least one weekly block.",
@@ -258,6 +266,16 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
          "/admin/domains"}
     ]
     |> Enum.filter(& &1)
+  end
+
+  # Tenants ship with two seeded services (slugs "basic-wash" and
+  # "deep-clean"). If those are still the literal set on the
+  # account, the operator hasn't customized — surface the prompt.
+  # Renaming, repricing, or adding a new ServiceType drops the
+  # checklist item.
+  defp using_default_services?(services) do
+    slugs = services |> Enum.map(& &1.slug) |> Enum.sort()
+    slugs == ["basic-wash", "deep-clean"]
   end
 
   # Onboarding-time defaults like "no logo" + "no support email"
