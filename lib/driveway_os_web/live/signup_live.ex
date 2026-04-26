@@ -48,8 +48,8 @@ defmodule DrivewayOSWeb.SignupLive do
     }
 
     case Platform.provision_tenant(attrs) do
-      {:ok, %{tenant: tenant}} ->
-        {:noreply, redirect(socket, external: tenant_root_url(tenant))}
+      {:ok, %{tenant: tenant, admin: admin}} ->
+        {:noreply, redirect(socket, external: tenant_admin_signed_in_url(tenant, admin))}
 
       {:error, :reserved_slug} ->
         {:noreply,
@@ -207,11 +207,24 @@ defmodule DrivewayOSWeb.SignupLive do
 
   # --- Helpers ---
 
-  defp tenant_root_url(tenant) do
+  # After provisioning, redirect through the tenant subdomain's
+  # `/auth/customer/store-token` controller so the new admin lands
+  # on `/admin` already signed in. LVs can't write the session
+  # cookie themselves; the controller does it for us. The token
+  # is a one-shot — `LoadCustomer` re-verifies signature + tenant
+  # claim on every subsequent request.
+  defp tenant_admin_signed_in_url(tenant, admin) do
+    {:ok, token, _} = AshAuthentication.Jwt.token_for_user(admin)
+
+    base = tenant_root_base_url(tenant)
+    return_to = URI.encode_www_form("/admin")
+    encoded_token = URI.encode_www_form(token)
+
+    "#{base}/auth/customer/store-token?token=#{encoded_token}&return_to=#{return_to}"
+  end
+
+  defp tenant_root_base_url(tenant) do
     host = Application.get_env(:driveway_os, :platform_host, "drivewayos.com")
-    # Pull port from the endpoint http config so dev (4000) and test
-    # (4002) both work. In prod the endpoint runs on :443 and we
-    # render with no port suffix.
     http_opts = Application.get_env(:driveway_os, DrivewayOSWeb.Endpoint)[:http] || []
     port = Keyword.get(http_opts, :port)
 
@@ -222,7 +235,7 @@ defmodule DrivewayOSWeb.SignupLive do
         true -> {"https", ":#{port}"}
       end
 
-    "#{scheme}://#{tenant.slug}.#{host}#{port_suffix}/"
+    "#{scheme}://#{tenant.slug}.#{host}#{port_suffix}"
   end
 
   defp ash_errors_to_map(%Ash.Error.Invalid{errors: errors}) do

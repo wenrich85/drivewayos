@@ -66,6 +66,13 @@ defmodule DrivewayOSWeb.SignupLiveTest do
       assert {:error, {:redirect, %{to: external_url}}} = result
       assert external_url =~ "#{slug}.lvh.me"
 
+      # New behavior: redirect lands at the auto-signin endpoint with
+      # a token + ?return_to=/admin so the operator skips the
+      # /sign-in form and goes straight to the dashboard.
+      assert external_url =~ "/auth/customer/store-token"
+      assert external_url =~ "token="
+      assert external_url =~ "return_to=%2Fadmin"
+
       # Verify side effects.
       {:ok, tenant} = Platform.get_tenant_by_slug(slug)
       assert tenant.display_name == "New Shop"
