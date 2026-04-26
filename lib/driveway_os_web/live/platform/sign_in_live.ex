@@ -39,8 +39,7 @@ defmodule DrivewayOSWeb.Platform.SignInLive do
          )
          |> Ash.read_one(authorize?: false) do
       {:ok, %{__metadata__: %{token: token}}} ->
-        {:noreply,
-         redirect(socket, to: ~p"/auth/platform/store-token?token=#{token}")}
+        {:noreply, redirect(socket, to: ~p"/auth/platform/store-token?token=#{token}")}
 
       _ ->
         {:noreply,

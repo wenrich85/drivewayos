@@ -144,7 +144,11 @@ defmodule DrivewayOSWeb.Admin.ScheduleLive do
 
             <div :if={@form_error} class="alert alert-error text-sm">{@form_error}</div>
 
-            <form id="new-block-form" phx-submit="create_block" class="grid grid-cols-1 md:grid-cols-6 gap-2 mt-2">
+            <form
+              id="new-block-form"
+              phx-submit="create_block"
+              class="grid grid-cols-1 md:grid-cols-6 gap-2 mt-2"
+            >
               <input
                 type="text"
                 name="block[name]"
@@ -220,5 +224,4 @@ defmodule DrivewayOSWeb.Admin.ScheduleLive do
     </main>
     """
   end
-
 end

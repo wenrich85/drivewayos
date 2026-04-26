@@ -85,12 +85,27 @@ defmodule SeedHelpers do
 
     if existing == [] do
       blocks = [
-        %{name: "Mon mornings", day_of_week: 1, start_time: ~T[09:00:00],
-          duration_minutes: 180, capacity: 2},
-        %{name: "Wed mornings", day_of_week: 3, start_time: ~T[09:00:00],
-          duration_minutes: 180, capacity: 2},
-        %{name: "Sat all day", day_of_week: 6, start_time: ~T[08:00:00],
-          duration_minutes: 480, capacity: 4}
+        %{
+          name: "Mon mornings",
+          day_of_week: 1,
+          start_time: ~T[09:00:00],
+          duration_minutes: 180,
+          capacity: 2
+        },
+        %{
+          name: "Wed mornings",
+          day_of_week: 3,
+          start_time: ~T[09:00:00],
+          duration_minutes: 180,
+          capacity: 2
+        },
+        %{
+          name: "Sat all day",
+          day_of_week: 6,
+          start_time: ~T[08:00:00],
+          duration_minutes: 480,
+          capacity: 4
+        }
       ]
 
       Enum.each(blocks, fn attrs ->

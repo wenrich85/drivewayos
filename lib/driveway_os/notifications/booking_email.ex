@@ -18,8 +18,12 @@ defmodule DrivewayOS.Notifications.BookingEmail do
 
   @spec confirmation(Tenant.t(), Customer.t(), Appointment.t(), ServiceType.t()) ::
           Swoosh.Email.t()
-  def confirmation(%Tenant{} = tenant, %Customer{} = customer, %Appointment{} = appt,
-                   %ServiceType{} = service) do
+  def confirmation(
+        %Tenant{} = tenant,
+        %Customer{} = customer,
+        %Appointment{} = appt,
+        %ServiceType{} = service
+      ) do
     new()
     |> to({customer.name, to_string(customer.email)})
     |> from(Branding.from_address(tenant))

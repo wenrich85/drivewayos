@@ -142,6 +142,7 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
             <a href="/admin/customers" class="btn btn-ghost btn-sm">Customers</a>
             <a href="/admin/services" class="btn btn-ghost btn-sm">Services</a>
             <a href="/admin/schedule" class="btn btn-ghost btn-sm">Schedule</a>
+            <a href="/admin/branding" class="btn btn-ghost btn-sm">Branding</a>
             <a href="/admin/domains" class="btn btn-ghost btn-sm">Domains</a>
             <a href="/auth/customer/sign-out" class="btn btn-ghost btn-sm">Sign out</a>
           </div>

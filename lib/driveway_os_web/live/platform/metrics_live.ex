@@ -97,7 +97,9 @@ defmodule DrivewayOSWeb.Platform.MetricsLive do
           <div class="stat bg-base-100 rounded-lg shadow">
             <div class="stat-title">Tenants</div>
             <div class="stat-value">{@tenant_count}</div>
-            <div class="stat-desc">{@active_count} active · {@pending_onboarding_count} pending · {@suspended_count} suspended</div>
+            <div class="stat-desc">
+              {@active_count} active · {@pending_onboarding_count} pending · {@suspended_count} suspended
+            </div>
           </div>
           <div class="stat bg-base-100 rounded-lg shadow">
             <div class="stat-title">Stripe-connected</div>

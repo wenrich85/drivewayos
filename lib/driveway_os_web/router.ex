@@ -52,6 +52,7 @@ defmodule DrivewayOSWeb.Router do
     live "/admin/services", Admin.ServicesLive
     live "/admin/customers", Admin.CustomersLive
     live "/admin/appointments", Admin.AppointmentsLive
+    live "/admin/branding", Admin.BrandingLive
 
     get "/auth/customer/store-token", Auth.SessionController, :store_token
     get "/auth/customer/sign-out", Auth.SessionController, :sign_out
