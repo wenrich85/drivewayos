@@ -183,6 +183,44 @@ defmodule DrivewayOSWeb.AdminDashboardTest do
     end
   end
 
+  describe "revenue summary" do
+    test "shows this-week revenue from paid appointments", ctx do
+      {:ok, appt} = book!(ctx.tenant, ctx.customer, ctx.service)
+
+      appt
+      |> Ash.Changeset.for_update(:mark_paid, %{stripe_payment_intent_id: "pi_test_123"})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
+
+      # Service price is $50.00 from the seeded basic-wash.
+      assert html =~ "This week"
+      assert html =~ "$50.00"
+    end
+
+    test "doesn't count cancelled appointments toward revenue", ctx do
+      {:ok, appt} = book!(ctx.tenant, ctx.customer, ctx.service)
+
+      appt
+      |> Ash.Changeset.for_update(:mark_paid, %{stripe_payment_intent_id: "pi_test_456"})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+      |> Ash.Changeset.for_update(:mark_refunded, %{})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
+
+      # Refunded → payment_status :refunded → not counted.
+      assert html =~ "This week"
+      refute html =~ "$50.00"
+    end
+  end
+
   describe "Today widget" do
     test "lists appointments scheduled for today in tenant timezone", ctx do
       tz = ctx.tenant.timezone

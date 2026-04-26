@@ -309,6 +309,13 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
                 <dt class="text-base-content/60">Cancelled</dt>
                 <dd class="col-span-2 text-base-content/80">{@appt.cancellation_reason}</dd>
               <% end %>
+
+              <%= if admin?(@current_customer) && @appt.reminder_sent_at do %>
+                <dt class="text-base-content/60">Reminder</dt>
+                <dd class="col-span-2 text-base-content/80">
+                  Sent {fmt_when(@appt.reminder_sent_at)}
+                </dd>
+              <% end %>
             </dl>
           </div>
         </section>

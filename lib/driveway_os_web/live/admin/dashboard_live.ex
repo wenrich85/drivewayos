@@ -132,6 +132,7 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
     pending = Enum.filter(appointments, &(&1.status == :pending))
     upcoming = Enum.filter(appointments, &(&1.status in [:pending, :confirmed]))
     today = today_appointments(appointments, socket.assigns.current_tenant.timezone)
+    {revenue_week, revenue_month} = revenue_summary(appointments)
 
     {:ok, blocks} =
       BlockTemplate |> Ash.Query.set_tenant(tenant_id) |> Ash.read(authorize?: false)
@@ -153,6 +154,32 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
     |> assign(:customer_map, customer_map)
     |> assign(:checklist, checklist)
     |> assign(:today, today)
+    |> assign(:revenue_week, revenue_week)
+    |> assign(:revenue_month, revenue_month)
+  end
+
+  # Sums price_cents across paid appointments scheduled in [start, now)
+  # for two windows: trailing 7 days and trailing 30 days. Refunded
+  # rows drop out (payment_status is the source of truth, not just
+  # `paid_at`).
+  defp revenue_summary(appointments) do
+    now = DateTime.utc_now()
+    week_ago = DateTime.add(now, -7 * 86_400, :second)
+    month_ago = DateTime.add(now, -30 * 86_400, :second)
+
+    paid = Enum.filter(appointments, &(&1.payment_status == :paid))
+
+    week =
+      paid
+      |> Enum.filter(&(DateTime.compare(&1.scheduled_at, week_ago) != :lt))
+      |> Enum.reduce(0, &(&1.price_cents + &2))
+
+    month =
+      paid
+      |> Enum.filter(&(DateTime.compare(&1.scheduled_at, month_ago) != :lt))
+      |> Enum.reduce(0, &(&1.price_cents + &2))
+
+    {week, month}
   end
 
   # Returns the subset of appointments scheduled within today's
@@ -304,27 +331,45 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
           </div>
         </section>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
           <article class="stat bg-base-100 rounded-xl shadow-sm border border-base-300">
             <div class="stat-title text-xs font-medium uppercase tracking-wide text-base-content/60">
               Pending
             </div>
-            <div class="stat-value text-3xl font-bold text-warning">{@pending_count}</div>
-            <div class="stat-desc text-xs text-base-content/60">Awaiting your confirmation</div>
+            <div class="stat-value text-2xl font-bold text-warning">{@pending_count}</div>
+            <div class="stat-desc text-xs text-base-content/60">Awaiting confirm</div>
           </article>
           <article class="stat bg-base-100 rounded-xl shadow-sm border border-base-300">
             <div class="stat-title text-xs font-medium uppercase tracking-wide text-base-content/60">
               Upcoming
             </div>
-            <div class="stat-value text-3xl font-bold text-info">{@upcoming_count}</div>
+            <div class="stat-value text-2xl font-bold text-info">{@upcoming_count}</div>
             <div class="stat-desc text-xs text-base-content/60">Pending + confirmed</div>
           </article>
           <article class="stat bg-base-100 rounded-xl shadow-sm border border-base-300">
             <div class="stat-title text-xs font-medium uppercase tracking-wide text-base-content/60">
               Customers
             </div>
-            <div class="stat-value text-3xl font-bold">{@customer_count}</div>
+            <div class="stat-value text-2xl font-bold">{@customer_count}</div>
             <div class="stat-desc text-xs text-base-content/60">All time</div>
+          </article>
+          <article class="stat bg-base-100 rounded-xl shadow-sm border border-base-300">
+            <div class="stat-title text-xs font-medium uppercase tracking-wide text-base-content/60">
+              This week
+            </div>
+            <div class="stat-value text-2xl font-bold text-success">
+              {fmt_price(@revenue_week)}
+            </div>
+            <div class="stat-desc text-xs text-base-content/60">Paid bookings</div>
+          </article>
+          <article class="stat bg-base-100 rounded-xl shadow-sm border border-base-300">
+            <div class="stat-title text-xs font-medium uppercase tracking-wide text-base-content/60">
+              This month
+            </div>
+            <div class="stat-value text-2xl font-bold text-success">
+              {fmt_price(@revenue_month)}
+            </div>
+            <div class="stat-desc text-xs text-base-content/60">Trailing 30 days</div>
           </article>
         </div>
 
