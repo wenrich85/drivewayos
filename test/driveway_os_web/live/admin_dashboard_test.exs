@@ -183,6 +183,50 @@ defmodule DrivewayOSWeb.AdminDashboardTest do
     end
   end
 
+  describe "acquisition channel breakdown" do
+    test "shows last-30-day counts grouped by channel", ctx do
+      now = DateTime.utc_now()
+
+      # Three bookings, two via Google, one via Friend/family.
+      for {channel, i} <- [{"Google", 1}, {"Google", 2}, {"Friend / family", 3}] do
+        Appointment
+        |> Ash.Changeset.for_create(
+          :book,
+          %{
+            customer_id: ctx.customer.id,
+            service_type_id: ctx.service.id,
+            scheduled_at: DateTime.add(now, i * 86_400, :second) |> DateTime.truncate(:second),
+            duration_minutes: ctx.service.duration_minutes,
+            price_cents: ctx.service.base_price_cents,
+            vehicle_description: "Truck #{i}",
+            service_address: "#{i} Lane",
+            acquisition_channel: channel
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create!(authorize?: false)
+      end
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
+
+      assert html =~ "How customers found you"
+      assert html =~ "Google"
+      assert html =~ "Friend / family"
+    end
+
+    test "card hidden when there are no recent appointments", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
+
+      refute html =~ "How customers found you"
+    end
+  end
+
   describe "revenue summary" do
     test "shows this-week revenue from paid appointments", ctx do
       {:ok, appt} = book!(ctx.tenant, ctx.customer, ctx.service)

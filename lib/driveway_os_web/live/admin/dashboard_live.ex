@@ -133,6 +133,7 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
     upcoming = Enum.filter(appointments, &(&1.status in [:pending, :confirmed]))
     today = today_appointments(appointments, socket.assigns.current_tenant.timezone)
     {revenue_week, revenue_month} = revenue_summary(appointments)
+    channels = channel_summary(appointments)
 
     {:ok, blocks} =
       BlockTemplate |> Ash.Query.set_tenant(tenant_id) |> Ash.read(authorize?: false)
@@ -156,6 +157,21 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
     |> assign(:today, today)
     |> assign(:revenue_week, revenue_week)
     |> assign(:revenue_month, revenue_month)
+    |> assign(:channels, channels)
+  end
+
+  # Last-30-days breakdown of acquisition_channel counts. Rolls
+  # nils into "Not asked" so the operator sees what fraction of
+  # bookings are missing the question — useful signal that
+  # something's off (e.g. wizard never reaching the schedule
+  # step).
+  defp channel_summary(appointments) do
+    cutoff = DateTime.add(DateTime.utc_now(), -30 * 86_400, :second)
+
+    appointments
+    |> Enum.filter(&(DateTime.compare(&1.scheduled_at, cutoff) != :lt))
+    |> Enum.frequencies_by(fn a -> a.acquisition_channel || "Not asked" end)
+    |> Enum.sort_by(fn {_, count} -> -count end)
   end
 
   # Sums price_cents across paid appointments scheduled in [start, now)
@@ -458,6 +474,26 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
                     Done
                   </span>
                 </div>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <section
+          :if={@channels != []}
+          class="card bg-base-100 shadow-sm border border-base-300"
+        >
+          <div class="card-body p-6">
+            <h2 class="card-title text-lg">How customers found you</h2>
+            <p class="text-sm text-base-content/60 mb-3">Last 30 days</p>
+
+            <ul class="space-y-2">
+              <li
+                :for={{channel, count} <- @channels}
+                class="flex items-center justify-between text-sm"
+              >
+                <span class="text-base-content/80">{channel}</span>
+                <span class="font-semibold tabular-nums">{count}</span>
               </li>
             </ul>
           </div>
