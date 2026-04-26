@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "drivewayos-dev",
+      "runtimeExecutable": "mix",
+      "runtimeArgs": ["phx.server"],
+      "cwd": "/Volumes/mac_external/Development/Business/driveway_os",
+      "port": 4000
+    }
+  ]
+}
