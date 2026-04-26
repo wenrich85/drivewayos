@@ -13,7 +13,7 @@ defmodule DrivewayOSWeb.BookingSuccessLive do
   on_mount DrivewayOSWeb.LoadCustomerHook
 
   alias DrivewayOS.Accounts.Customer
-  alias DrivewayOS.Scheduling.Appointment
+  alias DrivewayOS.Scheduling.{Appointment, Subscription}
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
@@ -23,6 +23,50 @@ defmodule DrivewayOSWeb.BookingSuccessLive do
       load_appointment(socket, id)
     end
   end
+
+  # --- Self-serve subscribe ---
+
+  @impl true
+  def handle_event("show_subscribe_form", _, socket) do
+    {:noreply, assign(socket, :subscribe_state, :form)}
+  end
+
+  def handle_event("hide_subscribe_form", _, socket) do
+    {:noreply, assign(socket, :subscribe_state, :idle)}
+  end
+
+  def handle_event("subscribe", %{"sub" => %{"frequency" => freq}}, socket) do
+    appt = socket.assigns.appointment
+    me = socket.assigns.current_customer
+    tenant = socket.assigns.current_tenant
+
+    # Don't double-book the just-booked appointment — start the
+    # recurring schedule one cycle after the current one.
+    starts_at = next_run_after(appt.scheduled_at, freq)
+
+    attrs = %{
+      customer_id: me.id,
+      service_type_id: appt.service_type_id,
+      frequency: String.to_existing_atom(freq),
+      starts_at: starts_at,
+      vehicle_id: appt.vehicle_id,
+      vehicle_description: appt.vehicle_description,
+      address_id: appt.address_id,
+      service_address: appt.service_address
+    }
+
+    case Subscription
+         |> Ash.Changeset.for_create(:subscribe, attrs, tenant: tenant.id)
+         |> Ash.create(authorize?: false) do
+      {:ok, _} -> {:noreply, assign(socket, :subscribe_state, :done)}
+      _ -> {:noreply, assign(socket, :subscribe_state, :error)}
+    end
+  end
+
+  defp next_run_after(scheduled_at, "weekly"), do: DateTime.add(scheduled_at, 7 * 86_400, :second)
+  defp next_run_after(scheduled_at, "biweekly"), do: DateTime.add(scheduled_at, 14 * 86_400, :second)
+  defp next_run_after(scheduled_at, "monthly"), do: DateTime.add(scheduled_at, 30 * 86_400, :second)
+  defp next_run_after(scheduled_at, _), do: DateTime.add(scheduled_at, 14 * 86_400, :second)
 
   # Two paths land here:
   #
@@ -44,11 +88,22 @@ defmodule DrivewayOSWeb.BookingSuccessLive do
        socket
        |> assign(:page_title, "Booking confirmed")
        |> assign(:appointment, appt)
-       |> assign(:booker, booker)}
+       |> assign(:booker, booker)
+       |> assign(:subscribe_state, :idle)}
     else
       _ -> {:ok, push_navigate(socket, to: ~p"/")}
     end
   end
+
+  # Self-serve subscribe is gated to: signed-in (so we have a real
+  # account to attach), non-guest (their account is ephemeral), and
+  # the customer who booked this very appointment (no point letting
+  # admins subscribe their customers from this page — that's H4's job
+  # via /admin/customers/:id).
+  defp can_subscribe?(%{current_customer: %Customer{id: id}, booker: %Customer{id: id, guest?: false}}),
+    do: true
+
+  defp can_subscribe?(_), do: false
 
   defp can_view?(%Customer{id: id}, %Customer{id: id}), do: true
   defp can_view?(%Customer{guest?: true}, _), do: true
@@ -103,6 +158,95 @@ defmodule DrivewayOSWeb.BookingSuccessLive do
                 <dd class="col-span-2 text-base-content/80">{@appointment.notes}</dd>
               <% end %>
             </dl>
+          </div>
+        </section>
+
+        <section
+          :if={can_subscribe?(assigns)}
+          class="card bg-base-100 shadow-sm border border-base-300"
+        >
+          <div class="card-body p-6">
+            <%= if @subscribe_state == :done do %>
+              <div class="flex items-center gap-3">
+                <span class="hero-check-circle w-6 h-6 text-success" aria-hidden="true"></span>
+                <div>
+                  <p class="font-semibold">You're set up for recurring.</p>
+                  <p class="text-sm text-base-content/70 mt-1">
+                    We'll auto-book the next one — manage anytime from your profile.
+                  </p>
+                </div>
+              </div>
+            <% else %>
+              <div class="flex items-start gap-3 flex-wrap">
+                <span class="hero-arrow-path w-6 h-6 text-primary mt-1 shrink-0" aria-hidden="true"></span>
+                <div class="flex-1 min-w-0">
+                  <p class="font-semibold">Make it recurring?</p>
+                  <p class="text-sm text-base-content/70 mt-1">
+                    Auto-book the same wash on a schedule. Pause or cancel from your profile anytime.
+                  </p>
+
+                  <button
+                    :if={@subscribe_state == :idle}
+                    phx-click="show_subscribe_form"
+                    class="btn btn-primary btn-sm mt-3 gap-1"
+                  >
+                    <span class="hero-arrow-path w-4 h-4" aria-hidden="true"></span>
+                    Set up recurring
+                  </button>
+
+                  <form
+                    :if={@subscribe_state == :form}
+                    id="subscribe-form"
+                    phx-submit="subscribe"
+                    class="mt-3 space-y-3"
+                  >
+                    <div class="flex flex-wrap gap-2">
+                      <label
+                        :for={
+                          {value, label} <-
+                            [
+                              {"weekly", "Weekly"},
+                              {"biweekly", "Every 2 weeks"},
+                              {"monthly", "Monthly"}
+                            ]
+                        }
+                        class="cursor-pointer"
+                      >
+                        <input
+                          type="radio"
+                          name="sub[frequency]"
+                          value={value}
+                          class="peer hidden"
+                          checked={value == "biweekly"}
+                          required
+                        />
+                        <span class="btn btn-sm btn-ghost peer-checked:btn-primary">
+                          {label}
+                        </span>
+                      </label>
+                    </div>
+                    <div class="flex gap-2">
+                      <button
+                        type="button"
+                        phx-click="hide_subscribe_form"
+                        class="btn btn-ghost btn-sm"
+                      >
+                        Cancel
+                      </button>
+                      <button type="submit" class="btn btn-primary btn-sm">Subscribe</button>
+                    </div>
+                  </form>
+
+                  <div
+                    :if={@subscribe_state == :error}
+                    role="alert"
+                    class="alert alert-error mt-3 text-sm"
+                  >
+                    Couldn't set up recurring. Try again from your profile.
+                  </div>
+                </div>
+              </div>
+            <% end %>
           </div>
         </section>
 

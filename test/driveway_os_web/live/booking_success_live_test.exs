@@ -150,6 +150,74 @@ defmodule DrivewayOSWeb.BookingSuccessLiveTest do
     end
   end
 
+  describe "self-serve subscribe" do
+    test "signed-in non-guest customer can subscribe from the success page", %{
+      conn: conn,
+      tenant: tenant
+    } do
+      {:ok, customer} =
+        Customer
+        |> Ash.Changeset.for_create(
+          :register_with_password,
+          %{
+            email: "subme-#{System.unique_integer([:positive])}@example.com",
+            password: "Password123!",
+            password_confirmation: "Password123!",
+            name: "SubMe"
+          },
+          tenant: tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      appt = book_for(tenant, customer)
+
+      {:ok, lv, html} =
+        conn
+        |> sign_in(customer)
+        |> Map.put(:host, "#{tenant.slug}.lvh.me")
+        |> live(~p"/book/success/#{appt.id}")
+
+      assert html =~ "Make it recurring?"
+
+      render_click(lv, "show_subscribe_form")
+
+      lv
+      |> form("#subscribe-form", %{"sub" => %{"frequency" => "biweekly"}})
+      |> render_submit()
+
+      {:ok, [sub]} =
+        DrivewayOS.Scheduling.Subscription
+        |> Ash.Query.set_tenant(tenant.id)
+        |> Ash.read(authorize?: false)
+
+      assert sub.customer_id == customer.id
+      assert sub.frequency == :biweekly
+      # Recurring schedule starts AFTER the just-booked appointment so
+      # the very next-cycle date doesn't double-book.
+      assert DateTime.diff(sub.starts_at, appt.scheduled_at, :day) == 14
+    end
+
+    test "guest does NOT see the subscribe CTA", %{conn: conn, tenant: tenant} do
+      {:ok, guest} =
+        Customer
+        |> Ash.Changeset.for_create(
+          :register_guest,
+          %{name: "Guest", email: "g-sub@example.com"},
+          tenant: tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      appt = book_for(tenant, guest)
+
+      {:ok, _lv, html} =
+        conn
+        |> Map.put(:host, "#{tenant.slug}.lvh.me")
+        |> live(~p"/book/success/#{appt.id}")
+
+      refute html =~ "Make it recurring?"
+    end
+  end
+
   describe "guest (no session)" do
     test "can view a receipt for a guest appointment", %{conn: conn, tenant: tenant} do
       {:ok, guest} =
