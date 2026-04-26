@@ -327,6 +327,16 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
             <.nav_link href="/admin/schedule" icon="hero-clock">Schedule</.nav_link>
             <.nav_link href="/admin/branding" icon="hero-paint-brush">Branding</.nav_link>
             <.nav_link href="/admin/domains" icon="hero-globe-alt">Domains</.nav_link>
+            <a
+              href="/"
+              target="_blank"
+              rel="noopener"
+              class="btn btn-ghost btn-sm gap-1"
+              title="Preview your customer-facing site in a new tab"
+            >
+              <span class="hero-arrow-top-right-on-square w-4 h-4" aria-hidden="true"></span>
+              View shop
+            </a>
             <a href="/auth/customer/sign-out" class="btn btn-ghost btn-sm gap-1">
               <span class="hero-arrow-left-on-rectangle w-4 h-4" aria-hidden="true"></span>
               Sign out

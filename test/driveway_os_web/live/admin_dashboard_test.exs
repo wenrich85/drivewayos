@@ -68,6 +68,16 @@ defmodule DrivewayOSWeb.AdminDashboardTest do
       assert html =~ "Admin"
       assert html =~ ctx.tenant.display_name
     end
+
+    test "admin nav has a 'View shop' link to the public landing in a new tab", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
+
+      assert html =~ "View shop"
+      assert html =~ ~s(target="_blank")
+    end
   end
 
   describe "first-run checklist" do
