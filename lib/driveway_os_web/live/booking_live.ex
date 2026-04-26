@@ -38,7 +38,7 @@ defmodule DrivewayOSWeb.BookingLive do
   alias DrivewayOS.Mailer
   alias DrivewayOS.Notifications.BookingEmail
   alias DrivewayOS.Plans
-  alias DrivewayOS.Scheduling.{Appointment, Photo, ServiceType}
+  alias DrivewayOS.Scheduling.{Appointment, BookingDraft, Photo, ServiceType}
   alias DrivewayOS.Uploads
 
   require Ash.Query
@@ -74,6 +74,8 @@ defmodule DrivewayOSWeb.BookingLive do
             do: load_saved_addresses(customer.id, tenant.id),
             else: []
 
+        {restored_step, restored_data} = restore_draft(tenant.id, customer)
+
         socket =
           socket
           |> assign(:page_title, "Book a wash")
@@ -81,8 +83,8 @@ defmodule DrivewayOSWeb.BookingLive do
           |> assign(:slots, slots)
           |> assign(:saved_vehicles, saved_vehicles)
           |> assign(:saved_addresses, saved_addresses)
-          |> assign(:wizard_step, :service)
-          |> assign(:wizard_data, blank_data())
+          |> assign(:wizard_step, restored_step)
+          |> assign(:wizard_data, restored_data)
           |> assign(:vehicle_mode, initial_mode(saved_vehicles))
           |> assign(:address_mode, initial_mode(saved_addresses))
           |> assign(:account_mode, :guest)
@@ -391,6 +393,7 @@ defmodule DrivewayOSWeb.BookingLive do
          {:ok, appt} <-
            create_appointment(tenant, customer, service, scheduled_at, merged) do
       socket = consume_booking_photos(socket, tenant, customer, appt)
+      clear_draft(socket)
       handle_post_booking(socket, tenant, customer, service, appt)
     else
       {:error, :missing_service} ->
@@ -412,6 +415,16 @@ defmodule DrivewayOSWeb.BookingLive do
 
   # --- Navigation ---
 
+  def handle_event("start_over", _, socket) do
+    clear_draft(socket)
+
+    {:noreply,
+     socket
+     |> assign(:wizard_step, :service)
+     |> assign(:wizard_data, blank_data())
+     |> assign(:errors, %{})}
+  end
+
   def handle_event("back", _, socket) do
     case prev_step(socket.assigns.wizard_step, socket) do
       nil -> {:noreply, socket}
@@ -431,7 +444,11 @@ defmodule DrivewayOSWeb.BookingLive do
       else: :schedule
   end
 
-  defp advance_to(socket, step), do: assign(socket, :wizard_step, step)
+  defp advance_to(socket, step) do
+    socket = assign(socket, :wizard_step, step)
+    save_draft(socket)
+    socket
+  end
 
   defp put_data(socket, key, value) do
     new = Map.put(socket.assigns.wizard_data, to_string(key), value)
@@ -448,6 +465,83 @@ defmodule DrivewayOSWeb.BookingLive do
       "notes" => ""
     }
   end
+
+  # --- Draft persistence (signed-in customers only) ---
+
+  defp restore_draft(_tenant_id, nil), do: {:service, blank_data()}
+
+  defp restore_draft(_tenant_id, %{guest?: true}), do: {:service, blank_data()}
+
+  defp restore_draft(tenant_id, %{id: customer_id}) do
+    case BookingDraft
+         |> Ash.Query.for_read(:for_customer, %{customer_id: customer_id})
+         |> Ash.Query.set_tenant(tenant_id)
+         |> Ash.read(authorize?: false) do
+      {:ok, [%BookingDraft{step: step, data: data}]} ->
+        {parse_step(step), Map.merge(blank_data(), data || %{})}
+
+      _ ->
+        {:service, blank_data()}
+    end
+  rescue
+    _ -> {:service, blank_data()}
+  end
+
+  defp parse_step(step) when is_binary(step) do
+    case step do
+      "service" -> :service
+      "account" -> :account
+      "vehicle" -> :vehicle
+      "address" -> :address
+      "photos" -> :photos
+      "schedule" -> :schedule
+      _ -> :service
+    end
+  end
+
+  defp parse_step(_), do: :service
+
+  defp save_draft(%{assigns: %{current_customer: %{guest?: true}}}), do: :ok
+  defp save_draft(%{assigns: %{current_customer: nil}}), do: :ok
+  defp save_draft(%{assigns: %{current_customer: customer}} = socket) do
+    BookingDraft
+    |> Ash.Changeset.for_create(
+      :upsert,
+      %{
+        customer_id: customer.id,
+        step: Atom.to_string(socket.assigns.wizard_step),
+        data: socket.assigns.wizard_data
+      },
+      tenant: socket.assigns.current_tenant.id
+    )
+    |> Ash.create(authorize?: false)
+
+    :ok
+  rescue
+    _ -> :ok
+  end
+
+  defp save_draft(_), do: :ok
+
+  defp clear_draft(%{assigns: %{current_customer: %{guest?: true}}}), do: :ok
+  defp clear_draft(%{assigns: %{current_customer: nil}}), do: :ok
+  defp clear_draft(%{assigns: %{current_customer: customer}} = socket) do
+    case BookingDraft
+         |> Ash.Query.for_read(:for_customer, %{customer_id: customer.id})
+         |> Ash.Query.set_tenant(socket.assigns.current_tenant.id)
+         |> Ash.read(authorize?: false) do
+      {:ok, [draft]} ->
+        Ash.destroy(draft, authorize?: false, tenant: socket.assigns.current_tenant.id)
+        :ok
+
+      _ ->
+        :ok
+    end
+  rescue
+    _ -> :ok
+  end
+
+  defp clear_draft(_), do: :ok
 
   # Going back skips :account when the customer was already signed
   # in at mount (step never appeared in their timeline). Anonymous
@@ -741,7 +835,18 @@ defmodule DrivewayOSWeb.BookingLive do
           >
             <span class="hero-arrow-left w-4 h-4" aria-hidden="true"></span> Back
           </a>
-          <h1 class="text-3xl font-bold tracking-tight mt-2">Book a wash</h1>
+          <div class="flex items-center justify-between gap-3 mt-2">
+            <h1 class="text-3xl font-bold tracking-tight">Book a wash</h1>
+            <button
+              :if={@current_customer && @wizard_step != :service}
+              type="button"
+              phx-click="start_over"
+              data-confirm="Discard this draft and start over?"
+              class="btn btn-ghost btn-sm"
+            >
+              Start over
+            </button>
+          </div>
           <p :if={@current_customer} class="text-sm text-base-content/70 mt-1">
             Welcome back, {@current_customer.name}.
           </p>

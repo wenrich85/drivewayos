@@ -707,4 +707,161 @@ defmodule DrivewayOSWeb.BookingLiveTest do
       refute html =~ "4. photos"
     end
   end
+
+  describe "session-cache resume (BookingDraft)" do
+    test "advancing past a step persists a draft row", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/book")
+
+      service_id = extract_service_id(html, "basic")
+
+      lv
+      |> form("#step-service-form", %{"booking" => %{"service_type_id" => service_id}})
+      |> render_submit()
+
+      {:ok, [draft]} =
+        DrivewayOS.Scheduling.BookingDraft
+        |> Ash.Query.set_tenant(ctx.tenant.id)
+        |> Ash.read(authorize?: false)
+
+      assert draft.customer_id == ctx.customer.id
+      assert draft.step == "vehicle"
+      assert draft.data["service_type_id"] == service_id
+    end
+
+    test "re-mounting after advancing restores the wizard at the saved step", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/book")
+
+      service_id = extract_service_id(html, "basic")
+
+      lv
+      |> form("#step-service-form", %{"booking" => %{"service_type_id" => service_id}})
+      |> render_submit()
+
+      lv
+      |> form("#step-vehicle-text-form", %{
+        "booking" => %{"vehicle_description" => "2022 Subaru Outback (Blue)"}
+      })
+      |> render_submit()
+
+      # Simulate the customer closing the tab and coming back: a
+      # fresh LV mount with the same conn should put them on
+      # :address (the step they'd advanced to) with the prior data
+      # pre-filled.
+      {:ok, _lv2, html2} =
+        ctx.conn
+        |> sign_in(ctx.customer)
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/book")
+
+      assert html2 =~ "step-address-text-form"
+
+      # The vehicle data from the prior step is still in the
+      # restored draft (not visible at :address but stays in
+      # wizard_data so the final submit carries it through).
+      {:ok, [d]} =
+        DrivewayOS.Scheduling.BookingDraft
+        |> Ash.Query.set_tenant(ctx.tenant.id)
+        |> Ash.read(authorize?: false)
+
+      assert d.data["vehicle_description"] == "2022 Subaru Outback (Blue)"
+    end
+
+    test "Start over button clears the draft and returns to :service", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/book")
+
+      service_id = extract_service_id(html, "basic")
+
+      lv
+      |> form("#step-service-form", %{"booking" => %{"service_type_id" => service_id}})
+      |> render_submit()
+
+      html = render_click(lv, "start_over")
+
+      # Draft is gone.
+      {:ok, drafts} =
+        DrivewayOS.Scheduling.BookingDraft
+        |> Ash.Query.set_tenant(ctx.tenant.id)
+        |> Ash.read(authorize?: false)
+
+      assert drafts == []
+      # Wizard reset to :service.
+      assert html =~ "step-service-form"
+    end
+
+    test "completing the booking deletes the draft", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/book")
+
+      service_id = extract_service_id(html, "basic")
+
+      lv
+      |> form("#step-service-form", %{"booking" => %{"service_type_id" => service_id}})
+      |> render_submit()
+
+      lv
+      |> form("#step-vehicle-text-form", %{
+        "booking" => %{"vehicle_description" => "Truck"}
+      })
+      |> render_submit()
+
+      lv
+      |> form("#step-address-text-form", %{
+        "booking" => %{"service_address" => "1 Main"}
+      })
+      |> render_submit()
+
+      future = DateTime.utc_now() |> DateTime.add(2 * 86_400, :second)
+
+      lv
+      |> form("#booking-form", %{
+        "booking" => %{
+          "scheduled_at" => DateTime.to_iso8601(future) |> String.slice(0, 16)
+        }
+      })
+      |> render_submit()
+
+      {:ok, drafts} =
+        DrivewayOS.Scheduling.BookingDraft
+        |> Ash.Query.set_tenant(ctx.tenant.id)
+        |> Ash.read(authorize?: false)
+
+      assert drafts == []
+    end
+
+    test "guests do not get drafts persisted", %{conn: conn, tenant: tenant} do
+      # Promote tenant to Pro so guests are allowed at all.
+      tenant
+      |> Ash.Changeset.for_update(:update, %{plan_tier: :pro})
+      |> Ash.update!(authorize?: false)
+
+      DrivewayOS.Plans.flush_cache()
+
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{tenant.slug}.lvh.me") |> live(~p"/book")
+
+      service_id = extract_service_id(html, "basic")
+
+      lv
+      |> form("#step-service-form", %{"booking" => %{"service_type_id" => service_id}})
+      |> render_submit()
+
+      {:ok, drafts} =
+        DrivewayOS.Scheduling.BookingDraft
+        |> Ash.Query.set_tenant(tenant.id)
+        |> Ash.read(authorize?: false)
+
+      assert drafts == []
+    end
+  end
 end
