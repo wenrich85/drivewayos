@@ -18,7 +18,8 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
   on_mount DrivewayOSWeb.LoadCustomerHook
 
   alias DrivewayOS.Accounts.Customer
-  alias DrivewayOS.Scheduling.{Appointment, ServiceType}
+  alias DrivewayOS.Platform.CustomDomain
+  alias DrivewayOS.Scheduling.{Appointment, BlockTemplate, ServiceType}
 
   require Ash.Query
 
@@ -105,6 +106,16 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
     pending = Enum.filter(appointments, &(&1.status == :pending))
     upcoming = Enum.filter(appointments, &(&1.status in [:pending, :confirmed]))
 
+    {:ok, blocks} =
+      BlockTemplate |> Ash.Query.set_tenant(tenant_id) |> Ash.read(authorize?: false)
+
+    {:ok, custom_domains} =
+      CustomDomain
+      |> Ash.Query.filter(tenant_id == ^tenant_id)
+      |> Ash.read(authorize?: false)
+
+    checklist = build_checklist(socket.assigns.current_tenant, blocks, custom_domains)
+
     socket
     |> assign(:page_title, "Admin · #{socket.assigns.current_tenant.display_name}")
     |> assign(:pending, Enum.sort_by(pending, & &1.scheduled_at, DateTime))
@@ -113,6 +124,36 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
     |> assign(:customer_count, length(customers))
     |> assign(:service_map, service_map)
     |> assign(:customer_map, customer_map)
+    |> assign(:checklist, checklist)
+  end
+
+  # Returns a list of `{title, blurb, href}` for the open onboarding
+  # items only — completed ones drop out, so when everything's done
+  # the checklist is just `[]` and the card hides itself.
+  defp build_checklist(tenant, blocks, custom_domains) do
+    [
+      is_nil(tenant.stripe_account_id) &&
+        {"Connect Stripe", "Take payment for bookings.", "/onboarding/stripe/start"},
+      Enum.empty?(blocks) &&
+        {"Define your availability",
+         "Customers see concrete time slots once you've added at least one weekly block.",
+         "/admin/schedule"},
+      missing_branding?(tenant) &&
+        {"Customize your branding",
+         "Upload a logo, set your support email, pick a brand color.",
+         "/admin/branding"},
+      Enum.empty?(custom_domains) &&
+        {"(Optional) Run on your own domain",
+         "Point a hostname like book.yourshop.com at DrivewayOS.",
+         "/admin/domains"}
+    ]
+    |> Enum.filter(& &1)
+  end
+
+  # Onboarding-time defaults like "no logo" + "no support email"
+  # mean the operator hasn't customized branding yet.
+  defp missing_branding?(tenant) do
+    is_nil(tenant.support_email) and is_nil(tenant.logo_url)
   end
 
   defp fmt_price(cents), do: "$" <> :erlang.float_to_binary(cents / 100, decimals: 2)
@@ -148,18 +189,27 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
           </div>
         </div>
 
-        <div
-          :if={is_nil(@current_tenant.stripe_account_id)}
-          class="alert alert-warning shadow"
+        <section
+          :if={@checklist != []}
+          class="card bg-base-100 shadow border-l-4 border-warning"
         >
-          <div class="flex-1">
-            <div class="font-semibold">Stripe not connected yet</div>
-            <div class="text-sm">
-              Connect your Stripe account to start collecting payment for bookings.
-            </div>
+          <div class="card-body">
+            <h2 class="card-title text-lg">Get set up</h2>
+            <p class="text-sm text-base-content/70">
+              A few things to take care of before you're ready for real customers.
+            </p>
+            <ul class="space-y-3 mt-2">
+              <li :for={{title, blurb, href} <- @checklist} class="flex gap-3 items-start">
+                <span class="text-warning text-xl leading-none">○</span>
+                <div class="flex-1">
+                  <div class="font-semibold">{title}</div>
+                  <div class="text-sm text-base-content/70">{blurb}</div>
+                </div>
+                <a href={href} class="btn btn-primary btn-sm">Do it</a>
+              </li>
+            </ul>
           </div>
-          <a href="/onboarding/stripe/start" class="btn btn-primary btn-sm">Connect Stripe</a>
-        </div>
+        </section>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div class="stat bg-base-100 rounded-lg shadow">

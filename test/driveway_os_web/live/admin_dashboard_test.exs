@@ -70,6 +70,53 @@ defmodule DrivewayOSWeb.AdminDashboardTest do
     end
   end
 
+  describe "first-run checklist" do
+    test "shows open items when the tenant is fresh", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
+
+      # Stripe not connected, no block templates → these items render.
+      assert html =~ "Get set up"
+      assert html =~ "Connect Stripe"
+      assert html =~ "Define your availability"
+    end
+
+    test "hides items that are done", ctx do
+      # Mark Stripe connected + add a block template; both items should
+      # disappear from the checklist.
+      ctx.tenant
+      |> Ash.Changeset.for_update(:update, %{
+        stripe_account_id: "acct_done_#{System.unique_integer([:positive])}",
+        stripe_account_status: :enabled
+      })
+      |> Ash.update!(authorize?: false)
+
+      DrivewayOS.Scheduling.BlockTemplate
+      |> Ash.Changeset.for_create(
+        :create,
+        %{
+          name: "Mon",
+          day_of_week: 1,
+          start_time: ~T[09:00:00],
+          duration_minutes: 60,
+          capacity: 1
+        },
+        tenant: ctx.tenant.id
+      )
+      |> Ash.create!(authorize?: false)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
+
+      refute html =~ "Connect Stripe"
+      refute html =~ "Define your availability"
+    end
+  end
+
   describe "dashboard contents" do
     test "shows count of pending appointments", ctx do
       {:ok, _appt} = book!(ctx.tenant, ctx.customer, ctx.service)

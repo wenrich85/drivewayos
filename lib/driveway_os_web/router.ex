@@ -42,6 +42,7 @@ defmodule DrivewayOSWeb.Router do
     live "/", LandingLive
     live "/signup", SignupLive
     live "/sign-in", Auth.SignInLive
+    live "/magic-link", Auth.MagicLinkLive
     live "/register", Auth.RegisterLive
     live "/book", BookingLive
     live "/book/success/:id", BookingSuccessLive

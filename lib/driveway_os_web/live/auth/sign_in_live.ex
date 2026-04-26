@@ -95,6 +95,12 @@ defmodule DrivewayOSWeb.Auth.SignInLive do
             <button type="submit" class="btn btn-primary w-full">Sign in</button>
           </form>
 
+          <div class="divider text-xs">or</div>
+
+          <a href="/magic-link" class="btn btn-ghost btn-sm">
+            Email me a sign-in link instead
+          </a>
+
           <div class="divider text-xs">or continue with</div>
 
           <div class="space-y-2">
