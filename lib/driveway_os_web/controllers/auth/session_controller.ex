@@ -23,6 +23,7 @@ defmodule DrivewayOSWeb.Auth.SessionController do
   def sign_out(conn, _params) do
     conn
     |> delete_session(:customer_token)
+    |> delete_session(:impersonated_by)
     |> redirect(to: ~p"/")
   end
 end

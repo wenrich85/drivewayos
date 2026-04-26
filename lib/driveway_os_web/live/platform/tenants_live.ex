@@ -82,7 +82,10 @@ defmodule DrivewayOSWeb.Platform.TenantsLive do
               {length(@tenants)} total · welcome, {@current_platform_user.name}
             </p>
           </div>
-          <a href="/auth/platform/sign-out" class="btn btn-ghost btn-sm">Sign out</a>
+          <div class="flex gap-2">
+            <a href="/metrics" class="btn btn-ghost btn-sm">Metrics</a>
+            <a href="/auth/platform/sign-out" class="btn btn-ghost btn-sm">Sign out</a>
+          </div>
         </div>
 
         <section class="card bg-base-100 shadow">
@@ -124,6 +127,13 @@ defmodule DrivewayOSWeb.Platform.TenantsLive do
                       {Calendar.strftime(t.inserted_at, "%b %-d, %Y")}
                     </td>
                     <td class="text-right space-x-1">
+                      <a
+                        :if={t.status != :archived}
+                        href={"/platform/impersonate/#{t.id}"}
+                        class="btn btn-ghost btn-xs"
+                      >
+                        Impersonate
+                      </a>
                       <button
                         :if={t.status in [:active, :pending_onboarding]}
                         phx-click="suspend_tenant"

@@ -18,6 +18,8 @@ defmodule DrivewayOSWeb.LoadCustomerHook do
   alias DrivewayOS.Accounts.Customer
 
   def on_mount(:default, _params, session, socket) do
+    socket = assign(socket, :impersonated_by, Map.get(session, "impersonated_by"))
+
     socket =
       with %{} = tenant <- socket.assigns[:current_tenant],
            token when is_binary(token) <- Map.get(session, "customer_token"),

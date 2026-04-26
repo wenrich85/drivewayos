@@ -31,6 +31,8 @@ defmodule DrivewayOSWeb.Plugs.LoadCustomer do
   def init(opts), do: opts
 
   def call(conn, _opts) do
+    conn = assign(conn, :impersonated_by, get_session(conn, :impersonated_by))
+
     with %{} = tenant <- conn.assigns[:current_tenant],
          token when is_binary(token) <- get_session(conn, :customer_token),
          # Passing `tenant:` to verify makes Joken validate the JWT's

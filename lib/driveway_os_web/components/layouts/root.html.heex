@@ -42,6 +42,15 @@
     </script>
   </head>
   <body>
+    <div
+      :if={assigns[:impersonated_by]}
+      class="bg-warning text-warning-content text-center text-sm py-1 px-3 flex justify-center items-center gap-3"
+    >
+      <span>⚠️ Impersonating tenant — actions audit-logged.</span>
+      <a href="/auth/customer/sign-out" class="link link-hover font-semibold">
+        Stop impersonating
+      </a>
+    </div>
     {@inner_content}
   </body>
 </html>

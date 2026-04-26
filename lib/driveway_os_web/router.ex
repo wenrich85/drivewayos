@@ -62,8 +62,11 @@ defmodule DrivewayOSWeb.Router do
     # Platform-admin (the SaaS operator — us). All under admin.lvh.me.
     live "/platform-sign-in", Platform.SignInLive
     live "/tenants", Platform.TenantsLive
+    live "/metrics", Platform.MetricsLive
     get "/auth/platform/store-token", Platform.SessionController, :store_token
     get "/auth/platform/sign-out", Platform.SessionController, :sign_out
+
+    get "/platform/impersonate/:id", Platform.ImpersonationController, :start
   end
 
   # Other scopes may use custom stacks.
