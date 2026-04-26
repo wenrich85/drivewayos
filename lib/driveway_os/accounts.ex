@@ -13,9 +13,29 @@ defmodule DrivewayOS.Accounts do
   """
   use Ash.Domain
 
+  require Ash.Query
+
   resources do
     resource DrivewayOS.Accounts.Customer
     resource DrivewayOS.Accounts.Token
+  end
+
+  @doc """
+  Returns every `:admin`-role Customer for the given tenant. Used
+  by notification fan-outs (operator alert on new booking, etc.)
+  Tenant-scoped — passing a tenant_id from a different tenant gets
+  you that tenant's admins; cross-tenant leakage is impossible
+  because the multitenancy filter applies.
+  """
+  @spec tenant_admins(binary()) :: [DrivewayOS.Accounts.Customer.t()]
+  def tenant_admins(tenant_id) when is_binary(tenant_id) do
+    case DrivewayOS.Accounts.Customer
+         |> Ash.Query.filter(role == :admin)
+         |> Ash.Query.set_tenant(tenant_id)
+         |> Ash.read(authorize?: false) do
+      {:ok, admins} -> admins
+      _ -> []
+    end
   end
 
   @doc """

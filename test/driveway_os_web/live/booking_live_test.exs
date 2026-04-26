@@ -708,6 +708,80 @@ defmodule DrivewayOSWeb.BookingLiveTest do
     end
   end
 
+  describe "operator alert on new booking" do
+    setup ctx do
+      {:ok, admin} =
+        DrivewayOS.Accounts.Customer
+        |> Ash.Changeset.for_create(
+          :register_with_password,
+          %{
+            email: "owner-#{System.unique_integer([:positive])}@example.com",
+            password: "Password123!",
+            password_confirmation: "Password123!",
+            name: "Owner"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      admin
+      |> Ash.Changeset.for_update(:update, %{role: :admin})
+      |> Ash.update!(authorize?: false)
+
+      Map.put(ctx, :admin, admin)
+    end
+
+    test "tenant admin gets a 'New booking' email when a customer books", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/book")
+
+      service_id = extract_service_id(html, "basic")
+
+      lv
+      |> form("#step-service-form", %{"booking" => %{"service_type_id" => service_id}})
+      |> render_submit()
+
+      lv
+      |> form("#step-vehicle-text-form", %{
+        "booking" => %{"vehicle_description" => "Truck"}
+      })
+      |> render_submit()
+
+      lv
+      |> form("#step-address-text-form", %{
+        "booking" => %{"service_address" => "1 Main"}
+      })
+      |> render_submit()
+
+      future = DateTime.utc_now() |> DateTime.add(2 * 86_400, :second)
+
+      lv
+      |> form("#booking-form", %{
+        "booking" => %{
+          "scheduled_at" => DateTime.to_iso8601(future) |> String.slice(0, 16)
+        }
+      })
+      |> render_submit()
+
+      # Booking succeeded → both the customer confirmation AND the
+      # admin "New booking" alert land in the Swoosh test mailbox.
+      received = drain_emails([])
+
+      subjects = Enum.map(received, & &1.subject)
+      assert Enum.any?(subjects, &String.contains?(&1, "New booking"))
+    end
+
+    defp drain_emails(acc) do
+      receive do
+        {:email, %Swoosh.Email{} = e} -> drain_emails([e | acc])
+      after
+        0 -> acc
+      end
+    end
+  end
+
   describe "session-cache resume (BookingDraft)" do
     test "advancing past a step persists a draft row", ctx do
       conn = sign_in(ctx.conn, ctx.customer)

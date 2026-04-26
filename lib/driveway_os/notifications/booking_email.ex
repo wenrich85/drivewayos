@@ -54,6 +54,48 @@ defmodule DrivewayOS.Notifications.BookingEmail do
     """
   end
 
+  @doc """
+  Operator-side notification: fired when a customer books an
+  appointment so the tenant admin doesn't have to refresh /admin
+  to find out. One email per admin (the BookingLive fan-out
+  iterates over `Accounts.tenant_admins/1`).
+  """
+  @spec new_booking_alert(Tenant.t(), Customer.t(), Customer.t(), Appointment.t(), ServiceType.t()) ::
+          Swoosh.Email.t()
+  def new_booking_alert(
+        %Tenant{} = tenant,
+        %Customer{} = admin,
+        %Customer{} = customer,
+        %Appointment{} = appt,
+        %ServiceType{} = service
+      ) do
+    new()
+    |> to({admin.name, to_string(admin.email)})
+    |> from(Branding.from_address(tenant))
+    |> subject("New booking: #{service.name} for #{customer.name}")
+    |> text_body(alert_body(tenant, admin, customer, appt, service))
+  end
+
+  defp alert_body(tenant, admin, customer, appt, service) do
+    """
+    Hi #{admin.name},
+
+    A new booking just came through #{Branding.display_name(tenant)}.
+
+      Customer: #{customer.name} (#{to_string(customer.email)})
+      Service:  #{service.name}
+      When:     #{format_when(appt.scheduled_at)}
+      Vehicle:  #{appt.vehicle_description}
+      Where:    #{appt.service_address}
+      Total:    #{format_price(appt.price_cents)}
+      Status:   #{appt.status}
+
+    Confirm or cancel from your admin dashboard.
+
+    -- #{Branding.display_name(tenant)}
+    """
+  end
+
   defp format_when(%DateTime{} = dt) do
     Calendar.strftime(dt, "%a %b %-d, %Y at %-I:%M %p UTC")
   end

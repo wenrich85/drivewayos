@@ -657,6 +657,12 @@ defmodule DrivewayOSWeb.BookingLive do
   end
 
   defp handle_post_booking(socket, tenant, customer, service, appt) do
+    # Operators want to know about new bookings regardless of which
+    # post-booking branch the customer takes. Fire the alert before
+    # we even hit Stripe so a Stripe outage doesn't suppress the
+    # notification.
+    notify_admins_of_new_booking(tenant, customer, appt, service)
+
     if tenant.stripe_account_id do
       params = checkout_params(tenant, customer, service, appt)
 
@@ -684,6 +690,16 @@ defmodule DrivewayOSWeb.BookingLive do
     tenant
     |> BookingEmail.confirmation(customer, appt, service)
     |> Mailer.deliver()
+  rescue
+    _ -> :error
+  end
+
+  defp notify_admins_of_new_booking(tenant, customer, appt, service) do
+    for admin <- DrivewayOS.Accounts.tenant_admins(tenant.id) do
+      tenant
+      |> BookingEmail.new_booking_alert(admin, customer, appt, service)
+      |> Mailer.deliver()
+    end
   rescue
     _ -> :error
   end
