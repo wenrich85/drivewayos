@@ -39,12 +39,15 @@ defmodule DrivewayOSWeb.BookingLive do
         {:ok, push_navigate(socket, to: ~p"/sign-in")}
 
       true ->
-        services = load_services(socket.assigns.current_tenant.id)
+        tenant_id = socket.assigns.current_tenant.id
+        services = load_services(tenant_id)
+        slots = DrivewayOS.Scheduling.upcoming_slots(tenant_id, 14)
 
         {:ok,
          socket
          |> assign(:page_title, "Book a wash")
          |> assign(:services, services)
+         |> assign(:slots, slots)
          |> assign(:errors, %{})
          |> assign(:form, blank_form())}
     end
@@ -54,9 +57,10 @@ defmodule DrivewayOSWeb.BookingLive do
   def handle_event("submit", %{"booking" => params}, socket) do
     tenant = socket.assigns.current_tenant
     customer = socket.assigns.current_customer
+    slots = socket.assigns[:slots] || []
 
     with {:ok, service} <- fetch_service(params["service_type_id"], tenant.id),
-         {:ok, scheduled_at} <- parse_scheduled_at(params["scheduled_at"]),
+         {:ok, scheduled_at} <- resolve_scheduled_at(params, slots),
          {:ok, appt} <-
            create_appointment(tenant, customer, service, scheduled_at, params) do
       handle_post_booking(socket, tenant, customer, service, appt)
@@ -113,6 +117,28 @@ defmodule DrivewayOSWeb.BookingLive do
     case Ash.get(ServiceType, id, tenant: tenant_id, authorize?: false) do
       {:ok, svc} -> {:ok, svc}
       _ -> {:error, :missing_service}
+    end
+  end
+
+  # When templates exist, the form sends slot_id; resolve it to the
+  # slot's scheduled_at. Otherwise fall back to free-text parsing.
+  defp resolve_scheduled_at(%{"slot_id" => slot_id}, slots)
+       when is_binary(slot_id) and slot_id != "" do
+    case Enum.find(slots, &(&1.block_template_id == slot_id_template(slot_id))) do
+      nil -> {:error, :bad_datetime}
+      slot -> {:ok, slot.scheduled_at}
+    end
+  end
+
+  defp resolve_scheduled_at(%{"scheduled_at" => v}, _slots), do: parse_scheduled_at(v)
+  defp resolve_scheduled_at(_, _), do: {:error, :bad_datetime}
+
+  # slot_id format: "<template_id>|<iso8601>" so a slot is uniquely
+  # identified by template + date.
+  defp slot_id_template(slot_id) do
+    case String.split(slot_id, "|", parts: 2) do
+      [template_id | _] -> template_id
+      _ -> nil
     end
   end
 
@@ -292,7 +318,30 @@ defmodule DrivewayOSWeb.BookingLive do
               </p>
             </div>
 
-            <div>
+            <div :if={@slots != []}>
+              <label class="label" for="booking-slot">
+                <span class="label-text">Available slots</span>
+              </label>
+              <select
+                id="booking-slot"
+                name="booking[slot_id]"
+                class="select select-bordered w-full"
+                required
+              >
+                <option value="">— Pick a slot —</option>
+                <option
+                  :for={slot <- @slots}
+                  value={"#{slot.block_template_id}|#{DateTime.to_iso8601(slot.scheduled_at)}"}
+                >
+                  {slot.name} — {Calendar.strftime(slot.scheduled_at, "%a %b %-d, %-I:%M %p UTC")} ({slot.duration_minutes} min)
+                </option>
+              </select>
+              <p :if={@errors[:scheduled_at]} class="text-error text-sm mt-1">
+                {@errors[:scheduled_at]}
+              </p>
+            </div>
+
+            <div :if={@slots == []}>
               <label class="label" for="booking-scheduled-at">
                 <span class="label-text">Date & time</span>
               </label>

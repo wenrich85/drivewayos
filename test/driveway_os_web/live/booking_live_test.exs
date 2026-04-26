@@ -201,6 +201,35 @@ defmodule DrivewayOSWeb.BookingLiveTest do
       assert appt.payment_status == :pending
     end
 
+    test "with block templates: shows slot picker instead of free-text",
+         %{conn: conn, tenant: tenant, customer: customer} do
+      today_dow = Integer.mod(Date.day_of_week(Date.utc_today(), :sunday) - 1, 7)
+
+      {:ok, _bt} =
+        DrivewayOS.Scheduling.BlockTemplate
+        |> Ash.Changeset.for_create(
+          :create,
+          %{
+            name: "Daily morning",
+            day_of_week: today_dow,
+            start_time: ~T[09:00:00],
+            duration_minutes: 60,
+            capacity: 1
+          },
+          tenant: tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      conn = sign_in(conn, customer)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{tenant.slug}.lvh.me") |> live(~p"/book")
+
+      # Slot picker named differently from the free-text input.
+      assert html =~ ~s(name="booking[slot_id]")
+      assert html =~ "Daily morning"
+    end
+
     test "submitting with no service shows an error", %{
       conn: conn,
       tenant: tenant,

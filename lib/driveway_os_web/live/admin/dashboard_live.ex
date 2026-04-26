@@ -138,6 +138,7 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
             </p>
           </div>
           <div class="flex gap-2">
+            <a href="/admin/schedule" class="btn btn-ghost btn-sm">Schedule</a>
             <a href="/admin/domains" class="btn btn-ghost btn-sm">Domains</a>
             <a href="/auth/customer/sign-out" class="btn btn-ghost btn-sm">Sign out</a>
           </div>
