@@ -61,48 +61,65 @@ defmodule DrivewayOSWeb.Admin.CustomersLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <main class="min-h-screen bg-base-200 px-4 py-8">
-      <div class="max-w-4xl mx-auto space-y-6">
-        <div class="flex justify-between items-center flex-wrap gap-2">
-          <div>
-            <h1 class="text-3xl font-bold">Customers</h1>
-            <p class="text-base-content/70 text-sm">
-              Everyone who's signed up at {@current_tenant.display_name}.
-            </p>
-          </div>
-          <a href="/admin" class="btn btn-ghost btn-sm">← Dashboard</a>
-        </div>
+    <main class="min-h-screen bg-base-200 px-4 py-8 sm:py-12">
+      <div class="max-w-5xl mx-auto space-y-6">
+        <header>
+          <a
+            href="/admin"
+            class="inline-flex items-center gap-1 text-sm text-base-content/60 hover:text-base-content transition-colors"
+          >
+            <span class="hero-arrow-left w-4 h-4" aria-hidden="true"></span> Dashboard
+          </a>
+          <h1 class="text-3xl font-bold tracking-tight mt-2">Customers</h1>
+          <p class="text-sm text-base-content/70 mt-1">
+            Everyone who's signed up at <span class="font-semibold">{@current_tenant.display_name}</span>.
+          </p>
+        </header>
 
-        <section class="card bg-base-100 shadow">
-          <div class="card-body">
-            <div :if={@customers == []} class="text-center py-6 text-base-content/60">
-              No customers yet.
+        <section class="card bg-base-100 shadow-sm border border-base-300">
+          <div class="card-body p-6">
+            <div :if={@customers == []} class="text-center py-12 px-4">
+              <span
+                class="hero-user-group w-12 h-12 mx-auto text-base-content/30"
+                aria-hidden="true"
+              ></span>
+              <p class="mt-2 text-sm text-base-content/60">No customers yet.</p>
             </div>
 
             <div :if={@customers != []} class="overflow-x-auto">
               <table class="table table-zebra">
                 <thead>
                   <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Role</th>
-                    <th>Bookings</th>
-                    <th>Joined</th>
+                    <th class="text-xs font-semibold uppercase tracking-wide text-base-content/60">
+                      Name
+                    </th>
+                    <th class="text-xs font-semibold uppercase tracking-wide text-base-content/60">
+                      Email
+                    </th>
+                    <th class="text-xs font-semibold uppercase tracking-wide text-base-content/60">
+                      Role
+                    </th>
+                    <th class="text-xs font-semibold uppercase tracking-wide text-base-content/60">
+                      Bookings
+                    </th>
+                    <th class="text-xs font-semibold uppercase tracking-wide text-base-content/60">
+                      Joined
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr :for={c <- @customers}>
+                  <tr :for={c <- @customers} class="hover:bg-base-200/50 cursor-pointer">
                     <td class="font-semibold">
                       <.link navigate={~p"/admin/customers/#{c.id}"} class="link link-hover">
                         {c.name}
                       </.link>
                     </td>
-                    <td>{to_string(c.email)}</td>
+                    <td class="text-sm">{to_string(c.email)}</td>
                     <td>
                       <span :if={c.role == :admin} class="badge badge-primary badge-sm">Admin</span>
                       <span :if={c.role != :admin} class="badge badge-ghost badge-sm">Customer</span>
                     </td>
-                    <td>{Map.get(@appt_counts, c.id, 0)}</td>
+                    <td class="text-sm">{Map.get(@appt_counts, c.id, 0)}</td>
                     <td class="text-xs text-base-content/60">
                       {Calendar.strftime(c.inserted_at, "%b %-d, %Y")}
                     </td>

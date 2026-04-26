@@ -98,66 +98,95 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <main class="min-h-screen bg-base-200 px-4 py-8">
+    <main class="min-h-screen bg-base-200 px-4 py-8 sm:py-12">
       <div class="max-w-3xl mx-auto space-y-6">
-        <div class="flex justify-between items-start flex-wrap gap-2">
-          <div>
-            <h1 class="text-3xl font-bold">{@customer.name}</h1>
-            <p class="text-base-content/70 text-sm">
+        <header>
+          <a
+            href="/admin/customers"
+            class="inline-flex items-center gap-1 text-sm text-base-content/60 hover:text-base-content transition-colors"
+          >
+            <span class="hero-arrow-left w-4 h-4" aria-hidden="true"></span> All customers
+          </a>
+          <h1 class="text-3xl font-bold tracking-tight mt-2">{@customer.name}</h1>
+          <p class="text-sm text-base-content/70 mt-1 flex items-center gap-3 flex-wrap">
+            <span class="inline-flex items-center gap-1">
+              <span class="hero-envelope w-4 h-4" aria-hidden="true"></span>
               {to_string(@customer.email)}
-              <span :if={@customer.phone} class="ml-2">· {@customer.phone}</span>
-            </p>
-          </div>
-          <a href="/admin/customers" class="btn btn-ghost btn-sm">← All customers</a>
+            </span>
+            <span :if={@customer.phone} class="inline-flex items-center gap-1">
+              <span class="hero-phone w-4 h-4" aria-hidden="true"></span> {@customer.phone}
+            </span>
+            <span :if={@customer.role == :admin} class="badge badge-primary badge-sm">Admin</span>
+          </p>
+        </header>
+
+        <div :if={@flash_msg} role="alert" class="alert alert-success">
+          <span class="hero-check-circle w-5 h-5 shrink-0" aria-hidden="true"></span>
+          <span class="text-sm">{@flash_msg}</span>
+        </div>
+        <div :if={@notes_error} role="alert" class="alert alert-error">
+          <span class="hero-exclamation-circle w-5 h-5 shrink-0" aria-hidden="true"></span>
+          <span class="text-sm">{@notes_error}</span>
         </div>
 
-        <div :if={@flash_msg} class="alert alert-success text-sm">{@flash_msg}</div>
-        <div :if={@notes_error} class="alert alert-error text-sm">{@notes_error}</div>
-
-        <section class="card bg-base-100 shadow">
-          <div class="card-body">
-            <h2 class="card-title text-lg">Admin notes</h2>
-            <p class="text-xs text-base-content/60">
-              Visible to your team only. Gate codes, vehicle quirks, preferences, etc.
-            </p>
+        <section class="card bg-base-100 shadow-sm border border-base-300">
+          <div class="card-body p-6 space-y-3">
+            <div>
+              <h2 class="card-title text-lg">Admin notes</h2>
+              <p class="text-xs text-base-content/60">
+                Visible to your team only. Gate codes, vehicle quirks, preferences, etc.
+              </p>
+            </div>
 
             <form id="notes-form" phx-submit="save_notes" class="space-y-2">
               <textarea
                 name="customer[admin_notes]"
                 rows="4"
+                placeholder="Notes about this customer…"
                 class="textarea textarea-bordered w-full"
               >{@customer.admin_notes || ""}</textarea>
-              <button type="submit" class="btn btn-primary btn-sm">Save notes</button>
+              <button type="submit" class="btn btn-primary btn-sm gap-1">
+                <span class="hero-check w-4 h-4" aria-hidden="true"></span> Save notes
+              </button>
             </form>
           </div>
         </section>
 
-        <section class="card bg-base-100 shadow">
-          <div class="card-body">
+        <section class="card bg-base-100 shadow-sm border border-base-300">
+          <div class="card-body p-6">
             <h2 class="card-title text-lg">Appointment history</h2>
 
-            <div :if={@appointments == []} class="text-center py-6 text-base-content/60">
-              No bookings yet.
+            <div :if={@appointments == []} class="text-center py-8 px-4">
+              <span
+                class="hero-calendar w-12 h-12 mx-auto text-base-content/30"
+                aria-hidden="true"
+              ></span>
+              <p class="mt-2 text-sm text-base-content/60">No bookings yet.</p>
             </div>
 
             <ul :if={@appointments != []} class="divide-y divide-base-200">
               <li
                 :for={a <- @appointments}
-                class="py-3 flex items-center justify-between gap-3 flex-wrap"
+                class="py-4 flex items-start justify-between gap-3 flex-wrap"
               >
                 <div class="flex-1 min-w-0">
-                  <div class="font-semibold flex items-center gap-2">
-                    <span>{service_name(@service_map, a.service_type_id)}</span>
-                    <span class={"badge badge-sm #{status_badge(a.status)}"}>{a.status}</span>
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <.link
+                      navigate={~p"/appointments/#{a.id}"}
+                      class="font-semibold link link-hover"
+                    >
+                      {service_name(@service_map, a.service_type_id)}
+                    </.link>
+                    <span class={"badge badge-sm " <> status_badge(a.status)}>{a.status}</span>
                   </div>
-                  <div class="text-sm text-base-content/70">
+                  <div class="text-sm text-base-content/70 mt-1">
                     {fmt_when(a.scheduled_at)}
                   </div>
-                  <div class="text-xs text-base-content/60 truncate">
+                  <div class="text-xs text-base-content/60 truncate mt-1">
                     {a.vehicle_description} · {a.service_address}
                   </div>
                 </div>
-                <div class="text-sm font-semibold">{fmt_price(a.price_cents)}</div>
+                <div class="text-sm font-semibold shrink-0">{fmt_price(a.price_cents)}</div>
               </li>
             </ul>
           </div>

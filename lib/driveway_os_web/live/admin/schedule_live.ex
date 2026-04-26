@@ -126,95 +126,148 @@ defmodule DrivewayOSWeb.Admin.ScheduleLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <main class="min-h-screen bg-base-200 px-4 py-8">
+    <main class="min-h-screen bg-base-200 px-4 py-8 sm:py-12">
       <div class="max-w-3xl mx-auto space-y-6">
-        <div class="flex justify-between items-center flex-wrap gap-2">
-          <div>
-            <h1 class="text-3xl font-bold">Availability</h1>
-            <p class="text-base-content/70 text-sm">
-              Define weekly time blocks. Customers pick from the resulting concrete slots when they book.
-            </p>
-          </div>
-          <a href="/admin" class="btn btn-ghost btn-sm">← Dashboard</a>
-        </div>
+        <header>
+          <a
+            href="/admin"
+            class="inline-flex items-center gap-1 text-sm text-base-content/60 hover:text-base-content transition-colors"
+          >
+            <span class="hero-arrow-left w-4 h-4" aria-hidden="true"></span> Dashboard
+          </a>
+          <h1 class="text-3xl font-bold tracking-tight mt-2">Availability</h1>
+          <p class="text-sm text-base-content/70 mt-1">
+            Define weekly time blocks. Customers pick from the resulting concrete slots when they book.
+          </p>
+        </header>
 
-        <section class="card bg-base-100 shadow">
-          <div class="card-body">
+        <section class="card bg-base-100 shadow-sm border border-base-300">
+          <div class="card-body p-6 space-y-4">
             <h2 class="card-title text-lg">Add a block</h2>
 
-            <div :if={@form_error} class="alert alert-error text-sm">{@form_error}</div>
+            <div :if={@form_error} role="alert" class="alert alert-error">
+              <span class="hero-exclamation-circle w-5 h-5 shrink-0" aria-hidden="true"></span>
+              <span class="text-sm">{@form_error}</span>
+            </div>
 
             <form
               id="new-block-form"
               phx-submit="create_block"
-              class="grid grid-cols-1 md:grid-cols-6 gap-2 mt-2"
+              class="grid grid-cols-1 md:grid-cols-6 gap-3"
             >
-              <input
-                type="text"
-                name="block[name]"
-                placeholder="Wednesday mornings"
-                class="input input-bordered md:col-span-2"
-                required
-              />
-              <select name="block[day_of_week]" class="select select-bordered" required>
-                <option value="">Day</option>
-                <option :for={{label, n} <- Enum.with_index(@days_of_week_labels)} value={n}>
-                  {label}
-                </option>
-              </select>
-              <input
-                type="time"
-                name="block[start_time]"
-                class="input input-bordered"
-                required
-              />
-              <input
-                type="number"
-                name="block[duration_minutes]"
-                placeholder="Min"
-                min="15"
-                step="15"
-                class="input input-bordered"
-                required
-              />
-              <input
-                type="number"
-                name="block[capacity]"
-                value="1"
-                min="1"
-                class="input input-bordered"
-                required
-              />
-              <button type="submit" class="btn btn-primary md:col-span-6">Add block</button>
+              <div class="md:col-span-2">
+                <label class="label" for="blk-name">
+                  <span class="label-text font-medium">Name</span>
+                </label>
+                <input
+                  id="blk-name"
+                  type="text"
+                  name="block[name]"
+                  placeholder="Wednesday mornings"
+                  class="input input-bordered w-full"
+                  required
+                />
+              </div>
+              <div>
+                <label class="label" for="blk-dow">
+                  <span class="label-text font-medium">Day</span>
+                </label>
+                <select
+                  id="blk-dow"
+                  name="block[day_of_week]"
+                  class="select select-bordered w-full"
+                  required
+                >
+                  <option value="">—</option>
+                  <option
+                    :for={{label, n} <- Enum.with_index(@days_of_week_labels)}
+                    value={n}
+                  >
+                    {label}
+                  </option>
+                </select>
+              </div>
+              <div>
+                <label class="label" for="blk-start">
+                  <span class="label-text font-medium">Start</span>
+                </label>
+                <input
+                  id="blk-start"
+                  type="time"
+                  name="block[start_time]"
+                  class="input input-bordered w-full"
+                  required
+                />
+              </div>
+              <div>
+                <label class="label" for="blk-dur">
+                  <span class="label-text font-medium">Duration</span>
+                </label>
+                <input
+                  id="blk-dur"
+                  type="number"
+                  name="block[duration_minutes]"
+                  placeholder="60"
+                  min="15"
+                  step="15"
+                  class="input input-bordered w-full"
+                  required
+                />
+              </div>
+              <div>
+                <label class="label" for="blk-cap">
+                  <span class="label-text font-medium">Capacity</span>
+                </label>
+                <input
+                  id="blk-cap"
+                  type="number"
+                  name="block[capacity]"
+                  value="1"
+                  min="1"
+                  class="input input-bordered w-full"
+                  required
+                />
+              </div>
+              <button type="submit" class="btn btn-primary md:col-span-6 gap-2">
+                <span class="hero-plus w-5 h-5" aria-hidden="true"></span> Add block
+              </button>
             </form>
           </div>
         </section>
 
-        <section class="card bg-base-100 shadow">
-          <div class="card-body">
+        <section class="card bg-base-100 shadow-sm border border-base-300">
+          <div class="card-body p-6">
             <h2 class="card-title text-lg">Your blocks</h2>
 
-            <div :if={@blocks == []} class="text-center py-6 text-base-content/60">
-              No availability defined yet. Customers will see a free-form date picker until you add some.
+            <div :if={@blocks == []} class="text-center py-8 px-4">
+              <span
+                class="hero-clock w-12 h-12 mx-auto text-base-content/30"
+                aria-hidden="true"
+              ></span>
+              <p class="mt-2 text-sm text-base-content/60 max-w-md mx-auto">
+                No availability defined yet. Customers will see a free-form date picker until you add some.
+              </p>
             </div>
 
             <ul :if={@blocks != []} class="divide-y divide-base-200">
-              <li :for={b <- @blocks} class="py-3 flex items-center justify-between gap-3 flex-wrap">
+              <li
+                :for={b <- @blocks}
+                class="py-4 flex items-center justify-between gap-3 flex-wrap"
+              >
                 <div>
-                  <div class="font-semibold">
-                    {b.name}
-                  </div>
-                  <div class="text-sm text-base-content/70">
-                    {day_label(b.day_of_week)} at {time_label(b.start_time)} · {b.duration_minutes} min · capacity {b.capacity}
+                  <div class="font-semibold">{b.name}</div>
+                  <div class="text-sm text-base-content/70 mt-0.5">
+                    <span class="font-mono">{day_label(b.day_of_week)}</span>
+                    at {time_label(b.start_time)} · {b.duration_minutes} min · capacity {b.capacity}
                   </div>
                 </div>
                 <button
                   phx-click="delete_block"
                   phx-value-id={b.id}
                   data-confirm={"Remove #{b.name}?"}
-                  class="btn btn-ghost btn-sm text-error"
+                  class="btn btn-ghost btn-sm text-error gap-1"
                 >
-                  Remove
+                  <span class="hero-trash w-4 h-4" aria-hidden="true"></span> Remove
                 </button>
               </li>
             </ul>

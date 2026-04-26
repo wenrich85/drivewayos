@@ -81,27 +81,36 @@ defmodule DrivewayOSWeb.Admin.BrandingLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <main class="min-h-screen bg-base-200 px-4 py-8">
+    <main class="min-h-screen bg-base-200 px-4 py-8 sm:py-12">
       <div class="max-w-2xl mx-auto space-y-6">
-        <div class="flex justify-between items-center flex-wrap gap-2">
-          <div>
-            <h1 class="text-3xl font-bold">Branding</h1>
-            <p class="text-base-content/70 text-sm">
-              How {@current_tenant.display_name} looks to your customers.
-            </p>
-          </div>
-          <a href="/admin" class="btn btn-ghost btn-sm">← Dashboard</a>
+        <header>
+          <a
+            href="/admin"
+            class="inline-flex items-center gap-1 text-sm text-base-content/60 hover:text-base-content transition-colors"
+          >
+            <span class="hero-arrow-left w-4 h-4" aria-hidden="true"></span> Dashboard
+          </a>
+          <h1 class="text-3xl font-bold tracking-tight mt-2">Branding</h1>
+          <p class="text-sm text-base-content/70 mt-1">
+            How <span class="font-semibold">{@current_tenant.display_name}</span> looks to your customers.
+          </p>
+        </header>
+
+        <div :if={@flash_msg} role="alert" class="alert alert-success">
+          <span class="hero-check-circle w-5 h-5 shrink-0" aria-hidden="true"></span>
+          <span class="text-sm">{@flash_msg}</span>
+        </div>
+        <div :if={@errors[:base]} role="alert" class="alert alert-error">
+          <span class="hero-exclamation-circle w-5 h-5 shrink-0" aria-hidden="true"></span>
+          <span class="text-sm">{@errors[:base]}</span>
         </div>
 
-        <div :if={@flash_msg} class="alert alert-success text-sm">{@flash_msg}</div>
-        <div :if={@errors[:base]} class="alert alert-error text-sm">{@errors[:base]}</div>
-
-        <section class="card bg-base-100 shadow">
-          <div class="card-body">
+        <section class="card bg-base-100 shadow-sm border border-base-300">
+          <div class="card-body p-6">
             <form id="branding-form" phx-submit="submit" class="space-y-4">
               <div>
                 <label class="label" for="b-name">
-                  <span class="label-text">Business name</span>
+                  <span class="label-text font-medium">Business name</span>
                 </label>
                 <input
                   id="b-name"
@@ -111,7 +120,7 @@ defmodule DrivewayOSWeb.Admin.BrandingLive do
                   class="input input-bordered w-full"
                   required
                 />
-                <p :if={@errors[:display_name]} class="text-error text-sm mt-1">
+                <p :if={@errors[:display_name]} class="text-error text-xs mt-1">
                   {@errors[:display_name]}
                 </p>
               </div>
@@ -119,7 +128,7 @@ defmodule DrivewayOSWeb.Admin.BrandingLive do
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label class="label" for="b-email">
-                    <span class="label-text">Support email</span>
+                    <span class="label-text font-medium">Support email</span>
                   </label>
                   <input
                     id="b-email"
@@ -132,7 +141,7 @@ defmodule DrivewayOSWeb.Admin.BrandingLive do
                 </div>
                 <div>
                   <label class="label" for="b-phone">
-                    <span class="label-text">Support phone</span>
+                    <span class="label-text font-medium">Support phone</span>
                   </label>
                   <input
                     id="b-phone"
@@ -148,23 +157,32 @@ defmodule DrivewayOSWeb.Admin.BrandingLive do
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label class="label" for="b-color">
-                    <span class="label-text">Primary color</span>
+                    <span class="label-text font-medium">Primary color</span>
                   </label>
-                  <input
-                    id="b-color"
-                    type="text"
-                    name="tenant[primary_color_hex]"
-                    value={@current_tenant.primary_color_hex}
-                    placeholder="#0d9488"
-                    class="input input-bordered w-full font-mono"
-                  />
-                  <p :if={@errors[:primary_color_hex]} class="text-error text-sm mt-1">
+                  <div class="flex items-center gap-2">
+                    <span
+                      :if={@current_tenant.primary_color_hex}
+                      class="inline-block w-9 h-9 rounded-md border border-base-300 shrink-0"
+                      style={"background-color: #{@current_tenant.primary_color_hex};"}
+                      aria-hidden="true"
+                    >
+                    </span>
+                    <input
+                      id="b-color"
+                      type="text"
+                      name="tenant[primary_color_hex]"
+                      value={@current_tenant.primary_color_hex}
+                      placeholder="#0d9488"
+                      class="input input-bordered w-full font-mono"
+                    />
+                  </div>
+                  <p :if={@errors[:primary_color_hex]} class="text-error text-xs mt-1">
                     {@errors[:primary_color_hex]}
                   </p>
                 </div>
                 <div>
                   <label class="label" for="b-tz">
-                    <span class="label-text">Timezone</span>
+                    <span class="label-text font-medium">Timezone</span>
                   </label>
                   <input
                     id="b-tz"
@@ -179,7 +197,8 @@ defmodule DrivewayOSWeb.Admin.BrandingLive do
 
               <div>
                 <label class="label" for="b-logo">
-                  <span class="label-text">Logo URL</span>
+                  <span class="label-text font-medium">Logo URL</span>
+                  <span class="label-text-alt text-base-content/50">Optional</span>
                 </label>
                 <input
                   id="b-logo"
@@ -190,11 +209,13 @@ defmodule DrivewayOSWeb.Admin.BrandingLive do
                   class="input input-bordered w-full"
                 />
                 <p class="text-xs text-base-content/60 mt-1">
-                  Direct image URL. Hosting your own file (S3, Cloudflare R2, etc.).
+                  Direct image URL. You host the file (S3, Cloudflare R2, etc.).
                 </p>
               </div>
 
-              <button type="submit" class="btn btn-primary">Save</button>
+              <button type="submit" class="btn btn-primary gap-2">
+                <span class="hero-check w-5 h-5" aria-hidden="true"></span> Save
+              </button>
             </form>
           </div>
         </section>

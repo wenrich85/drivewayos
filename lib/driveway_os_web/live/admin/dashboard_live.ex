@@ -169,38 +169,51 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <main class="min-h-screen bg-base-200 px-4 py-8">
-      <div class="max-w-5xl mx-auto space-y-6">
-        <div class="flex justify-between items-start flex-wrap gap-2">
+    <main class="min-h-screen bg-base-200 px-4 py-8 sm:py-12">
+      <div class="max-w-6xl mx-auto space-y-6">
+        <header class="flex justify-between items-start flex-wrap gap-3">
           <div>
-            <h1 class="text-3xl font-bold">Admin · {@current_tenant.display_name}</h1>
-            <p class="text-base-content/70 text-sm">
+            <p class="text-xs font-semibold uppercase tracking-wide text-base-content/60">Admin</p>
+            <h1 class="text-3xl font-bold tracking-tight">{@current_tenant.display_name}</h1>
+            <p class="text-sm text-base-content/70 mt-1">
               Welcome back, {@current_customer.name}.
             </p>
           </div>
-          <div class="flex gap-2 flex-wrap">
-            <a href="/admin/appointments" class="btn btn-ghost btn-sm">Appointments</a>
-            <a href="/admin/customers" class="btn btn-ghost btn-sm">Customers</a>
-            <a href="/admin/services" class="btn btn-ghost btn-sm">Services</a>
-            <a href="/admin/schedule" class="btn btn-ghost btn-sm">Schedule</a>
-            <a href="/admin/branding" class="btn btn-ghost btn-sm">Branding</a>
-            <a href="/admin/domains" class="btn btn-ghost btn-sm">Domains</a>
-            <a href="/auth/customer/sign-out" class="btn btn-ghost btn-sm">Sign out</a>
-          </div>
-        </div>
+          <nav class="flex gap-1 flex-wrap" aria-label="Admin sections">
+            <.nav_link href="/admin/appointments" icon="hero-calendar">Appointments</.nav_link>
+            <.nav_link href="/admin/customers" icon="hero-user-group">Customers</.nav_link>
+            <.nav_link href="/admin/services" icon="hero-rectangle-stack">Services</.nav_link>
+            <.nav_link href="/admin/schedule" icon="hero-clock">Schedule</.nav_link>
+            <.nav_link href="/admin/branding" icon="hero-paint-brush">Branding</.nav_link>
+            <.nav_link href="/admin/domains" icon="hero-globe-alt">Domains</.nav_link>
+            <a href="/auth/customer/sign-out" class="btn btn-ghost btn-sm gap-1">
+              <span class="hero-arrow-left-on-rectangle w-4 h-4" aria-hidden="true"></span>
+              Sign out
+            </a>
+          </nav>
+        </header>
 
         <section
           :if={@checklist != []}
-          class="card bg-base-100 shadow border-l-4 border-warning"
+          class="card bg-warning/10 border border-warning/30 shadow-sm"
         >
-          <div class="card-body">
-            <h2 class="card-title text-lg">Get set up</h2>
-            <p class="text-sm text-base-content/70">
-              A few things to take care of before you're ready for real customers.
-            </p>
-            <ul class="space-y-3 mt-2">
-              <li :for={{title, blurb, href} <- @checklist} class="flex gap-3 items-start">
-                <span class="text-warning text-xl leading-none">○</span>
+          <div class="card-body p-6">
+            <div class="flex items-start gap-3">
+              <span class="hero-rocket-launch w-6 h-6 text-warning shrink-0 mt-0.5" aria-hidden="true"></span>
+              <div>
+                <h2 class="card-title text-lg">Get set up</h2>
+                <p class="text-sm text-base-content/70">
+                  A few things to take care of before you're ready for real customers.
+                </p>
+              </div>
+            </div>
+
+            <ul class="space-y-3 mt-3">
+              <li
+                :for={{title, blurb, href} <- @checklist}
+                class="flex gap-3 items-start bg-base-100 border border-base-300 rounded-lg p-4"
+              >
+                <span class="hero-arrow-right-circle w-5 h-5 text-warning shrink-0 mt-0.5" aria-hidden="true"></span>
                 <div class="flex-1">
                   <div class="font-semibold">{title}</div>
                   <div class="text-sm text-base-content/70">{blurb}</div>
@@ -212,67 +225,98 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
         </section>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div class="stat bg-base-100 rounded-lg shadow">
-            <div class="stat-title">Pending</div>
-            <div class="stat-value text-warning">{@pending_count}</div>
-            <div class="stat-desc">Awaiting your confirmation</div>
-          </div>
-          <div class="stat bg-base-100 rounded-lg shadow">
-            <div class="stat-title">Upcoming</div>
-            <div class="stat-value text-info">{@upcoming_count}</div>
-            <div class="stat-desc">Pending + confirmed</div>
-          </div>
-          <div class="stat bg-base-100 rounded-lg shadow">
-            <div class="stat-title">Customers</div>
-            <div class="stat-value">{@customer_count}</div>
-            <div class="stat-desc">All time</div>
-          </div>
+          <article class="stat bg-base-100 rounded-xl shadow-sm border border-base-300">
+            <div class="stat-title text-xs font-medium uppercase tracking-wide text-base-content/60">
+              Pending
+            </div>
+            <div class="stat-value text-3xl font-bold text-warning">{@pending_count}</div>
+            <div class="stat-desc text-xs text-base-content/60">Awaiting your confirmation</div>
+          </article>
+          <article class="stat bg-base-100 rounded-xl shadow-sm border border-base-300">
+            <div class="stat-title text-xs font-medium uppercase tracking-wide text-base-content/60">
+              Upcoming
+            </div>
+            <div class="stat-value text-3xl font-bold text-info">{@upcoming_count}</div>
+            <div class="stat-desc text-xs text-base-content/60">Pending + confirmed</div>
+          </article>
+          <article class="stat bg-base-100 rounded-xl shadow-sm border border-base-300">
+            <div class="stat-title text-xs font-medium uppercase tracking-wide text-base-content/60">
+              Customers
+            </div>
+            <div class="stat-value text-3xl font-bold">{@customer_count}</div>
+            <div class="stat-desc text-xs text-base-content/60">All time</div>
+          </article>
         </div>
 
-        <section class="card bg-base-100 shadow">
-          <div class="card-body">
-            <h2 class="card-title">Pending appointments</h2>
-
-            <div :if={@pending == []} class="text-center py-8 text-base-content/60">
-              Nothing pending. New bookings will show up here.
+        <section class="card bg-base-100 shadow-sm border border-base-300">
+          <div class="card-body p-6">
+            <div class="flex items-center justify-between flex-wrap gap-2">
+              <h2 class="card-title text-lg">Pending appointments</h2>
+              <a
+                :if={@pending != []}
+                href="/admin/appointments"
+                class="btn btn-ghost btn-sm gap-1"
+              >
+                View all
+                <span class="hero-arrow-right w-4 h-4" aria-hidden="true"></span>
+              </a>
             </div>
 
-            <ul :if={@pending != []} class="divide-y divide-base-200">
-              <li :for={a <- @pending} class="py-3 flex items-center justify-between gap-3 flex-wrap">
+            <div :if={@pending == []} class="text-center py-12 px-4">
+              <span class="hero-inbox w-12 h-12 mx-auto text-base-content/30" aria-hidden="true"></span>
+              <h3 class="mt-4 text-lg font-semibold">All caught up</h3>
+              <p class="mt-1 text-sm text-base-content/60 max-w-sm mx-auto">
+                Nothing pending right now. New bookings show up here automatically.
+              </p>
+            </div>
+
+            <ul :if={@pending != []} class="divide-y divide-base-200 mt-2">
+              <li
+                :for={a <- @pending}
+                class="py-4 flex items-start justify-between gap-3 flex-wrap"
+              >
                 <div class="flex-1 min-w-0">
-                  <div class="font-semibold">
-                    {service_name(@service_map, a.service_type_id)}
-                    <span class="text-base-content/50">·</span>
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <.link
+                      navigate={~p"/appointments/#{a.id}"}
+                      class="font-semibold link link-hover"
+                    >
+                      {service_name(@service_map, a.service_type_id)}
+                    </.link>
+                    <span class="text-base-content/40">·</span>
                     <span class="text-sm text-base-content/70">
                       {customer_name(@customer_map, a.customer_id)}
                     </span>
                   </div>
-                  <div class="text-sm text-base-content/70">
-                    {fmt_when(a.scheduled_at)} · {a.vehicle_description}
+                  <div class="text-sm text-base-content/70 mt-1 flex items-center gap-1">
+                    <span class="hero-clock w-4 h-4" aria-hidden="true"></span>
+                    {fmt_when(a.scheduled_at)}
+                    <span class="text-base-content/40 mx-1">·</span>
+                    {a.vehicle_description}
                   </div>
-                  <div class="text-xs text-base-content/60 truncate">
+                  <div class="text-xs text-base-content/60 truncate mt-1 flex items-center gap-1">
+                    <span class="hero-map-pin w-3 h-3 shrink-0" aria-hidden="true"></span>
                     {a.service_address}
                   </div>
                 </div>
 
                 <div class="flex items-center gap-2">
-                  <span class="font-semibold text-sm">
-                    {fmt_price(a.price_cents)}
-                  </span>
+                  <span class="font-semibold">{fmt_price(a.price_cents)}</span>
                   <button
                     phx-click="confirm_appointment"
                     phx-value-id={a.id}
-                    class="btn btn-success btn-sm"
+                    class="btn btn-success btn-sm gap-1"
                   >
-                    Confirm
+                    <span class="hero-check w-4 h-4" aria-hidden="true"></span> Confirm
                   </button>
                   <button
                     phx-click="cancel_appointment"
                     phx-value-id={a.id}
                     data-confirm="Cancel this appointment?"
                     class="btn btn-ghost btn-sm text-error"
+                    aria-label="Cancel"
                   >
-                    Cancel
+                    <span class="hero-x-mark w-4 h-4" aria-hidden="true"></span>
                   </button>
                 </div>
               </li>
@@ -281,6 +325,19 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
         </section>
       </div>
     </main>
+    """
+  end
+
+  attr :href, :string, required: true
+  attr :icon, :string, required: true
+  slot :inner_block, required: true
+
+  defp nav_link(assigns) do
+    ~H"""
+    <a href={@href} class="btn btn-ghost btn-sm gap-1">
+      <span class={"#{@icon} w-4 h-4"} aria-hidden="true"></span>
+      {render_slot(@inner_block)}
+    </a>
     """
   end
 end

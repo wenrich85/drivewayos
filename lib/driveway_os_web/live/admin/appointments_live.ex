@@ -102,71 +102,83 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <main class="min-h-screen bg-base-200 px-4 py-8">
+    <main class="min-h-screen bg-base-200 px-4 py-8 sm:py-12">
       <div class="max-w-5xl mx-auto space-y-6">
-        <div class="flex justify-between items-center flex-wrap gap-2">
-          <div>
-            <h1 class="text-3xl font-bold">Appointments</h1>
-            <p class="text-base-content/70 text-sm">
-              All bookings, newest first.
-            </p>
-          </div>
-          <a href="/admin" class="btn btn-ghost btn-sm">← Dashboard</a>
-        </div>
+        <header>
+          <a
+            href="/admin"
+            class="inline-flex items-center gap-1 text-sm text-base-content/60 hover:text-base-content transition-colors"
+          >
+            <span class="hero-arrow-left w-4 h-4" aria-hidden="true"></span> Dashboard
+          </a>
+          <h1 class="text-3xl font-bold tracking-tight mt-2">Appointments</h1>
+          <p class="text-sm text-base-content/70 mt-1">All bookings, newest first.</p>
+        </header>
 
-        <section class="card bg-base-100 shadow">
-          <div class="card-body">
-            <div :if={@appointments == []} class="text-center py-6 text-base-content/60">
-              No appointments yet.
+        <section class="card bg-base-100 shadow-sm border border-base-300">
+          <div class="card-body p-6">
+            <div :if={@appointments == []} class="text-center py-12 px-4">
+              <span
+                class="hero-calendar w-12 h-12 mx-auto text-base-content/30"
+                aria-hidden="true"
+              ></span>
+              <p class="mt-2 text-sm text-base-content/60">No appointments yet.</p>
             </div>
 
             <div :if={@appointments != []} class="overflow-x-auto">
               <table class="table table-zebra">
                 <thead>
                   <tr>
-                    <th>When</th>
-                    <th>Customer</th>
-                    <th>Service</th>
-                    <th>Vehicle</th>
-                    <th>Status</th>
-                    <th>Payment</th>
+                    <th class="text-xs font-semibold uppercase tracking-wide text-base-content/60">
+                      When
+                    </th>
+                    <th class="text-xs font-semibold uppercase tracking-wide text-base-content/60">
+                      Customer
+                    </th>
+                    <th class="text-xs font-semibold uppercase tracking-wide text-base-content/60">
+                      Service
+                    </th>
+                    <th class="text-xs font-semibold uppercase tracking-wide text-base-content/60">
+                      Vehicle
+                    </th>
+                    <th class="text-xs font-semibold uppercase tracking-wide text-base-content/60">
+                      Status
+                    </th>
+                    <th class="text-xs font-semibold uppercase tracking-wide text-base-content/60">
+                      Payment
+                    </th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr :for={a <- @appointments}>
+                  <tr :for={a <- @appointments} class="hover:bg-base-200/50">
                     <td class="text-sm">
                       <.link navigate={~p"/appointments/#{a.id}"} class="link link-hover">
                         {fmt_when(a.scheduled_at)}
                       </.link>
                     </td>
-                    <td>{(@customer_map[a.customer_id] || %{name: "—"}).name}</td>
-                    <td>{(@service_map[a.service_type_id] || %{name: "—"}).name}</td>
-                    <td class="text-xs text-base-content/70">{a.vehicle_description}</td>
-                    <td>
-                      <span class={"badge badge-sm #{status_badge(a.status)}"}>
-                        {a.status}
-                      </span>
+                    <td class="text-sm">{(@customer_map[a.customer_id] || %{name: "—"}).name}</td>
+                    <td class="text-sm">{(@service_map[a.service_type_id] || %{name: "—"}).name}</td>
+                    <td class="text-xs text-base-content/70 max-w-[12rem] truncate">
+                      {a.vehicle_description}
                     </td>
                     <td>
-                      <span :if={a.payment_status == :paid} class="badge badge-success badge-sm">
-                        Paid
-                      </span>
-                      <span :if={a.payment_status == :pending} class="badge badge-warning badge-sm">
-                        Pending
-                      </span>
-                      <span :if={a.payment_status == :unpaid} class="badge badge-ghost badge-sm">
-                        Unpaid
-                      </span>
+                      <span class={"badge badge-sm " <> status_badge(a.status)}>{a.status}</span>
+                    </td>
+                    <td>
+                      <span :if={a.payment_status == :paid} class="badge badge-success badge-sm">Paid</span>
+                      <span :if={a.payment_status == :pending} class="badge badge-warning badge-sm">Pending</span>
+                      <span :if={a.payment_status == :unpaid} class="badge badge-ghost badge-sm">Unpaid</span>
+                      <span :if={a.payment_status == :refunded} class="badge badge-ghost badge-sm">Refunded</span>
                     </td>
                     <td class="text-right space-x-1">
                       <button
                         :if={a.status == :pending}
                         phx-click="confirm_appointment"
                         phx-value-id={a.id}
-                        class="btn btn-success btn-xs"
+                        class="btn btn-success btn-xs gap-1"
                       >
-                        Confirm
+                        <span class="hero-check w-3 h-3" aria-hidden="true"></span> Confirm
                       </button>
                       <button
                         :if={a.status in [:pending, :confirmed]}
@@ -174,8 +186,9 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLive do
                         phx-value-id={a.id}
                         data-confirm="Cancel this appointment?"
                         class="btn btn-ghost btn-xs text-error"
+                        aria-label="Cancel"
                       >
-                        Cancel
+                        <span class="hero-x-mark w-3 h-3" aria-hidden="true"></span>
                       </button>
                     </td>
                   </tr>
