@@ -85,4 +85,84 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLiveTest do
     reloaded = Ash.get!(Appointment, ctx.appt.id, tenant: ctx.tenant.id, authorize?: false)
     assert reloaded.status == :confirmed
   end
+
+  describe "status filter" do
+    setup ctx do
+      # Confirm one extra appointment so we have rows in two distinct
+      # statuses to filter against.
+      {:ok, confirmed} =
+        Appointment
+        |> Ash.Changeset.for_create(
+          :book,
+          %{
+            customer_id: ctx.customer.id,
+            service_type_id: ctx.appt.service_type_id,
+            scheduled_at:
+              DateTime.utc_now() |> DateTime.add(2 * 86_400, :second) |> DateTime.truncate(:second),
+            duration_minutes: 45,
+            price_cents: 5_000,
+            vehicle_description: "Blue Subaru Outback",
+            service_address: "1 Oak"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      confirmed
+      |> Ash.Changeset.for_update(:confirm, %{})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      Map.put(ctx, :confirmed, Ash.reload!(confirmed, authorize?: false))
+    end
+
+    test "filtering to :pending shows only pending rows", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, _html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin/appointments")
+
+      html = render_change(lv, "filter_status", %{"status" => "pending"})
+
+      assert html =~ "Red Tesla"
+      refute html =~ "Blue Subaru Outback"
+    end
+
+    test "filtering to :confirmed shows only confirmed rows", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, _html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin/appointments")
+
+      html = render_change(lv, "filter_status", %{"status" => "confirmed"})
+
+      refute html =~ "Red Tesla"
+      assert html =~ "Blue Subaru Outback"
+    end
+
+    test "filter :all returns to showing both", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, _html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin/appointments")
+
+      render_change(lv, "filter_status", %{"status" => "pending"})
+      html = render_change(lv, "filter_status", %{"status" => "all"})
+
+      assert html =~ "Red Tesla"
+      assert html =~ "Blue Subaru Outback"
+    end
+  end
+
+  describe "search" do
+    test "filters rows by case-insensitive substring match on customer or vehicle", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, _html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin/appointments")
+
+      html = render_change(lv, "search", %{"q" => "tesla"})
+
+      assert html =~ "Red Tesla"
+    end
+  end
 end

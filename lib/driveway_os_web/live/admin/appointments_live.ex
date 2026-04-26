@@ -32,8 +32,25 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLive do
         {:ok,
          socket
          |> assign(:page_title, "Appointments")
+         |> assign(:status_filter, :all)
+         |> assign(:search_q, "")
          |> load_data()}
     end
+  end
+
+  @impl true
+  def handle_event("filter_status", %{"status" => status}, socket) do
+    {:noreply,
+     socket
+     |> assign(:status_filter, parse_status(status))
+     |> load_data()}
+  end
+
+  def handle_event("search", %{"q" => q}, socket) do
+    {:noreply,
+     socket
+     |> assign(:search_q, q || "")
+     |> load_data()}
   end
 
   @impl true
@@ -80,11 +97,46 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLive do
     {:ok, services} =
       ServiceType |> Ash.Query.set_tenant(tenant_id) |> Ash.read(authorize?: false)
 
+    customer_map = Map.new(customers, &{&1.id, &1})
+
+    filtered =
+      appointments
+      |> apply_status_filter(socket.assigns[:status_filter] || :all)
+      |> apply_search(socket.assigns[:search_q] || "", customer_map)
+
     socket
-    |> assign(:appointments, appointments)
-    |> assign(:customer_map, Map.new(customers, &{&1.id, &1}))
+    |> assign(:appointments, filtered)
+    |> assign(:customer_map, customer_map)
     |> assign(:service_map, Map.new(services, &{&1.id, &1}))
   end
+
+  defp apply_status_filter(appointments, :all), do: appointments
+  defp apply_status_filter(appointments, status),
+    do: Enum.filter(appointments, &(&1.status == status))
+
+  defp apply_search(appointments, "", _), do: appointments
+
+  defp apply_search(appointments, q, customer_map) do
+    needle = String.downcase(q)
+
+    Enum.filter(appointments, fn a ->
+      vehicle = String.downcase(a.vehicle_description || "")
+      address = String.downcase(a.service_address || "")
+      name = String.downcase((customer_map[a.customer_id] || %{name: ""}).name || "")
+
+      String.contains?(vehicle, needle) or
+        String.contains?(address, needle) or
+        String.contains?(name, needle)
+    end)
+  end
+
+  defp parse_status("all"), do: :all
+  defp parse_status("pending"), do: :pending
+  defp parse_status("confirmed"), do: :confirmed
+  defp parse_status("in_progress"), do: :in_progress
+  defp parse_status("completed"), do: :completed
+  defp parse_status("cancelled"), do: :cancelled
+  defp parse_status(_), do: :all
 
   defp fmt_when(%DateTime{} = dt), do: Calendar.strftime(dt, "%b %-d %-I:%M %p")
 
@@ -116,7 +168,59 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLive do
         </header>
 
         <section class="card bg-base-100 shadow-sm border border-base-300">
-          <div class="card-body p-6">
+          <div class="card-body p-6 space-y-4">
+            <div class="flex flex-wrap gap-3 items-center justify-between">
+              <form
+                id="appointments-filter-form"
+                phx-change="filter_status"
+                class="flex flex-wrap gap-2 items-center"
+              >
+                <label
+                  :for={
+                    {label, value} <-
+                      [
+                        {"All", "all"},
+                        {"Pending", "pending"},
+                        {"Confirmed", "confirmed"},
+                        {"In progress", "in_progress"},
+                        {"Completed", "completed"},
+                        {"Cancelled", "cancelled"}
+                      ]
+                  }
+                  class={
+                    "btn btn-xs " <>
+                      if Atom.to_string(@status_filter) == value,
+                        do: "btn-primary",
+                        else: "btn-ghost"
+                  }
+                >
+                  <input
+                    type="radio"
+                    name="status"
+                    value={value}
+                    checked={Atom.to_string(@status_filter) == value}
+                    class="hidden"
+                  />
+                  {label}
+                </label>
+              </form>
+              <form
+                id="appointments-search-form"
+                phx-change="search"
+                class="flex items-center gap-2"
+              >
+                <span class="hero-magnifying-glass w-4 h-4 text-base-content/40" aria-hidden="true"></span>
+                <input
+                  type="search"
+                  name="q"
+                  value={@search_q}
+                  placeholder="Customer, vehicle, address…"
+                  class="input input-bordered input-sm w-64"
+                  phx-debounce="300"
+                />
+              </form>
+            </div>
+
             <div :if={@appointments == []} class="text-center py-12 px-4">
               <span
                 class="hero-calendar w-12 h-12 mx-auto text-base-content/30"
