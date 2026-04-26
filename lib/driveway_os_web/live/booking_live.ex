@@ -18,6 +18,8 @@ defmodule DrivewayOSWeb.BookingLive do
   on_mount DrivewayOSWeb.LoadCustomerHook
 
   alias DrivewayOS.Billing.StripeClient
+  alias DrivewayOS.Mailer
+  alias DrivewayOS.Notifications.BookingEmail
   alias DrivewayOS.Scheduling.{Appointment, ServiceType}
 
   require Ash.Query
@@ -179,8 +181,21 @@ defmodule DrivewayOSWeb.BookingLive do
           {:noreply, push_navigate(socket, to: ~p"/book/success/#{appt.id}")}
       end
     else
+      # Non-Stripe path: payment is collected on-site. Send the
+      # confirmation email immediately since there's no webhook to
+      # wait on.
+      send_confirmation_email(tenant, customer, appt, service)
       {:noreply, push_navigate(socket, to: ~p"/book/success/#{appt.id}")}
     end
+  end
+
+  defp send_confirmation_email(tenant, customer, appt, service) do
+    tenant
+    |> BookingEmail.confirmation(customer, appt, service)
+    |> Mailer.deliver()
+  rescue
+    # Don't crash the booking just because email failed.
+    _ -> :error
   end
 
   defp checkout_params(tenant, customer, service, appt) do

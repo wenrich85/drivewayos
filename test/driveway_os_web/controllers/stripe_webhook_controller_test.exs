@@ -112,6 +112,11 @@ defmodule DrivewayOSWeb.StripeWebhookControllerTest do
       assert reloaded.payment_status == :paid
       assert reloaded.status == :confirmed
       assert reloaded.stripe_payment_intent_id == "pi_test_123"
+
+      # Confirmation email goes out from the webhook on the Stripe path
+      # (BookingLive defers email until payment is confirmed).
+      import Swoosh.TestAssertions
+      assert_email_sent(fn email -> assert email.subject =~ tenant.display_name end)
     end
 
     test "invalid signature returns 400", %{conn: conn} do

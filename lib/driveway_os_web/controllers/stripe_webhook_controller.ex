@@ -15,6 +15,8 @@ defmodule DrivewayOSWeb.StripeWebhookController do
   use DrivewayOSWeb, :controller
 
   alias DrivewayOS.Billing.StripeClient
+  alias DrivewayOS.Mailer
+  alias DrivewayOS.Notifications.BookingEmail
   alias DrivewayOS.Platform
   alias DrivewayOS.Scheduling.Appointment
 
@@ -55,12 +57,14 @@ defmodule DrivewayOSWeb.StripeWebhookController do
              |> Ash.Query.set_tenant(tenant.id)
              |> Ash.read(authorize?: false) do
           {:ok, [appt]} ->
-            appt
-            |> Ash.Changeset.for_update(:mark_paid, %{
-              stripe_payment_intent_id: payment_intent
-            })
-            |> Ash.update!(authorize?: false, tenant: tenant.id)
+            updated =
+              appt
+              |> Ash.Changeset.for_update(:mark_paid, %{
+                stripe_payment_intent_id: payment_intent
+              })
+              |> Ash.update!(authorize?: false, tenant: tenant.id)
 
+            send_paid_confirmation(tenant, updated)
             :ok
 
           _ ->
@@ -75,4 +79,28 @@ defmodule DrivewayOSWeb.StripeWebhookController do
   end
 
   defp process_event(_unknown_event), do: :ok
+
+  # Best-effort confirmation email after payment lands. We rescue
+  # so a mailer hiccup never causes the webhook to fail (Stripe
+  # would then retry and re-mark-paid, which is benign but noisy).
+  defp send_paid_confirmation(tenant, appt) do
+    with {:ok, customer} <-
+           Ash.get(DrivewayOS.Accounts.Customer, appt.customer_id,
+             tenant: tenant.id,
+             authorize?: false
+           ),
+         {:ok, service} <-
+           Ash.get(DrivewayOS.Scheduling.ServiceType, appt.service_type_id,
+             tenant: tenant.id,
+             authorize?: false
+           ) do
+      tenant
+      |> BookingEmail.confirmation(customer, appt, service)
+      |> Mailer.deliver()
+    else
+      _ -> :error
+    end
+  rescue
+    _ -> :error
+  end
 end

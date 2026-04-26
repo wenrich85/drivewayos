@@ -83,6 +83,35 @@ defmodule DrivewayOSWeb.BookingLiveTest do
       assert html =~ ~s(name="booking[service_address]")
     end
 
+    test "non-Stripe path: sends a confirmation email after booking",
+         %{conn: conn, tenant: tenant, customer: customer} do
+      import Swoosh.TestAssertions
+
+      conn = sign_in(conn, customer)
+
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{tenant.slug}.lvh.me") |> live(~p"/book")
+
+      service_id = extract_service_id(html, "basic")
+      future = DateTime.utc_now() |> DateTime.add(2 * 86_400, :second)
+
+      lv
+      |> form("#booking-form", %{
+        "booking" => %{
+          "service_type_id" => service_id,
+          "scheduled_at" => DateTime.to_iso8601(future) |> String.slice(0, 16),
+          "vehicle_description" => "Red Civic",
+          "service_address" => "1 Main"
+        }
+      })
+      |> render_submit()
+
+      assert_email_sent(fn email ->
+        assert email.subject =~ tenant.display_name
+        assert email.to == [{customer.name, to_string(customer.email)}]
+      end)
+    end
+
     test "valid submission creates an Appointment + redirects to confirmation",
          %{conn: conn, tenant: tenant, customer: customer} do
       conn = sign_in(conn, customer)
