@@ -49,6 +49,7 @@ defmodule DrivewayOSWeb.Router do
     live "/book/success/:id", BookingSuccessLive
     live "/appointments", AppointmentsLive
     live "/appointments/:id", AppointmentDetailLive
+    get "/appointments/:id/calendar.ics", CalendarController, :appointment
     live "/me", CustomerProfileLive
     live "/admin", Admin.DashboardLive
     live "/admin/domains", Admin.CustomDomainsLive

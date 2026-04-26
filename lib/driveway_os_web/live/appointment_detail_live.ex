@@ -397,6 +397,16 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
                 <span class="hero-envelope w-4 h-4" aria-hidden="true"></span> Resend email
               </button>
 
+              <%!-- Add to calendar: visible to anyone who can see the appointment --%>
+              <a
+                :if={@appt.status not in [:cancelled]}
+                href={~p"/appointments/#{@appt.id}/calendar.ics"}
+                class="btn btn-ghost btn-sm gap-1"
+                title="Download .ics for Google / Apple / Outlook"
+              >
+                <span class="hero-calendar w-4 h-4" aria-hidden="true"></span> Add to calendar
+              </a>
+
               <%!-- Refund: admin only, only on a paid appointment with a known PI --%>
               <button
                 :if={

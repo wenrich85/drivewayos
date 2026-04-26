@@ -106,7 +106,14 @@ defmodule DrivewayOSWeb.BookingSuccessLive do
           </div>
         </section>
 
-        <div class="flex justify-end gap-2">
+        <div class="flex justify-end gap-2 flex-wrap">
+          <a
+            href={~p"/appointments/#{@appointment.id}/calendar.ics"}
+            class="btn btn-ghost btn-sm gap-1"
+          >
+            <span class="hero-calendar w-4 h-4" aria-hidden="true"></span>
+            Add to calendar
+          </a>
           <.link
             :if={@current_customer && not @booker.guest?}
             navigate={~p"/appointments"}
