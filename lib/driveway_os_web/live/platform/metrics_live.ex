@@ -78,49 +78,72 @@ defmodule DrivewayOSWeb.Platform.MetricsLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <main class="min-h-screen bg-base-200 px-4 py-8">
-      <div class="max-w-5xl mx-auto space-y-6">
-        <div class="flex justify-between items-center flex-wrap gap-2">
+    <main class="min-h-screen bg-base-200 px-4 py-8 sm:py-12">
+      <div class="max-w-6xl mx-auto space-y-6">
+        <header class="flex justify-between items-start flex-wrap gap-3">
           <div>
-            <h1 class="text-3xl font-bold">Metrics</h1>
-            <p class="text-base-content/70 text-sm">
-              SaaS-wide rollup. Hello, {@current_platform_user.name}.
+            <p class="text-xs font-semibold uppercase tracking-wide text-base-content/60">
+              Platform
+            </p>
+            <h1 class="text-3xl font-bold tracking-tight">Metrics</h1>
+            <p class="text-sm text-base-content/70 mt-1">
+              SaaS-wide rollup · welcome, {@current_platform_user.name}
             </p>
           </div>
-          <div class="flex gap-2">
-            <a href="/tenants" class="btn btn-ghost btn-sm">Tenants</a>
-            <a href="/auth/platform/sign-out" class="btn btn-ghost btn-sm">Sign out</a>
-          </div>
-        </div>
+          <nav class="flex gap-1 flex-wrap">
+            <a href="/tenants" class="btn btn-ghost btn-sm gap-1">
+              <span class="hero-building-office-2 w-4 h-4" aria-hidden="true"></span> Tenants
+            </a>
+            <a href="/metrics" class="btn btn-primary btn-sm gap-1">
+              <span class="hero-chart-bar w-4 h-4" aria-hidden="true"></span> Metrics
+            </a>
+            <a href="/auth/platform/sign-out" class="btn btn-ghost btn-sm gap-1">
+              <span class="hero-arrow-left-on-rectangle w-4 h-4" aria-hidden="true"></span>
+              Sign out
+            </a>
+          </nav>
+        </header>
 
         <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div class="stat bg-base-100 rounded-lg shadow">
-            <div class="stat-title">Tenants</div>
-            <div class="stat-value">{@tenant_count}</div>
-            <div class="stat-desc">
+          <article class="stat bg-base-100 rounded-xl shadow-sm border border-base-300">
+            <div class="stat-title text-xs font-medium uppercase tracking-wide text-base-content/60">
+              Tenants
+            </div>
+            <div class="stat-value text-3xl font-bold">{@tenant_count}</div>
+            <div class="stat-desc text-xs text-base-content/60">
               {@active_count} active · {@pending_onboarding_count} pending · {@suspended_count} suspended
             </div>
-          </div>
-          <div class="stat bg-base-100 rounded-lg shadow">
-            <div class="stat-title">Stripe-connected</div>
-            <div class="stat-value text-info">{@connected_count}</div>
-            <div class="stat-desc">of {@tenant_count} tenants</div>
-          </div>
-          <div class="stat bg-base-100 rounded-lg shadow">
-            <div class="stat-title">Paid bookings</div>
-            <div class="stat-value">{@paid_appointments}</div>
-            <div class="stat-desc">all time</div>
-          </div>
-          <div class="stat bg-base-100 rounded-lg shadow">
-            <div class="stat-title">GMV</div>
-            <div class="stat-value text-success">{fmt_cents(@gmv_cents)}</div>
-            <div class="stat-desc">all paid bookings, all tenants</div>
-          </div>
-          <div class="stat bg-base-100 rounded-lg shadow">
-            <div class="stat-title">Platform fee earned</div>
-            <div class="stat-value text-primary">{fmt_cents(@platform_fee_cents)}</div>
-            <div class="stat-desc">10% of GMV</div>
-          </div>
+          </article>
+          <article class="stat bg-base-100 rounded-xl shadow-sm border border-base-300">
+            <div class="stat-title text-xs font-medium uppercase tracking-wide text-base-content/60">
+              Stripe-connected
+            </div>
+            <div class="stat-value text-3xl font-bold text-info">{@connected_count}</div>
+            <div class="stat-desc text-xs text-base-content/60">of {@tenant_count} tenants</div>
+          </article>
+          <article class="stat bg-base-100 rounded-xl shadow-sm border border-base-300">
+            <div class="stat-title text-xs font-medium uppercase tracking-wide text-base-content/60">
+              Paid bookings
+            </div>
+            <div class="stat-value text-3xl font-bold">{@paid_appointments}</div>
+            <div class="stat-desc text-xs text-base-content/60">all time</div>
+          </article>
+          <article class="stat bg-base-100 rounded-xl shadow-sm border border-base-300">
+            <div class="stat-title text-xs font-medium uppercase tracking-wide text-base-content/60">
+              GMV
+            </div>
+            <div class="stat-value text-3xl font-bold text-success">{fmt_cents(@gmv_cents)}</div>
+            <div class="stat-desc text-xs text-base-content/60">all paid bookings, all tenants</div>
+          </article>
+          <article class="stat bg-base-100 rounded-xl shadow-sm border border-base-300 md:col-span-2">
+            <div class="stat-title text-xs font-medium uppercase tracking-wide text-base-content/60">
+              Platform fee earned
+            </div>
+            <div class="stat-value text-3xl font-bold text-primary">
+              {fmt_cents(@platform_fee_cents)}
+            </div>
+            <div class="stat-desc text-xs text-base-content/60">10% of GMV</div>
+          </article>
         </section>
       </div>
     </main>

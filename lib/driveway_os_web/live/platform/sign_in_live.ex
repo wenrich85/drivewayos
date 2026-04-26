@@ -53,42 +53,61 @@ defmodule DrivewayOSWeb.Platform.SignInLive do
   def render(assigns) do
     ~H"""
     <main class="min-h-screen flex items-center justify-center bg-base-200 px-4 py-12">
-      <div class="card w-full max-w-md bg-base-100 shadow-lg">
-        <div class="card-body">
-          <h1 class="card-title text-2xl">Platform sign in</h1>
-          <p class="text-base-content/70 mb-2">DrivewayOS operators only.</p>
+      <div class="w-full max-w-md space-y-6">
+        <header class="text-center space-y-2">
+          <span class="inline-flex items-center gap-2 rounded-full bg-primary/10 text-primary px-3 py-1 text-xs font-semibold uppercase tracking-wide">
+            <span class="hero-shield-check w-4 h-4" aria-hidden="true"></span> Platform
+          </span>
+          <h1 class="text-3xl font-bold tracking-tight">DrivewayOS operators</h1>
+          <p class="text-sm text-base-content/70">
+            Sign in to manage tenants, suspend accounts, and inspect cross-tenant metrics.
+          </p>
+        </header>
 
-          <div :if={@error} class="alert alert-error text-sm">{@error}</div>
-
-          <form id="platform-signin-form" phx-submit="submit" class="space-y-4">
-            <div>
-              <label class="label" for="psi-email"><span class="label-text">Email</span></label>
-              <input
-                id="psi-email"
-                type="email"
-                name="signin[email]"
-                value={@form_email}
-                class="input input-bordered w-full"
-                required
-              />
+        <section class="card bg-base-100 shadow-sm border border-base-300">
+          <div class="card-body p-6 space-y-4">
+            <div :if={@error} role="alert" class="alert alert-error">
+              <span class="hero-exclamation-circle w-5 h-5 shrink-0" aria-hidden="true"></span>
+              <span class="text-sm">{@error}</span>
             </div>
 
-            <div>
-              <label class="label" for="psi-password">
-                <span class="label-text">Password</span>
-              </label>
-              <input
-                id="psi-password"
-                type="password"
-                name="signin[password]"
-                class="input input-bordered w-full"
-                required
-              />
-            </div>
+            <form id="platform-signin-form" phx-submit="submit" class="space-y-4">
+              <div>
+                <label class="label" for="psi-email">
+                  <span class="label-text font-medium">Email</span>
+                </label>
+                <input
+                  id="psi-email"
+                  type="email"
+                  name="signin[email]"
+                  value={@form_email}
+                  autocomplete="email"
+                  class="input input-bordered w-full"
+                  required
+                />
+              </div>
 
-            <button type="submit" class="btn btn-primary w-full">Sign in</button>
-          </form>
-        </div>
+              <div>
+                <label class="label" for="psi-password">
+                  <span class="label-text font-medium">Password</span>
+                </label>
+                <input
+                  id="psi-password"
+                  type="password"
+                  name="signin[password]"
+                  autocomplete="current-password"
+                  class="input input-bordered w-full"
+                  required
+                />
+              </div>
+
+              <button type="submit" class="btn btn-primary w-full gap-2">
+                <span class="hero-arrow-right-on-rectangle w-5 h-5" aria-hidden="true"></span>
+                Sign in
+              </button>
+            </form>
+          </div>
+        </section>
       </div>
     </main>
     """
