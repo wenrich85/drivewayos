@@ -28,7 +28,10 @@ defmodule DrivewayOS.Application do
   # `dispatch_due_reminders/1` directly with a deterministic clock.
   defp scheduler_children do
     if Application.get_env(:driveway_os, :start_schedulers?, true) do
-      [DrivewayOS.Notifications.ReminderScheduler]
+      [
+        DrivewayOS.Notifications.ReminderScheduler,
+        DrivewayOS.Scheduling.SubscriptionScheduler
+      ]
     else
       []
     end
