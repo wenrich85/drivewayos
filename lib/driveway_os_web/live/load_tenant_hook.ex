@@ -19,14 +19,17 @@ defmodule DrivewayOSWeb.LoadTenantHook do
   alias DrivewayOS.Platform
 
   def on_mount(:default, _params, session, socket) do
-    case Map.get(session, "tenant_id") do
-      nil ->
-        {:cont,
-         socket
-         |> assign(:current_tenant, nil)
-         |> assign(:tenant_context, :marketing)}
+    # Read context the plug stamped — covers :marketing,
+    # :platform_admin, :tenant. Falls back to :marketing for
+    # legacy sessions (pre-rollout).
+    context =
+      case Map.get(session, "tenant_context") do
+        c when c in [:marketing, :platform_admin, :tenant] -> c
+        _ -> :marketing
+      end
 
-      id ->
+    case {context, Map.get(session, "tenant_id")} do
+      {:tenant, id} when is_binary(id) ->
         case Ash.get(Platform.Tenant, id, authorize?: false) do
           {:ok, %{status: :archived}} ->
             {:halt, redirect(socket, external: external_marketing_url())}
@@ -40,6 +43,12 @@ defmodule DrivewayOSWeb.LoadTenantHook do
           _ ->
             {:halt, redirect(socket, external: external_marketing_url())}
         end
+
+      {ctx, _} ->
+        {:cont,
+         socket
+         |> assign(:current_tenant, nil)
+         |> assign(:tenant_context, ctx)}
     end
   end
 

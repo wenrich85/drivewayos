@@ -49,11 +49,13 @@ defmodule DrivewayOSWeb.Plugs.LoadTenant do
         conn
         |> assign(:tenant_context, :marketing)
         |> assign(:current_tenant, nil)
+        |> put_session(:tenant_context, :marketing)
 
       :platform_admin ->
         conn
         |> assign(:tenant_context, :platform_admin)
         |> assign(:current_tenant, nil)
+        |> put_session(:tenant_context, :platform_admin)
 
       {:tenant, slug} ->
         case Platform.get_tenant_by_slug(slug) do
@@ -80,6 +82,7 @@ defmodule DrivewayOSWeb.Plugs.LoadTenant do
     |> assign(:tenant_context, :tenant)
     |> assign(:current_tenant, tenant)
     |> put_session(:tenant_id, tenant.id)
+    |> put_session(:tenant_context, :tenant)
   end
 
   # --- Private ---

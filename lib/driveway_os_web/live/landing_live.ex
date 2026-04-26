@@ -17,7 +17,13 @@ defmodule DrivewayOSWeb.LandingLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, socket}
+    case socket.assigns[:tenant_context] do
+      :platform_admin ->
+        {:ok, push_navigate(socket, to: ~p"/platform-sign-in")}
+
+      _ ->
+        {:ok, socket}
+    end
   end
 
   @impl true

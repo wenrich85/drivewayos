@@ -9,6 +9,7 @@ require Ash.Query
 
 alias DrivewayOS.Accounts.Customer
 alias DrivewayOS.Platform
+alias DrivewayOS.Platform.PlatformUser
 alias DrivewayOS.Scheduling.BlockTemplate
 
 password = "Password123!"
@@ -49,6 +50,30 @@ defmodule SeedHelpers do
 
         IO.puts("    ✓ Created customer: #{email}")
         c
+    end
+  end
+
+  def get_or_create_platform_user(email, attrs) do
+    require Ash.Query
+
+    existing =
+      PlatformUser
+      |> Ash.Query.filter(email == ^email)
+      |> Ash.read(authorize?: false)
+
+    case existing do
+      {:ok, [u | _]} ->
+        IO.puts("  ✓ Platform user already exists: #{email}")
+        u
+
+      _ ->
+        {:ok, u} =
+          PlatformUser
+          |> Ash.Changeset.for_create(:register_with_password, attrs)
+          |> Ash.create(authorize?: false)
+
+        IO.puts("  ✓ Created platform user: #{email}")
+        u
     end
   end
 
@@ -127,6 +152,16 @@ SeedHelpers.get_or_create_customer(tenant_b, "bob@example.com", %{
 
 SeedHelpers.add_block_templates(tenant_b)
 
+# Platform admin (you, the SaaS operator)
+IO.puts("\nPlatform admin")
+
+SeedHelpers.get_or_create_platform_user("operator@drivewayos.com", %{
+  email: "operator@drivewayos.com",
+  password: password,
+  password_confirmation: password,
+  name: "DrivewayOS Operator"
+})
+
 IO.puts("""
 
 === READY TO TEST ===
@@ -144,9 +179,14 @@ Tenant: Bravo Detail Inc
   Admin   : bravo-admin@example.com / #{password}
   Customer: bob@example.com        / #{password}
 
+Platform admin (the SaaS operator):
+  http://admin.lvh.me:4000
+  operator@drivewayos.com / #{password}
+
 Both tenants have block templates seeded (Mon/Wed mornings + Sat
 all day) so the booking form will show concrete slots.
 
 Sign in at  /sign-in  on each tenant subdomain.
-Admin only: /admin, /admin/schedule, /admin/domains
+Admin only: /admin, /admin/appointments, /admin/customers,
+            /admin/services, /admin/schedule, /admin/domains
 """)

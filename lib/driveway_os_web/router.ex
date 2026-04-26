@@ -12,6 +12,7 @@ defmodule DrivewayOSWeb.Router do
     # marketing/admin contexts. Cross-tenant verification is built
     # in via AshAuthentication's "tenant" JWT claim.
     plug DrivewayOSWeb.Plugs.LoadCustomer
+    plug DrivewayOSWeb.Plugs.LoadPlatformUser
     plug :fetch_live_flash
     plug :put_root_layout, html: {DrivewayOSWeb.Layouts, :root}
     plug :protect_from_forgery
@@ -57,6 +58,12 @@ defmodule DrivewayOSWeb.Router do
 
     get "/onboarding/stripe/start", StripeOnboardingController, :start
     get "/onboarding/stripe/callback", StripeOnboardingController, :callback
+
+    # Platform-admin (the SaaS operator — us). All under admin.lvh.me.
+    live "/platform-sign-in", Platform.SignInLive
+    live "/tenants", Platform.TenantsLive
+    get "/auth/platform/store-token", Platform.SessionController, :store_token
+    get "/auth/platform/sign-out", Platform.SessionController, :sign_out
   end
 
   # Other scopes may use custom stacks.
