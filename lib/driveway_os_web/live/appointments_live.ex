@@ -64,57 +64,95 @@ defmodule DrivewayOSWeb.AppointmentsLive do
     Calendar.strftime(dt, "%A, %B %-d, %Y · %-I:%M %p")
   end
 
-  defp status_badge_class(:pending), do: "badge-ghost"
+  # Spec § 6.7 status palette.
+  defp status_badge_class(:pending), do: "badge-warning"
   defp status_badge_class(:confirmed), do: "badge-info"
-  defp status_badge_class(:in_progress), do: "badge-warning"
+  defp status_badge_class(:in_progress), do: "badge-primary"
   defp status_badge_class(:completed), do: "badge-success"
-  defp status_badge_class(:cancelled), do: "badge-error"
+  defp status_badge_class(:cancelled), do: "badge-ghost"
   defp status_badge_class(_), do: "badge-ghost"
 
   @impl true
   def render(assigns) do
     ~H"""
-    <main class="min-h-screen bg-base-200 px-4 py-12">
-      <div class="max-w-3xl mx-auto space-y-4">
-        <div class="flex items-center justify-between">
-          <h1 class="text-3xl font-bold">My appointments</h1>
-          <.link navigate={~p"/book"} class="btn btn-primary">Book another</.link>
-        </div>
-
-        <div :if={@appointments == []} class="card bg-base-100 shadow">
-          <div class="card-body text-center py-12">
-            <p class="text-base-content/60">
-              No appointments yet.
+    <main class="min-h-screen bg-base-200 px-4 py-8 sm:py-12">
+      <div class="max-w-3xl mx-auto space-y-6">
+        <header class="flex items-end justify-between flex-wrap gap-3">
+          <div>
+            <a
+              href="/"
+              class="inline-flex items-center gap-1 text-sm text-base-content/60 hover:text-base-content transition-colors"
+            >
+              <span class="hero-arrow-left w-4 h-4" aria-hidden="true"></span> Back
+            </a>
+            <h1 class="text-3xl font-bold tracking-tight mt-2">My appointments</h1>
+            <p class="text-sm text-base-content/70 mt-1">
+              Every wash you've booked at <span class="font-semibold">{@current_tenant.display_name}</span>, newest first.
             </p>
-            <div class="card-actions justify-center mt-2">
-              <.link navigate={~p"/book"} class="btn btn-primary">Book your first wash</.link>
-            </div>
           </div>
-        </div>
+          <.link navigate={~p"/book"} class="btn btn-primary gap-2">
+            <span class="hero-plus w-4 h-4" aria-hidden="true"></span> Book another
+          </.link>
+        </header>
+
+        <%!-- Empty state per spec § 6.9 --%>
+        <section :if={@appointments == []} class="card bg-base-100 shadow-sm border border-base-300">
+          <div class="card-body text-center py-12 px-4">
+            <span
+              class="hero-calendar w-12 h-12 mx-auto text-base-content/30"
+              aria-hidden="true"
+            ></span>
+            <h3 class="mt-4 text-lg font-semibold">No appointments yet.</h3>
+            <p class="mt-1 text-sm text-base-content/60 max-w-sm mx-auto">
+              Pick a service and a time and {@current_tenant.display_name} will take it from there.
+            </p>
+            <.link navigate={~p"/book"} class="btn btn-primary btn-sm mt-4">
+              Book your first wash
+            </.link>
+          </div>
+        </section>
 
         <ul :if={@appointments != []} class="space-y-3">
-          <li :for={a <- @appointments} class="card bg-base-100 shadow">
-            <.link navigate={~p"/appointments/#{a.id}"} class="block hover:bg-base-200/40 rounded-2xl">
+          <li :for={a <- @appointments}>
+            <.link
+              navigate={~p"/appointments/#{a.id}"}
+              class="block card bg-base-100 shadow-sm border border-base-300 hover:shadow-md transition-shadow cursor-pointer"
+            >
               <div class="card-body p-5">
                 <div class="flex justify-between items-start gap-3 flex-wrap">
-                  <div class="flex-1">
-                    <div class="font-semibold">
-                      {service_name(@services, a.service_type_id)}
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span class="font-semibold">
+                        {service_name(@services, a.service_type_id)}
+                      </span>
+                      <span class={"badge badge-sm " <> status_badge_class(a.status)}>
+                        {a.status}
+                      </span>
+                      <span :if={a.payment_status == :paid} class="badge badge-sm badge-success">
+                        Paid
+                      </span>
                     </div>
-                    <div class="text-sm text-base-content/70">
+                    <div class="text-sm text-base-content/70 mt-1 flex items-center gap-1">
+                      <span class="hero-clock w-4 h-4 shrink-0" aria-hidden="true"></span>
                       {fmt_when(a.scheduled_at)}
                     </div>
-                    <div class="text-sm text-base-content/70 mt-1">
-                      {a.vehicle_description} · {a.service_address}
+                    <div class="text-sm text-base-content/70 mt-1 flex items-start gap-1 truncate">
+                      <span
+                        class="hero-truck w-4 h-4 shrink-0 mt-0.5"
+                        aria-hidden="true"
+                      ></span>
+                      <span class="truncate">{a.vehicle_description}</span>
+                    </div>
+                    <div class="text-sm text-base-content/70 mt-1 flex items-start gap-1 truncate">
+                      <span
+                        class="hero-map-pin w-4 h-4 shrink-0 mt-0.5"
+                        aria-hidden="true"
+                      ></span>
+                      <span class="truncate">{a.service_address}</span>
                     </div>
                   </div>
-                  <div class="text-right">
-                    <span class={"badge " <> status_badge_class(a.status)}>
-                      {a.status}
-                    </span>
-                    <div class="text-sm text-base-content/70 mt-1">
-                      {fmt_price(a.price_cents)}
-                    </div>
+                  <div class="text-right shrink-0">
+                    <div class="text-lg font-semibold">{fmt_price(a.price_cents)}</div>
                   </div>
                 </div>
               </div>

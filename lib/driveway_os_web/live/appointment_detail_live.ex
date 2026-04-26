@@ -168,103 +168,99 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <main class="min-h-screen bg-base-200 px-4 py-8">
+    <main class="min-h-screen bg-base-200 px-4 py-8 sm:py-12">
       <div class="max-w-2xl mx-auto space-y-6">
-        <div class="flex justify-between items-center flex-wrap gap-2">
-          <div>
-            <h1 class="text-3xl font-bold">{@service.name}</h1>
-            <p class="text-base-content/70 text-sm">
-              <span class={"badge badge-sm #{status_badge(@appt.status)}"}>
-                {@appt.status}
-              </span>
-              <span class="ml-2">{fmt_when(@appt.scheduled_at)}</span>
-            </p>
-          </div>
+        <header class="space-y-3">
           <a
             href={if admin?(@current_customer), do: "/admin/appointments", else: "/appointments"}
-            class="btn btn-ghost btn-sm"
+            class="inline-flex items-center gap-1 text-sm text-base-content/60 hover:text-base-content transition-colors"
           >
-            ← Back
+            <span class="hero-arrow-left w-4 h-4" aria-hidden="true"></span> Back
           </a>
+          <div>
+            <h1 class="text-3xl font-bold tracking-tight">{@service.name}</h1>
+            <div class="mt-2 flex items-center gap-2 flex-wrap">
+              <span class={"badge badge-sm " <> status_badge(@appt.status)}>{@appt.status}</span>
+              <span :if={@appt.payment_status == :paid} class="badge badge-sm badge-success">Paid</span>
+              <span :if={@appt.payment_status == :pending} class="badge badge-sm badge-warning">Payment pending</span>
+              <span :if={@appt.payment_status == :refunded} class="badge badge-sm badge-ghost">Refunded</span>
+              <span class="text-sm text-base-content/70 ml-1">{fmt_when(@appt.scheduled_at)}</span>
+            </div>
+          </div>
+        </header>
+
+        <div :if={@flash_msg} role="alert" class="alert alert-success">
+          <span class="hero-check-circle w-5 h-5 shrink-0" aria-hidden="true"></span>
+          <span class="text-sm">{@flash_msg}</span>
         </div>
 
-        <div :if={@flash_msg} class="alert alert-success text-sm">{@flash_msg}</div>
+        <section class="card bg-base-100 shadow-sm border border-base-300">
+          <div class="card-body p-6 space-y-4">
+            <h2 class="card-title text-base">Details</h2>
 
-        <section class="card bg-base-100 shadow">
-          <div class="card-body space-y-2">
-            <div class="grid grid-cols-3 gap-2 text-sm">
-              <div class="text-base-content/60">Customer</div>
-              <div class="col-span-2 font-semibold">{@booker.name}</div>
+            <dl class="grid grid-cols-3 gap-x-3 gap-y-3 text-sm">
+              <dt class="text-base-content/60">Customer</dt>
+              <dd class="col-span-2 font-semibold">{@booker.name}</dd>
 
-              <div class="text-base-content/60">Email</div>
-              <div class="col-span-2">{to_string(@booker.email)}</div>
+              <dt class="text-base-content/60">Email</dt>
+              <dd class="col-span-2 truncate">{to_string(@booker.email)}</dd>
 
-              <div :if={@booker.phone} class="text-base-content/60">Phone</div>
-              <div :if={@booker.phone} class="col-span-2">{@booker.phone}</div>
+              <%= if @booker.phone do %>
+                <dt class="text-base-content/60">Phone</dt>
+                <dd class="col-span-2">{@booker.phone}</dd>
+              <% end %>
 
-              <div class="text-base-content/60">Vehicle</div>
-              <div class="col-span-2">{@appt.vehicle_description}</div>
+              <dt class="text-base-content/60">Vehicle</dt>
+              <dd class="col-span-2">{@appt.vehicle_description}</dd>
 
-              <div class="text-base-content/60">Address</div>
-              <div class="col-span-2">{@appt.service_address}</div>
+              <dt class="text-base-content/60">Address</dt>
+              <dd class="col-span-2">{@appt.service_address}</dd>
 
-              <div class="text-base-content/60">Duration</div>
-              <div class="col-span-2">{@appt.duration_minutes} min</div>
+              <dt class="text-base-content/60">Duration</dt>
+              <dd class="col-span-2">{@appt.duration_minutes} min</dd>
 
-              <div class="text-base-content/60">Total</div>
-              <div class="col-span-2 font-semibold">{fmt_price(@appt.price_cents)}</div>
+              <dt class="text-base-content/60">Total</dt>
+              <dd class="col-span-2 font-semibold">{fmt_price(@appt.price_cents)}</dd>
 
-              <div :if={@appt.payment_status != :unpaid} class="text-base-content/60">
-                Payment
-              </div>
-              <div :if={@appt.payment_status != :unpaid} class="col-span-2">
-                <span :if={@appt.payment_status == :paid} class="badge badge-success badge-sm">
-                  Paid
-                </span>
-                <span :if={@appt.payment_status == :pending} class="badge badge-warning badge-sm">
-                  Pending
-                </span>
-              </div>
+              <%= if @appt.notes && @appt.notes != "" do %>
+                <dt class="text-base-content/60">Notes</dt>
+                <dd class="col-span-2 text-base-content/80">{@appt.notes}</dd>
+              <% end %>
 
-              <div :if={@appt.notes} class="text-base-content/60">Notes</div>
-              <div :if={@appt.notes} class="col-span-2 text-sm">{@appt.notes}</div>
-
-              <div :if={@appt.cancellation_reason} class="text-base-content/60">
-                Cancelled
-              </div>
-              <div :if={@appt.cancellation_reason} class="col-span-2 text-sm">
-                {@appt.cancellation_reason}
-              </div>
-            </div>
+              <%= if @appt.cancellation_reason do %>
+                <dt class="text-base-content/60">Cancelled</dt>
+                <dd class="col-span-2 text-base-content/80">{@appt.cancellation_reason}</dd>
+              <% end %>
+            </dl>
           </div>
         </section>
 
-        <section class="card bg-base-100 shadow">
-          <div class="card-body">
-            <h2 class="card-title text-lg">Actions</h2>
+        <section class="card bg-base-100 shadow-sm border border-base-300">
+          <div class="card-body p-6">
+            <h2 class="card-title text-base">Actions</h2>
 
-            <div class="flex gap-2 flex-wrap">
+            <div class="mt-3 flex gap-2 flex-wrap">
               <%!-- Admin actions --%>
               <button
                 :if={admin?(@current_customer) and @appt.status == :pending}
                 phx-click="confirm"
-                class="btn btn-success btn-sm"
+                class="btn btn-success btn-sm gap-1"
               >
-                Confirm
+                <span class="hero-check w-4 h-4" aria-hidden="true"></span> Confirm
               </button>
               <button
                 :if={admin?(@current_customer) and @appt.status == :confirmed}
                 phx-click="start_wash"
-                class="btn btn-primary btn-sm"
+                class="btn btn-primary btn-sm gap-1"
               >
-                Start
+                <span class="hero-play w-4 h-4" aria-hidden="true"></span> Start
               </button>
               <button
                 :if={admin?(@current_customer) and @appt.status == :in_progress}
                 phx-click="complete"
-                class="btn btn-success btn-sm"
+                class="btn btn-success btn-sm gap-1"
               >
-                Mark complete
+                <span class="hero-check-circle w-4 h-4" aria-hidden="true"></span> Mark complete
               </button>
 
               <%!-- Refund: admin only, only on a paid appointment with a known PI --%>
@@ -275,9 +271,9 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
                 }
                 phx-click="refund"
                 data-confirm="Refund this charge through Stripe?"
-                class="btn btn-warning btn-sm"
+                class="btn btn-error btn-sm btn-outline gap-1"
               >
-                Refund
+                <span class="hero-arrow-uturn-left w-4 h-4" aria-hidden="true"></span> Refund
               </button>
 
               <%!-- Cancel: anyone in scope, while it's still cancellable --%>
@@ -285,9 +281,9 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
                 :if={@appt.status in [:pending, :confirmed]}
                 phx-click="cancel"
                 data-confirm="Cancel this appointment?"
-                class="btn btn-ghost btn-sm text-error"
+                class="btn btn-ghost btn-sm text-error gap-1"
               >
-                Cancel appointment
+                <span class="hero-x-mark w-4 h-4" aria-hidden="true"></span> Cancel
               </button>
 
               <p
