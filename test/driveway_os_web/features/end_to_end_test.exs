@@ -21,7 +21,7 @@ defmodule DrivewayOSWeb.Features.EndToEndTest do
   use DrivewayOSWeb.FeatureCase, async: false
 
   import Wallaby.Browser
-  import Wallaby.Query, only: [css: 2, button: 1, link: 1, fillable_field: 1]
+  import Wallaby.Query, only: [css: 1, css: 2, button: 1, link: 1, fillable_field: 1]
 
   describe "marketing host" do
     feature "landing page renders DrivewayOS branding", %{session: session} do
@@ -228,6 +228,32 @@ defmodule DrivewayOSWeb.Features.EndToEndTest do
       |> assert_has(css("h1", text: "Admin · Owned & Operated"))
       |> assert_has(css(".stat-title", text: "Pending"))
       |> assert_has(css(".stat-title", text: "Customers"))
+    end
+  end
+
+  describe "custom domains" do
+    feature "tenant admin can add + verify a custom domain", %{session: session} do
+      %{tenant: tenant, admin: admin} =
+        provision_test_tenant!(display_name: "Custom Domain Co")
+
+      sign_in_as(session, tenant, to_string(admin.email))
+
+      hostname = "wallaby-#{System.unique_integer([:positive])}.example.com"
+
+      session
+      |> visit(tenant_url(tenant, "/admin/domains"))
+      |> assert_has(css("h1", text: "Custom domains"))
+      |> fill_in(fillable_field("domain[hostname]"), with: hostname)
+      |> click(button("Add"))
+      # New domain shows up with Pending status + DNS instructions.
+      |> assert_has(css("body", text: hostname))
+      |> assert_has(css(".badge", text: "Pending"))
+      |> assert_has(css("body", text: "CNAME"))
+
+      # Click "Verify" to mark it verified.
+      session
+      |> click(css("button[phx-click='verify_domain']"))
+      |> assert_has(css(".badge", text: "Verified"))
     end
   end
 

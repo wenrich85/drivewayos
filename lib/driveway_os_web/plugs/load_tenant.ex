@@ -9,7 +9,9 @@ defmodule DrivewayOSWeb.Plugs.LoadTenant do
       www.lvh.me                      → :marketing
       admin.lvh.me                    → :platform_admin
       {slug}.lvh.me                   → :tenant (load + assign)
+      <verified custom domain>        → :tenant (load + assign)
       anything-else.<platform_host>   → 404
+      unknown host                    → 404
 
   Side effects on success in the `:tenant` branch:
 
@@ -56,18 +58,28 @@ defmodule DrivewayOSWeb.Plugs.LoadTenant do
       {:tenant, slug} ->
         case Platform.get_tenant_by_slug(slug) do
           {:ok, tenant} ->
-            conn
-            |> assign(:tenant_context, :tenant)
-            |> assign(:current_tenant, tenant)
-            |> put_session(:tenant_id, tenant.id)
+            assign_tenant(conn, tenant)
 
           _ ->
             halt_404(conn)
         end
 
       :unknown ->
-        halt_404(conn)
+        # Last chance: maybe this is a tenant's custom domain. Hits
+        # the DB on every unknown-host request — fine at our scale,
+        # but add a small process-dict cache here when it gets hot.
+        case Platform.get_tenant_by_custom_hostname(conn.host) do
+          {:ok, tenant} -> assign_tenant(conn, tenant)
+          _ -> halt_404(conn)
+        end
     end
+  end
+
+  defp assign_tenant(conn, tenant) do
+    conn
+    |> assign(:tenant_context, :tenant)
+    |> assign(:current_tenant, tenant)
+    |> put_session(:tenant_id, tenant.id)
   end
 
   # --- Private ---

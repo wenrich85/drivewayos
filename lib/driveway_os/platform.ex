@@ -21,13 +21,20 @@ defmodule DrivewayOS.Platform do
 
   require Ash.Query
 
-  alias DrivewayOS.Platform.{PlatformToken, PlatformUser, Tenant, TenantSubscription}
+  alias DrivewayOS.Platform.{
+    CustomDomain,
+    PlatformToken,
+    PlatformUser,
+    Tenant,
+    TenantSubscription
+  }
 
   resources do
     resource Tenant
     resource PlatformUser
     resource PlatformToken
     resource TenantSubscription
+    resource CustomDomain
   end
 
   @doc """
@@ -56,6 +63,55 @@ defmodule DrivewayOS.Platform do
          |> Ash.read(authorize?: false) do
       {:ok, [tenant]} -> {:ok, tenant}
       _ -> {:error, :not_found}
+    end
+  end
+
+  @doc """
+  Add a custom hostname for `tenant`. Starts unverified; the tenant
+  must point DNS at our load balancer + then call
+  `verify_custom_domain/1`.
+  """
+  @spec add_custom_domain(Tenant.t(), String.t()) ::
+          {:ok, CustomDomain.t()} | {:error, term}
+  def add_custom_domain(%Tenant{id: tenant_id}, hostname) when is_binary(hostname) do
+    CustomDomain
+    |> Ash.Changeset.for_create(:create, %{
+      hostname: hostname,
+      tenant_id: tenant_id
+    })
+    |> Ash.create(authorize?: false)
+  end
+
+  @doc """
+  Mark a custom domain verified. After this returns, `LoadTenant`
+  will resolve requests to `domain.hostname` to the owning tenant.
+  """
+  @spec verify_custom_domain(CustomDomain.t()) :: {:ok, CustomDomain.t()} | {:error, term}
+  def verify_custom_domain(%CustomDomain{} = domain) do
+    domain
+    |> Ash.Changeset.for_update(:verify, %{})
+    |> Ash.update(authorize?: false)
+  end
+
+  @doc """
+  Look up the active tenant that owns `hostname`. Returns
+  `{:error, :not_found}` for unknown hosts, unverified hosts, or
+  hosts owned by an archived/suspended tenant.
+  """
+  @spec get_tenant_by_custom_hostname(String.t()) :: {:ok, Tenant.t()} | {:error, :not_found}
+  def get_tenant_by_custom_hostname(hostname) when is_binary(hostname) do
+    normalized = hostname |> String.trim() |> String.downcase()
+
+    case CustomDomain
+         |> Ash.Query.for_read(:verified_for_hostname, %{hostname: normalized})
+         |> Ash.Query.load(:tenant)
+         |> Ash.read(authorize?: false) do
+      {:ok, [%CustomDomain{tenant: %Tenant{status: status} = tenant}]}
+      when status in [:active, :pending_onboarding] ->
+        {:ok, tenant}
+
+      _ ->
+        {:error, :not_found}
     end
   end
 

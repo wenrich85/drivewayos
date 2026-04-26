@@ -147,6 +147,49 @@ defmodule DrivewayOSWeb.Plugs.LoadTenantTest do
     end
   end
 
+  describe "custom domains" do
+    test "verified custom hostname resolves to its tenant", %{tenant: tenant} do
+      hostname = "verified-#{System.unique_integer([:positive])}.example.com"
+      {:ok, cd} = DrivewayOS.Platform.add_custom_domain(tenant, hostname)
+      {:ok, _} = DrivewayOS.Platform.verify_custom_domain(cd)
+
+      conn =
+        conn(:get, "/")
+        |> with_host(hostname)
+        |> init_test_session(%{})
+        |> LoadTenant.call(@opts)
+
+      refute conn.halted
+      assert conn.assigns[:tenant_context] == :tenant
+      assert conn.assigns[:current_tenant].id == tenant.id
+    end
+
+    test "unverified custom hostname → 404", %{tenant: tenant} do
+      hostname = "unverified-#{System.unique_integer([:positive])}.example.com"
+      {:ok, _} = DrivewayOS.Platform.add_custom_domain(tenant, hostname)
+
+      conn =
+        conn(:get, "/")
+        |> with_host(hostname)
+        |> init_test_session(%{})
+        |> LoadTenant.call(@opts)
+
+      assert conn.halted
+      assert conn.status == 404
+    end
+
+    test "unknown hostname (not custom domain, not platform) → 404" do
+      conn =
+        conn(:get, "/")
+        |> with_host("totally-random-#{System.unique_integer([:positive])}.example.org")
+        |> init_test_session(%{})
+        |> LoadTenant.call(@opts)
+
+      assert conn.halted
+      assert conn.status == 404
+    end
+  end
+
   defp with_host(conn, host) do
     %{conn | host: host}
   end
