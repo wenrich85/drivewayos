@@ -78,7 +78,72 @@ defmodule DrivewayOSWeb.StripeWebhookController do
     end
   end
 
+  defp process_event(%{"type" => "account.updated", "data" => %{"object" => obj}} = _event) do
+    account_id = obj["id"]
+
+    case Platform.get_tenant_by_stripe_account(account_id) do
+      {:ok, tenant} ->
+        new_status = derive_account_status(obj)
+
+        tenant
+        |> Ash.Changeset.for_update(:update, %{stripe_account_status: new_status})
+        |> Ash.update!(authorize?: false)
+
+        :ok
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp process_event(%{"type" => "charge.refunded", "account" => account_id, "data" => data}) do
+    case Platform.get_tenant_by_stripe_account(account_id) do
+      {:ok, tenant} ->
+        pi_id = get_in(data, ["object", "payment_intent"])
+
+        if is_binary(pi_id) do
+          case Appointment
+               |> Ash.Query.for_read(:by_payment_intent, %{payment_intent_id: pi_id})
+               |> Ash.Query.set_tenant(tenant.id)
+               |> Ash.read(authorize?: false) do
+            {:ok, [appt | _]} ->
+              appt
+              |> Ash.Changeset.for_update(:mark_refunded, %{})
+              |> Ash.update!(authorize?: false, tenant: tenant.id)
+
+            _ ->
+              :ok
+          end
+        end
+
+        :ok
+
+      _ ->
+        :ok
+    end
+  end
+
   defp process_event(_unknown_event), do: :ok
+
+  # Map a Stripe Account object's flags to our internal status enum.
+  # `:enabled`     — tenant can take charges + receive payouts
+  # `:restricted`  — Stripe disabled them for some reason
+  # `:pending`     — partial onboarding (details_submitted but
+  #                  not yet charges/payouts enabled)
+  # `:none`        — fresh, no onboarding info yet
+  defp derive_account_status(%{
+         "charges_enabled" => true,
+         "payouts_enabled" => true,
+         "details_submitted" => true
+       }),
+       do: :enabled
+
+  defp derive_account_status(%{"requirements" => %{"disabled_reason" => reason}})
+       when is_binary(reason),
+       do: :restricted
+
+  defp derive_account_status(%{"details_submitted" => true}), do: :pending
+  defp derive_account_status(_), do: :none
 
   # Best-effort confirmation email after payment lands. We rescue
   # so a mailer hiccup never causes the webhook to fail (Stripe

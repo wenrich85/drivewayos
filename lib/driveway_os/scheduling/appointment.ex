@@ -227,9 +227,18 @@ defmodule DrivewayOS.Scheduling.Appointment do
       change set_attribute(:stripe_payment_intent_id, arg(:stripe_payment_intent_id))
     end
 
+    update :mark_refunded do
+      change set_attribute(:payment_status, :refunded)
+    end
+
     read :by_stripe_session do
       argument :session_id, :string, allow_nil?: false
       filter expr(stripe_checkout_session_id == ^arg(:session_id))
+    end
+
+    read :by_payment_intent do
+      argument :payment_intent_id, :string, allow_nil?: false
+      filter expr(stripe_payment_intent_id == ^arg(:payment_intent_id))
     end
 
     read :upcoming do

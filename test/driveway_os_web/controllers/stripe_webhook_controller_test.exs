@@ -133,6 +133,140 @@ defmodule DrivewayOSWeb.StripeWebhookControllerTest do
       assert conn.status == 400
     end
 
+    test "account.updated maps charges_enabled → :enabled", %{conn: conn, tenant: tenant} do
+      DrivewayOS.Billing.StripeClientMock
+      |> expect(:construct_event, fn _, _, _ ->
+        {:ok,
+         %{
+           "type" => "account.updated",
+           "account" => tenant.stripe_account_id,
+           "data" => %{
+             "object" => %{
+               "id" => tenant.stripe_account_id,
+               "charges_enabled" => true,
+               "payouts_enabled" => true,
+               "details_submitted" => true,
+               "requirements" => %{"disabled_reason" => nil}
+             }
+           }
+         }}
+      end)
+
+      # First put the tenant into a non-:enabled state so we can prove the bump.
+      tenant
+      |> Ash.Changeset.for_update(:update, %{stripe_account_status: :pending})
+      |> Ash.update!(authorize?: false)
+
+      conn =
+        conn
+        |> put_req_header("stripe-signature", "fake")
+        |> put_req_header("content-type", "application/json")
+        |> Map.put(:host, "lvh.me")
+        |> post("/webhooks/stripe", "{}")
+
+      assert conn.status == 200
+
+      reloaded = DrivewayOS.Platform.get_tenant_by_slug!(tenant.slug)
+      assert reloaded.stripe_account_status == :enabled
+    end
+
+    test "account.updated with disabled_reason → :restricted",
+         %{conn: conn, tenant: tenant} do
+      DrivewayOS.Billing.StripeClientMock
+      |> expect(:construct_event, fn _, _, _ ->
+        {:ok,
+         %{
+           "type" => "account.updated",
+           "account" => tenant.stripe_account_id,
+           "data" => %{
+             "object" => %{
+               "id" => tenant.stripe_account_id,
+               "charges_enabled" => false,
+               "payouts_enabled" => false,
+               "details_submitted" => true,
+               "requirements" => %{"disabled_reason" => "requirements.past_due"}
+             }
+           }
+         }}
+      end)
+
+      conn =
+        conn
+        |> put_req_header("stripe-signature", "fake")
+        |> put_req_header("content-type", "application/json")
+        |> Map.put(:host, "lvh.me")
+        |> post("/webhooks/stripe", "{}")
+
+      assert conn.status == 200
+
+      reloaded = DrivewayOS.Platform.get_tenant_by_slug!(tenant.slug)
+      assert reloaded.stripe_account_status == :restricted
+    end
+
+    test "charge.refunded marks the appointment :refunded",
+         %{conn: conn, tenant: tenant} do
+      {:ok, [service | _]} =
+        DrivewayOS.Scheduling.ServiceType
+        |> Ash.Query.set_tenant(tenant.id)
+        |> Ash.read(authorize?: false)
+
+      {:ok, [admin | _]} =
+        DrivewayOS.Accounts.Customer
+        |> Ash.Query.set_tenant(tenant.id)
+        |> Ash.read(authorize?: false)
+
+      {:ok, appt} =
+        Appointment
+        |> Ash.Changeset.for_create(
+          :book,
+          %{
+            customer_id: admin.id,
+            service_type_id: service.id,
+            scheduled_at:
+              DateTime.utc_now() |> DateTime.add(86_400, :second) |> DateTime.truncate(:second),
+            duration_minutes: service.duration_minutes,
+            price_cents: service.base_price_cents,
+            vehicle_description: "RX",
+            service_address: "1 Drive"
+          },
+          tenant: tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      pi_id = "pi_refund_test_#{System.unique_integer([:positive])}"
+
+      appt
+      |> Ash.Changeset.for_update(:mark_paid, %{stripe_payment_intent_id: pi_id})
+      |> Ash.update!(authorize?: false, tenant: tenant.id)
+
+      DrivewayOS.Billing.StripeClientMock
+      |> expect(:construct_event, fn _, _, _ ->
+        {:ok,
+         %{
+           "type" => "charge.refunded",
+           "account" => tenant.stripe_account_id,
+           "data" => %{
+             "object" => %{
+               "payment_intent" => pi_id,
+               "amount_refunded" => service.base_price_cents
+             }
+           }
+         }}
+      end)
+
+      conn =
+        conn
+        |> put_req_header("stripe-signature", "fake")
+        |> put_req_header("content-type", "application/json")
+        |> Map.put(:host, "lvh.me")
+        |> post("/webhooks/stripe", "{}")
+
+      assert conn.status == 200
+
+      reloaded = Ash.get!(Appointment, appt.id, tenant: tenant.id, authorize?: false)
+      assert reloaded.payment_status == :refunded
+    end
+
     test "unknown event type returns 200 (no-op)", %{conn: conn, tenant: tenant} do
       DrivewayOS.Billing.StripeClientMock
       |> expect(:construct_event, fn _, _, _ ->
