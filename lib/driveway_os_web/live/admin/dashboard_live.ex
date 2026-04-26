@@ -137,7 +137,23 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
               Welcome back, {@current_customer.name}.
             </p>
           </div>
-          <a href="/auth/customer/sign-out" class="btn btn-ghost btn-sm">Sign out</a>
+          <div class="flex gap-2">
+            <a href="/admin/domains" class="btn btn-ghost btn-sm">Domains</a>
+            <a href="/auth/customer/sign-out" class="btn btn-ghost btn-sm">Sign out</a>
+          </div>
+        </div>
+
+        <div
+          :if={is_nil(@current_tenant.stripe_account_id)}
+          class="alert alert-warning shadow"
+        >
+          <div class="flex-1">
+            <div class="font-semibold">Stripe not connected yet</div>
+            <div class="text-sm">
+              Connect your Stripe account to start collecting payment for bookings.
+            </div>
+          </div>
+          <a href="/onboarding/stripe/start" class="btn btn-primary btn-sm">Connect Stripe</a>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">

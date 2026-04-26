@@ -53,7 +53,11 @@ defmodule DrivewayOSWeb.Endpoint do
   plug Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],
-    json_decoder: Phoenix.json_library()
+    json_decoder: Phoenix.json_library(),
+    # Stripe webhook signature verification needs the raw request
+    # body. Stash it on the conn so the webhook controller can read
+    # it after the JSON parser has consumed it.
+    body_reader: {DrivewayOSWeb.CacheBodyReader, :read_body, []}
 
   plug Plug.MethodOverride
   plug Plug.Head

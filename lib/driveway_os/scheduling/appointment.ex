@@ -96,6 +96,34 @@ defmodule DrivewayOS.Scheduling.Appointment do
       constraints max_length: 300
     end
 
+    # Stripe Checkout Session id created at booking time (when the
+    # tenant has Connect onboarded). Survives the redirect cycle to
+    # Stripe and back so the webhook handler can resolve the
+    # session → appointment.
+    attribute :stripe_checkout_session_id, :string do
+      public? true
+      constraints max_length: 100
+    end
+
+    # PaymentIntent id, set on `checkout.session.completed`. Useful
+    # for refunds, reconciliation, and proving "yes Stripe knows
+    # about this charge."
+    attribute :stripe_payment_intent_id, :string do
+      public? true
+      constraints max_length: 100
+    end
+
+    attribute :payment_status, :atom do
+      constraints one_of: [:unpaid, :pending, :paid, :refunded]
+      default :unpaid
+      allow_nil? false
+      public? true
+    end
+
+    attribute :paid_at, :utc_datetime_usec do
+      public? true
+    end
+
     create_timestamp :inserted_at
     update_timestamp :updated_at
   end
@@ -184,6 +212,24 @@ defmodule DrivewayOS.Scheduling.Appointment do
 
       change set_attribute(:status, :cancelled)
       change set_attribute(:cancellation_reason, arg(:cancellation_reason))
+    end
+
+    update :attach_stripe_session do
+      accept [:stripe_checkout_session_id, :payment_status]
+    end
+
+    update :mark_paid do
+      argument :stripe_payment_intent_id, :string
+
+      change set_attribute(:payment_status, :paid)
+      change set_attribute(:paid_at, &DateTime.utc_now/0)
+      change set_attribute(:status, :confirmed)
+      change set_attribute(:stripe_payment_intent_id, arg(:stripe_payment_intent_id))
+    end
+
+    read :by_stripe_session do
+      argument :session_id, :string, allow_nil?: false
+      filter expr(stripe_checkout_session_id == ^arg(:session_id))
     end
 
     read :upcoming do

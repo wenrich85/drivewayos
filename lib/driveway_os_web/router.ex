@@ -22,6 +22,19 @@ defmodule DrivewayOSWeb.Router do
     plug :accepts, ["json"]
   end
 
+  # Stripe webhooks need no CSRF, no session, no LoadTenant — they
+  # carry their own auth (signature) and own tenant resolution
+  # (`stripe-account` header).
+  pipeline :webhook do
+    plug :accepts, ["json"]
+  end
+
+  scope "/webhooks", DrivewayOSWeb do
+    pipe_through :webhook
+
+    post "/stripe", StripeWebhookController, :handle
+  end
+
   scope "/", DrivewayOSWeb do
     pipe_through :browser
 
@@ -37,6 +50,9 @@ defmodule DrivewayOSWeb.Router do
 
     get "/auth/customer/store-token", Auth.SessionController, :store_token
     get "/auth/customer/sign-out", Auth.SessionController, :sign_out
+
+    get "/onboarding/stripe/start", StripeOnboardingController, :start
+    get "/onboarding/stripe/callback", StripeOnboardingController, :callback
   end
 
   # Other scopes may use custom stacks.

@@ -23,6 +23,7 @@ defmodule DrivewayOS.Platform do
 
   alias DrivewayOS.Platform.{
     CustomDomain,
+    OauthState,
     PlatformToken,
     PlatformUser,
     Tenant,
@@ -35,6 +36,7 @@ defmodule DrivewayOS.Platform do
     resource PlatformToken
     resource TenantSubscription
     resource CustomDomain
+    resource OauthState
   end
 
   @doc """
@@ -42,13 +44,27 @@ defmodule DrivewayOS.Platform do
   `{:error, :not_found}`. Archived tenants are excluded so the
   `LoadTenant` plug returns 404 for them.
   """
-  @spec get_tenant_by_slug(String.t()) :: {:ok, Tenant.t()} | {:error, :not_found}
+  @spec get_tenant_by_slug(String.t() | Ash.CiString.t()) ::
+          {:ok, Tenant.t()} | {:error, :not_found}
   def get_tenant_by_slug(slug) when is_binary(slug) do
     case Tenant
          |> Ash.Query.for_read(:by_slug, %{slug: slug})
          |> Ash.read(authorize?: false) do
       {:ok, [tenant]} -> {:ok, tenant}
       _ -> {:error, :not_found}
+    end
+  end
+
+  def get_tenant_by_slug(%Ash.CiString{} = slug), do: get_tenant_by_slug(to_string(slug))
+
+  @doc """
+  Raising version of `get_tenant_by_slug/1`.
+  """
+  @spec get_tenant_by_slug!(String.t()) :: Tenant.t()
+  def get_tenant_by_slug!(slug) do
+    case get_tenant_by_slug(slug) do
+      {:ok, tenant} -> tenant
+      _ -> raise "tenant not found: #{slug}"
     end
   end
 

@@ -9,3 +9,11 @@ end
 # keeps CI from breaking when ChromeDriver isn't installed.
 ExUnit.start(exclude: [:browser])
 Ecto.Adapters.SQL.Sandbox.mode(DrivewayOS.Repo, :manual)
+
+# Mox-backed mock for the Stripe API. Tests that touch billing
+# expect this to be defined; tests that don't can ignore it.
+Mox.defmock(DrivewayOS.Billing.StripeClientMock,
+  for: DrivewayOS.Billing.StripeClient
+)
+
+Application.put_env(:driveway_os, :stripe_client, DrivewayOS.Billing.StripeClientMock)

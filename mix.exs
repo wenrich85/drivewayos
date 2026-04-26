@@ -88,7 +88,11 @@ defmodule DrivewayOS.MixProject do
       # Browser-level (real Chrome via ChromeDriver) UI testing.
       # Tagged so plain `mix test` skips them; opt-in via
       # `mix test --include browser`.
-      {:wallaby, "~> 0.30", runtime: false, only: :test}
+      {:wallaby, "~> 0.30", runtime: false, only: :test},
+
+      # Behaviour-mocking for the StripeClient boundary so tests
+      # don't hit Stripe's real API.
+      {:mox, "~> 1.2", only: :test}
     ]
   end
 

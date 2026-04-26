@@ -56,6 +56,11 @@ config :driveway_os,
 
 config :driveway_os, :platform_host, "lvh.me"
 
+# Stripe placeholders (test env). Mox replaces all real API calls.
+config :driveway_os, :stripe_client_id, "ca_test_placeholder"
+config :driveway_os, :stripe_secret_key, "sk_test_placeholder"
+config :driveway_os, :stripe_webhook_secret, "whsec_test_placeholder"
+
 # --- Wallaby (browser tests) ---
 # Tests must be tagged `:browser` to use this; everything else runs
 # in the regular Sandbox. Wallaby points at port 4002 (the test

@@ -17,9 +17,15 @@ defmodule DrivewayOSWeb.BookingLive do
   on_mount DrivewayOSWeb.LoadTenantHook
   on_mount DrivewayOSWeb.LoadCustomerHook
 
+  alias DrivewayOS.Billing.StripeClient
   alias DrivewayOS.Scheduling.{Appointment, ServiceType}
 
   require Ash.Query
+
+  # Platform's cut on every booking, in basis points (e.g. 1000 =
+  # 10%). Hardcoded for V1; per-tenant overrides land with
+  # TenantSubscription.
+  @application_fee_bps 1000
 
   @impl true
   def mount(_params, _session, socket) do
@@ -51,7 +57,7 @@ defmodule DrivewayOSWeb.BookingLive do
          {:ok, scheduled_at} <- parse_scheduled_at(params["scheduled_at"]),
          {:ok, appt} <-
            create_appointment(tenant, customer, service, scheduled_at, params) do
-      {:noreply, push_navigate(socket, to: ~p"/book/success/#{appt.id}")}
+      handle_post_booking(socket, tenant, customer, service, appt)
     else
       {:error, :missing_service} ->
         {:noreply,
@@ -139,6 +145,88 @@ defmodule DrivewayOSWeb.BookingLive do
       tenant: tenant.id
     )
     |> Ash.create(authorize?: false)
+  end
+
+  # Decide what happens after the appointment is created.
+  #
+  # If the tenant has Stripe Connect onboarded, we mint a Stripe
+  # Checkout Session, attach its id to the appointment, and redirect
+  # the customer to Stripe's hosted page. Stripe will redirect them
+  # back to /book/success/:id once they pay.
+  #
+  # Otherwise (tenant hasn't connected Stripe yet), we fall back to
+  # the V0.5 path: appointment exists in :unpaid state, customer
+  # lands on the confirmation page, payment is collected on-site.
+  defp handle_post_booking(socket, tenant, customer, service, appt) do
+    if tenant.stripe_account_id do
+      params = checkout_params(tenant, customer, service, appt)
+
+      case StripeClient.create_checkout_session(tenant.stripe_account_id, params) do
+        {:ok, %{id: session_id, url: url}} ->
+          appt
+          |> Ash.Changeset.for_update(:attach_stripe_session, %{
+            stripe_checkout_session_id: session_id,
+            payment_status: :pending
+          })
+          |> Ash.update!(authorize?: false, tenant: tenant.id)
+
+          {:noreply, redirect(socket, external: url)}
+
+        {:error, _reason} ->
+          # Stripe failed — keep the appointment as-is and send the
+          # customer to the confirmation page. Better than losing the
+          # booking entirely; admin can reach out to collect payment.
+          {:noreply, push_navigate(socket, to: ~p"/book/success/#{appt.id}")}
+      end
+    else
+      {:noreply, push_navigate(socket, to: ~p"/book/success/#{appt.id}")}
+    end
+  end
+
+  defp checkout_params(tenant, customer, service, appt) do
+    base_url = tenant_base_url(tenant)
+    fee = div(service.base_price_cents * @application_fee_bps, 10_000)
+
+    %{
+      mode: "payment",
+      success_url: "#{base_url}/book/success/#{appt.id}?session_id={CHECKOUT_SESSION_ID}",
+      cancel_url: "#{base_url}/book",
+      customer_email: to_string(customer.email),
+      application_fee_amount: fee,
+      line_items: [
+        %{
+          quantity: 1,
+          price_data: %{
+            currency: "usd",
+            unit_amount: service.base_price_cents,
+            product_data: %{
+              name: service.name,
+              description: "#{tenant.display_name} · #{service.duration_minutes} min"
+            }
+          }
+        }
+      ],
+      metadata: %{
+        appointment_id: appt.id,
+        tenant_id: tenant.id,
+        customer_id: customer.id
+      }
+    }
+  end
+
+  defp tenant_base_url(tenant) do
+    host = Application.fetch_env!(:driveway_os, :platform_host)
+    http_opts = Application.get_env(:driveway_os, DrivewayOSWeb.Endpoint)[:http] || []
+    port = Keyword.get(http_opts, :port)
+
+    {scheme, port_suffix} =
+      cond do
+        host == "lvh.me" -> {"http", ":#{port || 4000}"}
+        port in [nil, 80, 443] -> {"https", ""}
+        true -> {"https", ":#{port}"}
+      end
+
+    "#{scheme}://#{tenant.slug}.#{host}#{port_suffix}"
   end
 
   defp ash_errors_to_map(%Ash.Error.Invalid{errors: errors}) do
