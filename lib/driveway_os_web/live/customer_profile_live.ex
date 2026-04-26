@@ -21,6 +21,7 @@ defmodule DrivewayOSWeb.CustomerProfileLive do
   on_mount DrivewayOSWeb.LoadCustomerHook
 
   alias DrivewayOS.Fleet.{Address, Vehicle}
+  alias DrivewayOS.Scheduling.{ServiceType, Subscription}
 
   require Ash.Query
 
@@ -46,10 +47,28 @@ defmodule DrivewayOSWeb.CustomerProfileLive do
     |> assign(:page_title, "Profile")
     |> assign(:vehicles, load_vehicles(customer_id, tenant_id))
     |> assign(:addresses, load_addresses(customer_id, tenant_id))
+    |> assign(:subscriptions, load_subscriptions(customer_id, tenant_id))
+    |> assign(:service_map, load_service_map(tenant_id))
     |> assign(:profile_mode, :read)
     |> assign(:vehicle_form?, false)
     |> assign(:address_form?, false)
     |> assign(:errors, %{})
+  end
+
+  defp load_subscriptions(customer_id, tenant_id) do
+    Subscription
+    |> Ash.Query.for_read(:for_customer, %{customer_id: customer_id})
+    |> Ash.Query.set_tenant(tenant_id)
+    |> Ash.read!(authorize?: false)
+  end
+
+  defp load_service_map(tenant_id) do
+    case ServiceType
+         |> Ash.Query.set_tenant(tenant_id)
+         |> Ash.read(authorize?: false) do
+      {:ok, services} -> Map.new(services, &{&1.id, &1})
+      _ -> %{}
+    end
   end
 
   defp load_vehicles(customer_id, tenant_id) do
@@ -198,6 +217,33 @@ defmodule DrivewayOSWeb.CustomerProfileLive do
          true <- a.customer_id == me.id,
          :ok <- Ash.destroy(a, authorize?: false, tenant: tenant.id) do
       {:noreply, assign(socket, :addresses, load_addresses(me.id, tenant.id))}
+    else
+      _ -> {:noreply, socket}
+    end
+  end
+
+  # --- Subscription transitions ---
+
+  def handle_event("pause_subscription", %{"id" => id}, socket),
+    do: transition_subscription(socket, id, :pause)
+
+  def handle_event("resume_subscription", %{"id" => id}, socket),
+    do: transition_subscription(socket, id, :resume)
+
+  def handle_event("cancel_subscription", %{"id" => id}, socket),
+    do: transition_subscription(socket, id, :cancel)
+
+  defp transition_subscription(socket, id, action) do
+    tenant = socket.assigns.current_tenant
+    me = socket.assigns.current_customer
+
+    with {:ok, sub} <- Ash.get(Subscription, id, tenant: tenant.id, authorize?: false),
+         true <- sub.customer_id == me.id,
+         {:ok, _} <-
+           sub
+           |> Ash.Changeset.for_update(action, %{})
+           |> Ash.update(authorize?: false, tenant: tenant.id) do
+      {:noreply, assign(socket, :subscriptions, load_subscriptions(me.id, tenant.id))}
     else
       _ -> {:noreply, socket}
     end
@@ -541,8 +587,76 @@ defmodule DrivewayOSWeb.CustomerProfileLive do
             </form>
           </div>
         </section>
+
+        <section
+          :if={@subscriptions != []}
+          class="card bg-base-100 shadow-sm border border-base-300"
+        >
+          <div class="card-body p-6">
+            <h2 class="card-title text-base">Recurring bookings</h2>
+
+            <ul class="divide-y divide-base-200 mt-2">
+              <li :for={sub <- @subscriptions} class="py-3">
+                <div class="flex items-start justify-between gap-3 flex-wrap">
+                  <div class="min-w-0">
+                    <div class="font-medium flex items-center gap-2">
+                      <span>{(@service_map[sub.service_type_id] || %{name: "Service"}).name}</span>
+                      <span class={"badge badge-sm " <> sub_badge(sub.status)}>
+                        {sub.status}
+                      </span>
+                    </div>
+                    <div class="text-sm text-base-content/70 mt-1">
+                      Every {frequency_label(sub.frequency)} · next {fmt_when(sub.next_run_at)}
+                    </div>
+                    <div class="text-xs text-base-content/60 mt-1 truncate">
+                      {sub.vehicle_description} · {sub.service_address}
+                    </div>
+                  </div>
+
+                  <div class="flex gap-2">
+                    <button
+                      :if={sub.status == :active}
+                      phx-click="pause_subscription"
+                      phx-value-id={sub.id}
+                      class="btn btn-ghost btn-xs gap-1"
+                    >
+                      <span class="hero-pause w-3 h-3" aria-hidden="true"></span> Pause
+                    </button>
+                    <button
+                      :if={sub.status == :paused}
+                      phx-click="resume_subscription"
+                      phx-value-id={sub.id}
+                      class="btn btn-success btn-xs gap-1"
+                    >
+                      <span class="hero-play w-3 h-3" aria-hidden="true"></span> Resume
+                    </button>
+                    <button
+                      :if={sub.status != :cancelled}
+                      phx-click="cancel_subscription"
+                      phx-value-id={sub.id}
+                      data-confirm="Cancel this recurring booking?"
+                      class="btn btn-ghost btn-xs text-error gap-1"
+                    >
+                      <span class="hero-x-mark w-3 h-3" aria-hidden="true"></span> Cancel
+                    </button>
+                  </div>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </section>
       </div>
     </main>
     """
   end
+
+  defp sub_badge(:active), do: "badge-success"
+  defp sub_badge(:paused), do: "badge-warning"
+  defp sub_badge(:cancelled), do: "badge-ghost"
+
+  defp frequency_label(:weekly), do: "week"
+  defp frequency_label(:biweekly), do: "2 weeks"
+  defp frequency_label(:monthly), do: "month"
+
+  defp fmt_when(%DateTime{} = dt), do: Calendar.strftime(dt, "%a %b %-d")
 end

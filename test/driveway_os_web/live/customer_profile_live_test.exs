@@ -348,6 +348,120 @@ defmodule DrivewayOSWeb.CustomerProfileLiveTest do
     end
   end
 
+  describe "recurring subscriptions" do
+    setup ctx do
+      {:ok, service} =
+        DrivewayOS.Scheduling.ServiceType
+        |> Ash.Changeset.for_create(
+          :create,
+          %{
+            slug: "recurring-svc",
+            name: "Recurring Service",
+            base_price_cents: 8_000,
+            duration_minutes: 60
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      {:ok, sub} =
+        DrivewayOS.Scheduling.Subscription
+        |> Ash.Changeset.for_create(
+          :subscribe,
+          %{
+            customer_id: ctx.customer.id,
+            service_type_id: service.id,
+            frequency: :biweekly,
+            starts_at: DateTime.utc_now() |> DateTime.add(86_400, :second),
+            service_address: "1 Recurring Lane",
+            vehicle_description: "Sub Truck"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      Map.put(ctx, :sub, sub)
+    end
+
+    test "lists active subscriptions", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/me")
+
+      assert html =~ "Recurring bookings"
+      assert html =~ "Every 2 weeks"
+      assert html =~ "Sub Truck"
+    end
+
+    test "Pause flips an active sub to :paused", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, _} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/me")
+
+      render_click(lv, "pause_subscription", %{"id" => ctx.sub.id})
+
+      reloaded =
+        Ash.get!(DrivewayOS.Scheduling.Subscription, ctx.sub.id,
+          tenant: ctx.tenant.id,
+          authorize?: false
+        )
+
+      assert reloaded.status == :paused
+    end
+
+    test "Cancel flips a sub to :cancelled (terminal)", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, _} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/me")
+
+      render_click(lv, "cancel_subscription", %{"id" => ctx.sub.id})
+
+      reloaded =
+        Ash.get!(DrivewayOS.Scheduling.Subscription, ctx.sub.id,
+          tenant: ctx.tenant.id,
+          authorize?: false
+        )
+
+      assert reloaded.status == :cancelled
+    end
+
+    test "another customer's sub cannot be cancelled even if id is guessed", ctx do
+      {:ok, other_customer} =
+        Customer
+        |> Ash.Changeset.for_create(
+          :register_with_password,
+          %{
+            email: "other-#{System.unique_integer([:positive])}@example.com",
+            password: "Password123!",
+            password_confirmation: "Password123!",
+            name: "Other"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      conn = sign_in(ctx.conn, other_customer)
+
+      {:ok, lv, _} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/me")
+
+      # Other customer trying to cancel ctx.customer's sub.
+      render_click(lv, "cancel_subscription", %{"id" => ctx.sub.id})
+
+      reloaded =
+        Ash.get!(DrivewayOS.Scheduling.Subscription, ctx.sub.id,
+          tenant: ctx.tenant.id,
+          authorize?: false
+        )
+
+      # Untouched.
+      assert reloaded.status == :active
+    end
+  end
+
   defp sign_in(conn, customer) do
     {:ok, token, _} = AshAuthentication.Jwt.token_for_user(customer)
     conn |> Plug.Test.init_test_session(%{customer_token: token})
