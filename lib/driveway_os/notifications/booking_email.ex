@@ -218,6 +218,51 @@ defmodule DrivewayOS.Notifications.BookingEmail do
     """)
   end
 
+  @doc """
+  Customer-side notification: a recurring subscription was just
+  created. Sent from the self-serve flow on /book/success and the
+  admin-created flow on /admin/customers/:id.
+  """
+  @spec subscription_confirmed(
+          Tenant.t(),
+          Customer.t(),
+          DrivewayOS.Scheduling.Subscription.t(),
+          ServiceType.t()
+        ) :: Swoosh.Email.t()
+  def subscription_confirmed(
+        %Tenant{} = tenant,
+        %Customer{} = customer,
+        %DrivewayOS.Scheduling.Subscription{} = sub,
+        %ServiceType{} = service
+      ) do
+    new()
+    |> to({customer.name, to_string(customer.email)})
+    |> from(Branding.from_address(tenant))
+    |> subject("You're set up for recurring #{service.name}")
+    |> text_body("""
+    Hey #{customer.name},
+
+    You're all set for recurring service with #{Branding.display_name(tenant)}.
+
+      Service:    #{service.name}
+      Frequency:  #{frequency_label(sub.frequency)}
+      Next wash:  #{format_when(sub.next_run_at)}
+      Vehicle:    #{sub.vehicle_description}
+      Where:      #{sub.service_address}
+
+    We'll auto-book each one a few days in advance and email you a
+    reminder the day before. Pause or cancel anytime from your
+    profile.
+
+    -- #{Branding.display_name(tenant)}
+    """)
+  end
+
+  defp frequency_label(:weekly), do: "every week"
+  defp frequency_label(:biweekly), do: "every 2 weeks"
+  defp frequency_label(:monthly), do: "every month"
+  defp frequency_label(other), do: to_string(other)
+
   defp alert_body(tenant, admin, customer, appt, service) do
     """
     Hi #{admin.name},

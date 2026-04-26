@@ -222,6 +222,28 @@ defmodule DrivewayOS.Notifications.BookingEmailTest do
     end
   end
 
+  describe "subscription_confirmed/4" do
+    test "to: customer; subject mentions service + recurring", ctx do
+      {appt, service} = book!(ctx.tenant, ctx.admin)
+
+      sub = %DrivewayOS.Scheduling.Subscription{
+        frequency: :biweekly,
+        starts_at: appt.scheduled_at,
+        next_run_at: appt.scheduled_at,
+        vehicle_description: appt.vehicle_description,
+        service_address: appt.service_address
+      }
+
+      email = BookingEmail.subscription_confirmed(ctx.tenant, ctx.admin, sub, service)
+
+      assert email.to == [{ctx.admin.name, to_string(ctx.admin.email)}]
+      assert email.subject =~ "recurring"
+      assert email.subject =~ service.name
+      assert email.text_body =~ "every 2 weeks"
+      assert email.text_body =~ appt.vehicle_description
+    end
+  end
+
   describe "tenant-A email never contains tenant-B branding" do
     test "confirmation isolation", ctx do
       {:ok, %{tenant: tenant_b}} =

@@ -13,7 +13,9 @@ defmodule DrivewayOSWeb.BookingSuccessLive do
   on_mount DrivewayOSWeb.LoadCustomerHook
 
   alias DrivewayOS.Accounts.Customer
-  alias DrivewayOS.Scheduling.{Appointment, Subscription}
+  alias DrivewayOS.Mailer
+  alias DrivewayOS.Notifications.BookingEmail
+  alias DrivewayOS.Scheduling.{Appointment, ServiceType, Subscription}
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
@@ -58,9 +60,27 @@ defmodule DrivewayOSWeb.BookingSuccessLive do
     case Subscription
          |> Ash.Changeset.for_create(:subscribe, attrs, tenant: tenant.id)
          |> Ash.create(authorize?: false) do
-      {:ok, _} -> {:noreply, assign(socket, :subscribe_state, :done)}
-      _ -> {:noreply, assign(socket, :subscribe_state, :error)}
+      {:ok, sub} ->
+        send_subscription_confirmation(tenant, me, sub)
+        {:noreply, assign(socket, :subscribe_state, :done)}
+
+      _ ->
+        {:noreply, assign(socket, :subscribe_state, :error)}
     end
+  end
+
+  defp send_subscription_confirmation(tenant, customer, sub) do
+    case Ash.get(ServiceType, sub.service_type_id, tenant: tenant.id, authorize?: false) do
+      {:ok, service} ->
+        tenant
+        |> BookingEmail.subscription_confirmed(customer, sub, service)
+        |> Mailer.deliver()
+
+      _ ->
+        :ok
+    end
+  rescue
+    _ -> :ok
   end
 
   defp next_run_after(scheduled_at, "weekly"), do: DateTime.add(scheduled_at, 7 * 86_400, :second)
