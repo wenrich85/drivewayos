@@ -171,6 +171,57 @@ defmodule DrivewayOS.Notifications.BookingEmailTest do
     end
   end
 
+  describe "confirmed/4" do
+    test "subject mentions 'confirmed' and the schedule", ctx do
+      {appt, service} = book!(ctx.tenant, ctx.admin)
+      email = BookingEmail.confirmed(ctx.tenant, ctx.admin, appt, service)
+
+      assert email.subject =~ "confirmed"
+      assert email.to == [{ctx.admin.name, to_string(ctx.admin.email)}]
+    end
+
+    test "body lists service, vehicle, address", ctx do
+      {appt, service} = book!(ctx.tenant, ctx.admin)
+      email = BookingEmail.confirmed(ctx.tenant, ctx.admin, appt, service)
+
+      assert email.text_body =~ service.name
+      assert email.text_body =~ appt.vehicle_description
+      assert email.text_body =~ appt.service_address
+    end
+  end
+
+  describe "cancelled/4" do
+    test "subject says 'cancelled' and goes to the customer", ctx do
+      {appt, service} = book!(ctx.tenant, ctx.admin)
+
+      cancelled_appt = %{
+        appt
+        | status: :cancelled,
+          cancellation_reason: "Cancelled by customer"
+      }
+
+      email = BookingEmail.cancelled(ctx.tenant, ctx.admin, cancelled_appt, service)
+
+      assert email.subject =~ "cancelled"
+      assert email.to == [{ctx.admin.name, to_string(ctx.admin.email)}]
+      assert email.text_body =~ "Cancelled by customer"
+    end
+  end
+
+  describe "customer_cancellation_alert/5" do
+    test "to: admin; subject: 'Cancellation: <customer> — <service>'", ctx do
+      {appt, service} = book!(ctx.tenant, ctx.admin)
+
+      email =
+        BookingEmail.customer_cancellation_alert(ctx.tenant, ctx.admin, ctx.admin, appt, service)
+
+      assert email.to == [{ctx.admin.name, to_string(ctx.admin.email)}]
+      assert email.subject =~ "Cancellation"
+      assert email.subject =~ ctx.admin.name
+      assert email.subject =~ service.name
+    end
+  end
+
   describe "tenant-A email never contains tenant-B branding" do
     test "confirmation isolation", ctx do
       {:ok, %{tenant: tenant_b}} =

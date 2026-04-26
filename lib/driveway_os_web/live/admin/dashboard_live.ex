@@ -18,6 +18,8 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
   on_mount DrivewayOSWeb.LoadCustomerHook
 
   alias DrivewayOS.Accounts.Customer
+  alias DrivewayOS.Mailer
+  alias DrivewayOS.Notifications.BookingEmail
   alias DrivewayOS.Platform.CustomDomain
   alias DrivewayOS.Scheduling.{Appointment, BlockTemplate, ServiceType}
 
@@ -41,52 +43,29 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
   end
 
   @impl true
-  def handle_event("confirm_appointment", %{"id" => id}, socket) do
-    tenant_id = socket.assigns.current_tenant.id
+  def handle_event("confirm_appointment", %{"id" => id}, socket),
+    do: transition_appointment(socket, id, :confirm, %{})
 
-    case Ash.get(Appointment, id, tenant: tenant_id, authorize?: false) do
-      {:ok, appt} ->
-        appt
-        |> Ash.Changeset.for_update(:confirm, %{})
-        |> Ash.update!(authorize?: false, tenant: tenant_id)
-
-        {:noreply, load_dashboard(socket)}
-
-      _ ->
-        {:noreply, socket}
-    end
-  end
-
-  def handle_event("cancel_appointment", %{"id" => id}, socket) do
-    tenant_id = socket.assigns.current_tenant.id
-
-    case Ash.get(Appointment, id, tenant: tenant_id, authorize?: false) do
-      {:ok, appt} ->
-        appt
-        |> Ash.Changeset.for_update(:cancel, %{cancellation_reason: "Cancelled by admin"})
-        |> Ash.update!(authorize?: false, tenant: tenant_id)
-
-        {:noreply, load_dashboard(socket)}
-
-      _ ->
-        {:noreply, socket}
-    end
-  end
+  def handle_event("cancel_appointment", %{"id" => id}, socket),
+    do: transition_appointment(socket, id, :cancel, %{cancellation_reason: "Cancelled by admin"})
 
   def handle_event("start_appointment", %{"id" => id}, socket),
-    do: transition_appointment(socket, id, :start_wash)
+    do: transition_appointment(socket, id, :start_wash, %{})
 
   def handle_event("complete_appointment", %{"id" => id}, socket),
-    do: transition_appointment(socket, id, :complete)
+    do: transition_appointment(socket, id, :complete, %{})
 
-  defp transition_appointment(socket, id, action) do
+  defp transition_appointment(socket, id, action, args) do
     tenant_id = socket.assigns.current_tenant.id
 
     case Ash.get(Appointment, id, tenant: tenant_id, authorize?: false) do
       {:ok, appt} ->
-        appt
-        |> Ash.Changeset.for_update(action, %{})
-        |> Ash.update!(authorize?: false, tenant: tenant_id)
+        updated =
+          appt
+          |> Ash.Changeset.for_update(action, args)
+          |> Ash.update!(authorize?: false, tenant: tenant_id)
+
+        send_state_change_email(socket, action, updated)
 
         {:noreply, load_dashboard(socket)}
 
@@ -94,6 +73,31 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
         {:noreply, socket}
     end
   end
+
+  # Customer-side email on admin-initiated confirm / cancel.
+  defp send_state_change_email(socket, action, %Appointment{} = appt)
+       when action in [:confirm, :cancel] do
+    tenant = socket.assigns.current_tenant
+
+    with {:ok, booker} <-
+           Ash.get(Customer, appt.customer_id, tenant: tenant.id, authorize?: false),
+         {:ok, service} <-
+           Ash.get(ServiceType, appt.service_type_id, tenant: tenant.id, authorize?: false) do
+      email =
+        case action do
+          :confirm -> BookingEmail.confirmed(tenant, booker, appt, service)
+          :cancel -> BookingEmail.cancelled(tenant, booker, appt, service)
+        end
+
+      Mailer.deliver(email)
+    end
+
+    :ok
+  rescue
+    _ -> :ok
+  end
+
+  defp send_state_change_email(_, _, _), do: :ok
 
   # --- Private ---
 

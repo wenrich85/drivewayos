@@ -177,6 +177,8 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
          |> Ash.Changeset.for_update(action, args)
          |> Ash.update(authorize?: false, tenant: tenant_id) do
       {:ok, updated} ->
+        send_state_change_emails(socket, action, updated)
+
         {:noreply,
          socket
          |> assign(:appt, updated)
@@ -185,6 +187,46 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
       {:error, _} ->
         {:noreply, assign(socket, :flash_msg, "Could not update.")}
     end
+  end
+
+  # Side-effect: emails on state change. Confirm + cancel notify the
+  # customer; cancellations from a customer also alert the admins.
+  # Wraps everything in a rescue so a mailer outage can't block the
+  # transition itself — the database state update is what matters.
+  defp send_state_change_emails(socket, action, updated) do
+    tenant = socket.assigns.current_tenant
+    booker = socket.assigns.booker
+    service = socket.assigns.service
+    actor = socket.assigns.current_customer
+
+    case action do
+      :confirm ->
+        tenant
+        |> BookingEmail.confirmed(booker, updated, service)
+        |> Mailer.deliver()
+
+      :cancel ->
+        tenant
+        |> BookingEmail.cancelled(booker, updated, service)
+        |> Mailer.deliver()
+
+        # Customer-initiated cancellations also alert tenant admins
+        # so they can re-shuffle their day.
+        if actor.id == booker.id and actor.role != :admin do
+          for admin <- DrivewayOS.Accounts.tenant_admins(tenant.id) do
+            tenant
+            |> BookingEmail.customer_cancellation_alert(admin, booker, updated, service)
+            |> Mailer.deliver()
+          end
+        end
+
+      _ ->
+        :ok
+    end
+
+    :ok
+  rescue
+    _ -> :ok
   end
 
   defp fmt_when(%DateTime{} = dt), do: Calendar.strftime(dt, "%a %b %-d, %Y · %-I:%M %p UTC")

@@ -76,6 +76,111 @@ defmodule DrivewayOS.Notifications.BookingEmail do
     |> text_body(alert_body(tenant, admin, customer, appt, service))
   end
 
+  @doc """
+  Customer-side notification: appointment was confirmed by the
+  operator. Fired from AppointmentDetailLive / DashboardLive when
+  an admin clicks Confirm.
+  """
+  @spec confirmed(Tenant.t(), Customer.t(), Appointment.t(), ServiceType.t()) ::
+          Swoosh.Email.t()
+  def confirmed(
+        %Tenant{} = tenant,
+        %Customer{} = customer,
+        %Appointment{} = appt,
+        %ServiceType{} = service
+      ) do
+    new()
+    |> to({customer.name, to_string(customer.email)})
+    |> from(Branding.from_address(tenant))
+    |> subject("Your booking is confirmed — #{format_when(appt.scheduled_at)}")
+    |> text_body("""
+    Hey #{customer.name},
+
+    #{Branding.display_name(tenant)} confirmed your booking.
+
+      Service:  #{service.name}
+      When:     #{format_when(appt.scheduled_at)}
+      Vehicle:  #{appt.vehicle_description}
+      Where:    #{appt.service_address}
+
+    Reply to this email if anything's changed before then.
+
+    -- #{Branding.display_name(tenant)}
+    """)
+  end
+
+  @doc """
+  Customer-side notification: appointment was cancelled. Sent for
+  cancellations from either side (admin or customer); the
+  cancellation_reason on the appointment captures who.
+  """
+  @spec cancelled(Tenant.t(), Customer.t(), Appointment.t(), ServiceType.t()) ::
+          Swoosh.Email.t()
+  def cancelled(
+        %Tenant{} = tenant,
+        %Customer{} = customer,
+        %Appointment{} = appt,
+        %ServiceType{} = service
+      ) do
+    new()
+    |> to({customer.name, to_string(customer.email)})
+    |> from(Branding.from_address(tenant))
+    |> subject("Your booking has been cancelled")
+    |> text_body("""
+    Hey #{customer.name},
+
+    Your #{service.name} booking with #{Branding.display_name(tenant)}
+    has been cancelled.
+
+      When was: #{format_when(appt.scheduled_at)}
+      Vehicle:  #{appt.vehicle_description}
+      Where:    #{appt.service_address}
+      Reason:   #{appt.cancellation_reason || "—"}
+
+    Need to rebook? Reply to this email.
+
+    -- #{Branding.display_name(tenant)}
+    """)
+  end
+
+  @doc """
+  Operator-side notification: a customer cancelled their own
+  booking. Mirror of new_booking_alert/5 — fan out per admin.
+  """
+  @spec customer_cancellation_alert(
+          Tenant.t(),
+          Customer.t(),
+          Customer.t(),
+          Appointment.t(),
+          ServiceType.t()
+        ) ::
+          Swoosh.Email.t()
+  def customer_cancellation_alert(
+        %Tenant{} = tenant,
+        %Customer{} = admin,
+        %Customer{} = customer,
+        %Appointment{} = appt,
+        %ServiceType{} = service
+      ) do
+    new()
+    |> to({admin.name, to_string(admin.email)})
+    |> from(Branding.from_address(tenant))
+    |> subject("Cancellation: #{customer.name} — #{service.name}")
+    |> text_body("""
+    Hi #{admin.name},
+
+    #{customer.name} just cancelled their #{service.name} booking on
+    #{Branding.display_name(tenant)}.
+
+      When was: #{format_when(appt.scheduled_at)}
+      Vehicle:  #{appt.vehicle_description}
+      Where:    #{appt.service_address}
+      Reason:   #{appt.cancellation_reason || "—"}
+
+    -- #{Branding.display_name(tenant)}
+    """)
+  end
+
   defp alert_body(tenant, admin, customer, appt, service) do
     """
     Hi #{admin.name},
