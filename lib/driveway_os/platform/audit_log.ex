@@ -43,7 +43,9 @@ defmodule DrivewayOS.Platform.AuditLog do
     :tenant_branding_updated,
     :custom_domain_added,
     :custom_domain_verified,
-    :custom_domain_removed
+    :custom_domain_removed,
+    # Platform plan edits (SaaS-tier matrix changes)
+    :platform_plan_updated
   ]
 
   postgres do

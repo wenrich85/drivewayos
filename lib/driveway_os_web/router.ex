@@ -76,6 +76,7 @@ defmodule DrivewayOSWeb.Router do
     live "/platform-sign-in", Platform.SignInLive
     live "/tenants", Platform.TenantsLive
     live "/metrics", Platform.MetricsLive
+    live "/plans", Platform.PlansLive
     get "/auth/platform/store-token", Platform.SessionController, :store_token
     get "/auth/platform/sign-out", Platform.SessionController, :sign_out
 

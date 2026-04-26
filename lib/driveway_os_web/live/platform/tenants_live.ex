@@ -107,6 +107,9 @@ defmodule DrivewayOSWeb.Platform.TenantsLive do
             <a href="/metrics" class="btn btn-ghost btn-sm gap-1">
               <span class="hero-chart-bar w-4 h-4" aria-hidden="true"></span> Metrics
             </a>
+            <a href="/plans" class="btn btn-ghost btn-sm gap-1">
+              <span class="hero-rectangle-stack w-4 h-4" aria-hidden="true"></span> Plans
+            </a>
             <a href="/auth/platform/sign-out" class="btn btn-ghost btn-sm gap-1">
               <span class="hero-arrow-left-on-rectangle w-4 h-4" aria-hidden="true"></span>
               Sign out

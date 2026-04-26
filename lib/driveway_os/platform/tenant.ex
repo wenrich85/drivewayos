@@ -112,6 +112,15 @@ defmodule DrivewayOS.Platform.Tenant do
       public? true
     end
 
+    # SaaS-tier feature gating. See DrivewayOS.Plans for the
+    # per-tier feature matrix. `nil` is treated as `:pro` by
+    # `Plans.tier_for/1` so existing tenants don't lose features
+    # when this column lights up.
+    attribute :plan_tier, :atom do
+      constraints one_of: [:starter, :pro, :enterprise]
+      public? true
+    end
+
     create_timestamp :inserted_at
     update_timestamp :updated_at
   end
@@ -169,7 +178,8 @@ defmodule DrivewayOS.Platform.Tenant do
         :support_email,
         :support_phone,
         :timezone,
-        :status
+        :status,
+        :plan_tier
       ]
     end
 

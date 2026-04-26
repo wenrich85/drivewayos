@@ -25,6 +25,7 @@ defmodule DrivewayOS.Platform do
     AuditLog,
     CustomDomain,
     OauthState,
+    Plan,
     PlatformToken,
     PlatformUser,
     Tenant,
@@ -39,6 +40,7 @@ defmodule DrivewayOS.Platform do
     resource CustomDomain
     resource OauthState
     resource AuditLog
+    resource Plan
   end
 
   @doc """
