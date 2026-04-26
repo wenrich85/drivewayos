@@ -12,7 +12,6 @@ defmodule DrivewayOSWeb.AdminDashboardTest do
 
   alias DrivewayOS.Accounts.Customer
   alias DrivewayOS.Platform
-  alias DrivewayOS.Platform.Tenant
   alias DrivewayOS.Scheduling.{Appointment, ServiceType}
 
   setup do

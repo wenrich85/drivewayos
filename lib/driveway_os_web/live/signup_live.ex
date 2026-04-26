@@ -209,9 +209,20 @@ defmodule DrivewayOSWeb.SignupLive do
 
   defp tenant_root_url(tenant) do
     host = Application.get_env(:driveway_os, :platform_host, "drivewayos.com")
-    scheme = if host == "lvh.me", do: "http", else: "https"
-    port = if host == "lvh.me", do: ":4000", else: ""
-    "#{scheme}://#{tenant.slug}.#{host}#{port}/"
+    # Pull port from the endpoint http config so dev (4000) and test
+    # (4002) both work. In prod the endpoint runs on :443 and we
+    # render with no port suffix.
+    http_opts = Application.get_env(:driveway_os, DrivewayOSWeb.Endpoint)[:http] || []
+    port = Keyword.get(http_opts, :port)
+
+    {scheme, port_suffix} =
+      cond do
+        host == "lvh.me" -> {"http", ":#{port || 4000}"}
+        port in [nil, 80, 443] -> {"https", ""}
+        true -> {"https", ":#{port}"}
+      end
+
+    "#{scheme}://#{tenant.slug}.#{host}#{port_suffix}/"
   end
 
   defp ash_errors_to_map(%Ash.Error.Invalid{errors: errors}) do

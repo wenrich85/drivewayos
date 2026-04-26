@@ -40,6 +40,13 @@ defmodule DrivewayOSWeb.Endpoint do
     param_key: "request_logger",
     cookie_key: "request_logger"
 
+  # In test, allow Wallaby's ChromeDriver-driven session to share
+  # the test process's SQL sandbox via a metadata header. No-op in
+  # other environments.
+  if Application.compile_env(:driveway_os, :sandbox) do
+    plug Phoenix.Ecto.SQL.Sandbox, sandbox: Application.compile_env(:driveway_os, :sandbox)
+  end
+
   plug Plug.RequestId
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 

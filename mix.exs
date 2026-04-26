@@ -83,7 +83,12 @@ defmodule DrivewayOS.MixProject do
       {:stripity_stripe, "~> 3.2"},
 
       # Required by Spark.Formatter (Ash DSL formatter plugin)
-      {:sourceror, "~> 1.7", only: [:dev, :test]}
+      {:sourceror, "~> 1.7", only: [:dev, :test]},
+
+      # Browser-level (real Chrome via ChromeDriver) UI testing.
+      # Tagged so plain `mix test` skips them; opt-in via
+      # `mix test --include browser`.
+      {:wallaby, "~> 0.30", runtime: false, only: :test}
     ]
   end
 

@@ -20,8 +20,13 @@ if System.get_env("PHX_SERVER") do
   config :driveway_os, DrivewayOSWeb.Endpoint, server: true
 end
 
-config :driveway_os, DrivewayOSWeb.Endpoint,
-  http: [port: String.to_integer(System.get_env("PORT", "4000"))]
+# Bind the dev/prod endpoint to PORT (default 4000). The test
+# endpoint stays on 4002 (configured in config/test.exs) so Wallaby
+# doesn't fight a running dev server for the port.
+if config_env() != :test do
+  config :driveway_os, DrivewayOSWeb.Endpoint,
+    http: [port: String.to_integer(System.get_env("PORT", "4000"))]
+end
 
 if config_env() == :prod do
   database_url =

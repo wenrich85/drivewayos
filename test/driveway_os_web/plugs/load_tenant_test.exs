@@ -57,6 +57,29 @@ defmodule DrivewayOSWeb.Plugs.LoadTenantTest do
       refute conn.halted
       assert conn.assigns[:tenant_context] == :marketing
     end
+
+    test "localhost is treated as marketing (dev convenience)" do
+      conn =
+        conn(:get, "/")
+        |> with_host("localhost")
+        |> init_test_session(%{})
+        |> LoadTenant.call(@opts)
+
+      refute conn.halted
+      assert conn.assigns[:tenant_context] == :marketing
+      assert conn.assigns[:current_tenant] == nil
+    end
+
+    test "127.0.0.1 is treated as marketing (dev convenience)" do
+      conn =
+        conn(:get, "/")
+        |> with_host("127.0.0.1")
+        |> init_test_session(%{})
+        |> LoadTenant.call(@opts)
+
+      refute conn.halted
+      assert conn.assigns[:tenant_context] == :marketing
+    end
   end
 
   describe "platform admin subdomain" do

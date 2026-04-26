@@ -29,6 +29,14 @@ defmodule DrivewayOSWeb.Plugs.LoadTenant do
 
   @platform_subdomains ~w(www)
 
+  # Hosts that always resolve to the marketing context regardless of
+  # `:platform_host`. `localhost` and `127.0.0.1` are dev/test
+  # conveniences so a developer can hit the marketing page at
+  # `http://localhost:4000` without having to know about `lvh.me`.
+  # In prod these names aren't reachable from the public internet, so
+  # they're harmless to leave on.
+  @marketing_aliases ~w(localhost 127.0.0.1)
+
   def init(opts), do: opts
 
   def call(conn, _opts) do
@@ -67,6 +75,9 @@ defmodule DrivewayOSWeb.Plugs.LoadTenant do
   defp classify(host, platform_host) do
     cond do
       host == platform_host ->
+        :marketing
+
+      host in @marketing_aliases ->
         :marketing
 
       String.ends_with?(host, "." <> platform_host) ->
