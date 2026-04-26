@@ -145,7 +145,8 @@ defmodule DrivewayOS.Platform.Tenant do
         :logo_url,
         :support_email,
         :support_phone,
-        :timezone
+        :timezone,
+        :plan_tier
       ]
 
       # Default subdomain to slug if not specified — keeps the common
