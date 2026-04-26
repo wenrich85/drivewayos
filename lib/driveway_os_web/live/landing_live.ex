@@ -14,6 +14,7 @@ defmodule DrivewayOSWeb.LandingLive do
   use DrivewayOSWeb, :live_view
 
   on_mount DrivewayOSWeb.LoadTenantHook
+  on_mount DrivewayOSWeb.LoadCustomerHook
 
   @impl true
   def mount(_params, _session, socket) do
@@ -74,7 +75,7 @@ defmodule DrivewayOSWeb.LandingLive do
         <p class="text-xl text-base-content/70">
           Mobile detailing at your door. Book a wash in minutes.
         </p>
-        <div class="flex justify-center gap-3">
+        <div class="flex justify-center gap-3 flex-wrap">
           <a
             href="/book"
             class="btn"
@@ -82,8 +83,34 @@ defmodule DrivewayOSWeb.LandingLive do
           >
             Book a wash
           </a>
-          <a href="/sign-in" class="btn btn-ghost">Sign in</a>
+
+          <%!-- Signed-in customer: show their landing options. --%>
+          <a :if={@current_customer} href="/appointments" class="btn btn-ghost">
+            My appointments
+          </a>
+          <a
+            :if={@current_customer && @current_customer.role == :admin}
+            href="/admin"
+            class="btn btn-ghost"
+          >
+            Admin
+          </a>
+          <a :if={@current_customer} href="/auth/customer/sign-out" class="btn btn-ghost">
+            Sign out
+          </a>
+
+          <%!-- Signed-out: invite to register / sign in. --%>
+          <a :if={is_nil(@current_customer)} href="/sign-in" class="btn btn-ghost">
+            Sign in
+          </a>
+          <a :if={is_nil(@current_customer)} href="/register" class="btn btn-ghost">
+            Register
+          </a>
         </div>
+
+        <p :if={@current_customer} class="text-sm text-base-content/60 mt-3">
+          Signed in as <span class="font-semibold">{@current_customer.name}</span>
+        </p>
       </div>
     </main>
     """
