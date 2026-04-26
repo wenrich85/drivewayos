@@ -138,6 +138,22 @@ defmodule DrivewayOS.Scheduling.Appointment do
       allow_nil? false
       public? true
     end
+
+    # Optional FKs to saved Vehicle / Address rows. Nil for
+    # Starter-tier bookings (which only have free-text
+    # vehicle_description / service_address) or for guests who
+    # didn't save the vehicle/address. The denormalized strings on
+    # this resource always remain populated — they're the source
+    # of truth for the appointment's snapshot.
+    belongs_to :vehicle, DrivewayOS.Fleet.Vehicle do
+      allow_nil? true
+      public? true
+    end
+
+    belongs_to :address, DrivewayOS.Fleet.Address do
+      allow_nil? true
+      public? true
+    end
   end
 
   actions do
@@ -154,7 +170,9 @@ defmodule DrivewayOS.Scheduling.Appointment do
         :price_cents,
         :vehicle_description,
         :service_address,
-        :notes
+        :notes,
+        :vehicle_id,
+        :address_id
       ]
 
       validate compare(:scheduled_at, greater_than: &DateTime.utc_now/0),
