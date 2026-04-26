@@ -13,6 +13,7 @@ defmodule DrivewayOSWeb.AppointmentDetailLiveTest do
   """
   use DrivewayOSWeb.ConnCase, async: false
 
+  import Mox
   import Phoenix.LiveViewTest
 
   alias DrivewayOS.Accounts.Customer
@@ -20,6 +21,8 @@ defmodule DrivewayOSWeb.AppointmentDetailLiveTest do
   alias DrivewayOS.Scheduling.{Appointment, ServiceType}
 
   require Ash.Query
+
+  setup :verify_on_exit!
 
   setup do
     {:ok, %{tenant: tenant, admin: admin}} =
@@ -146,6 +149,67 @@ defmodule DrivewayOSWeb.AppointmentDetailLiveTest do
 
       reloaded = Ash.get!(Appointment, ctx.appt.id, tenant: ctx.tenant.id, authorize?: false)
       assert reloaded.status == :cancelled
+    end
+
+    test "admin can refund a paid appointment", ctx do
+      # Set up: tenant has Stripe Connect, appointment is paid + confirmed
+      ctx.tenant
+      |> Ash.Changeset.for_update(:update, %{
+        stripe_account_id: "acct_refund_#{System.unique_integer([:positive])}",
+        stripe_account_status: :enabled
+      })
+      |> Ash.update!(authorize?: false)
+
+      pi_id = "pi_refundable_#{System.unique_integer([:positive])}"
+
+      ctx.appt
+      |> Ash.Changeset.for_update(:mark_paid, %{stripe_payment_intent_id: pi_id})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      DrivewayOS.Billing.StripeClientMock
+      |> expect(:refund_payment_intent, fn _connect_account, ^pi_id ->
+        {:ok, %{id: "re_test_999", status: "succeeded"}}
+      end)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, _} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/appointments/#{ctx.appt.id}")
+
+      html =
+        lv
+        |> element("button[phx-click='refund']")
+        |> render_click()
+
+      # Optimistic local state — we flip immediately on Stripe success.
+      # The real charge.refunded webhook will land later and confirm.
+      reloaded = Ash.get!(Appointment, ctx.appt.id, tenant: ctx.tenant.id, authorize?: false)
+      assert reloaded.payment_status == :refunded
+      assert html =~ "Refund"
+    end
+
+    test "non-admin doesn't see a refund button", ctx do
+      ctx.tenant
+      |> Ash.Changeset.for_update(:update, %{
+        stripe_account_id: "acct_x_#{System.unique_integer([:positive])}",
+        stripe_account_status: :enabled
+      })
+      |> Ash.update!(authorize?: false)
+
+      ctx.appt
+      |> Ash.Changeset.for_update(:mark_paid, %{stripe_payment_intent_id: "pi_x"})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, _lv, html} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/appointments/#{ctx.appt.id}")
+
+      refute html =~ ~s(phx-click="refund")
     end
 
     test "admin can confirm", ctx do

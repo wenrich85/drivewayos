@@ -59,6 +59,9 @@ defmodule DrivewayOSWeb.Plugs.LoadTenant do
 
       {:tenant, slug} ->
         case Platform.get_tenant_by_slug(slug) do
+          {:ok, %{status: :suspended} = tenant} ->
+            halt_503(conn, tenant)
+
           {:ok, tenant} ->
             assign_tenant(conn, tenant)
 
@@ -120,5 +123,51 @@ defmodule DrivewayOSWeb.Plugs.LoadTenant do
     |> put_resp_content_type("text/plain")
     |> send_resp(404, "Not found")
     |> halt()
+  end
+
+  # Suspended tenants get a friendly 503 page that names the
+  # tenant + tells the customer to come back later. 503 (not 404)
+  # is the correct semantic — the resource exists, it's just
+  # temporarily unavailable.
+  defp halt_503(conn, tenant) do
+    body = """
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>#{html_escape(tenant.display_name)} is paused</title>
+        <style>
+          body { font-family: system-ui, -apple-system, sans-serif; background: #f4f4f5; color: #18181b; margin: 0; padding: 0; }
+          main { max-width: 32rem; margin: 6rem auto; padding: 2rem; background: white; border-radius: .75rem; box-shadow: 0 1px 3px rgba(0,0,0,.08); text-align: center; }
+          h1 { margin: 0 0 .5rem; font-size: 1.75rem; }
+          p { color: #52525b; line-height: 1.6; }
+          .badge { display: inline-block; background: #fef9c3; color: #854d0e; font-size: .75rem; padding: .15rem .6rem; border-radius: 999px; margin-bottom: 1rem; }
+        </style>
+      </head>
+      <body>
+        <main>
+          <span class="badge">Paused</span>
+          <h1>#{html_escape(tenant.display_name)} isn't taking bookings right now.</h1>
+          <p>This shop is temporarily on hold. If you're a customer with an existing booking, your wash is still scheduled — please check back later or reach out to the shop directly.</p>
+        </main>
+      </body>
+    </html>
+    """
+
+    conn
+    |> put_resp_content_type("text/html")
+    |> send_resp(503, body)
+    |> halt()
+  end
+
+  defp html_escape(value) do
+    value
+    |> to_string()
+    |> String.replace("&", "&amp;")
+    |> String.replace("<", "&lt;")
+    |> String.replace(">", "&gt;")
+    |> String.replace("\"", "&quot;")
+    |> String.replace("'", "&#39;")
   end
 end

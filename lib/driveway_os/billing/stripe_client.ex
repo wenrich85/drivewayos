@@ -44,6 +44,20 @@ defmodule DrivewayOS.Billing.StripeClient do
             ) ::
               {:ok, map()} | {:error, term()}
 
+  @doc """
+  Refund a charge by PaymentIntent id. Uses the tenant's
+  connect_account so the refund actually comes from their Stripe
+  balance, not the platform's.
+
+  Returns `{:ok, %{id: "re_...", status: "succeeded" | ...}}` on
+  success.
+  """
+  @callback refund_payment_intent(
+              connect_account :: String.t(),
+              payment_intent_id :: String.t()
+            ) ::
+              {:ok, %{id: String.t(), status: String.t()}} | {:error, term()}
+
   # --- Dispatcher ---
 
   @doc """
@@ -61,4 +75,7 @@ defmodule DrivewayOS.Billing.StripeClient do
 
   def construct_event(payload, signature, secret),
     do: impl().construct_event(payload, signature, secret)
+
+  def refund_payment_intent(connect_account, payment_intent_id),
+    do: impl().refund_payment_intent(connect_account, payment_intent_id)
 end

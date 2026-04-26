@@ -59,6 +59,8 @@ defmodule DrivewayOSWeb.Router do
 
     get "/auth/customer/store-token", Auth.SessionController, :store_token
     get "/auth/customer/sign-out", Auth.SessionController, :sign_out
+    get "/auth/customer/verify-email", EmailVerificationController, :verify
+    post "/auth/customer/resend-verification", EmailVerificationController, :resend
 
     get "/onboarding/stripe/start", StripeOnboardingController, :start
     get "/onboarding/stripe/callback", StripeOnboardingController, :callback

@@ -144,6 +144,23 @@ defmodule DrivewayOSWeb.Plugs.LoadTenantTest do
       assert conn.status == 404
     end
 
+    test "503s on a suspended tenant", %{tenant: tenant} do
+      tenant
+      |> Ash.Changeset.for_update(:suspend, %{})
+      |> Ash.update!(authorize?: false)
+
+      conn =
+        conn(:get, "/")
+        |> with_host("#{tenant.slug}.lvh.me")
+        |> init_test_session(%{})
+        |> LoadTenant.call(@opts)
+
+      assert conn.halted
+      assert conn.status == 503
+      assert conn.resp_body =~ tenant.display_name or conn.resp_body =~ "paused" or
+               conn.resp_body =~ "suspended"
+    end
+
     test "404s on an archived tenant", %{tenant: tenant} do
       tenant
       |> Ash.Changeset.for_update(:archive, %{})

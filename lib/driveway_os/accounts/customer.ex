@@ -239,6 +239,14 @@ defmodule DrivewayOS.Accounts.Customer do
   actions do
     defaults [:read, update: :*]
 
+    update :verify_email do
+      # Inherits the resource's anonymous validators, which aren't
+      # atomic-aware. The action runs over a single row in a tiny
+      # transaction so non-atomic is fine.
+      require_atomic? false
+      change set_attribute(:email_verified_at, &DateTime.utc_now/0)
+    end
+
     create :register_with_google do
       argument :user_info, :map, allow_nil?: false
       argument :oauth_tokens, :map, allow_nil?: false

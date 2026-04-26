@@ -17,6 +17,7 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
   on_mount DrivewayOSWeb.LoadCustomerHook
 
   alias DrivewayOS.Accounts.Customer
+  alias DrivewayOS.Billing.StripeClient
   alias DrivewayOS.Scheduling.{Appointment, ServiceType}
 
   @impl true
@@ -77,6 +78,52 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
 
   def handle_event("complete", _, socket) do
     transition(socket, :complete, %{})
+  end
+
+  def handle_event("refund", _, socket) do
+    if socket.assigns.current_customer.role == :admin do
+      do_refund(socket)
+    else
+      {:noreply, socket}
+    end
+  end
+
+  defp do_refund(socket) do
+    tenant = socket.assigns.current_tenant
+    appt = socket.assigns.appt
+
+    cond do
+      is_nil(tenant.stripe_account_id) ->
+        {:noreply, assign(socket, :flash_msg, "Connect Stripe before refunding.")}
+
+      is_nil(appt.stripe_payment_intent_id) ->
+        {:noreply, assign(socket, :flash_msg, "No payment to refund.")}
+
+      appt.payment_status != :paid ->
+        {:noreply, assign(socket, :flash_msg, "Appointment isn't in a refundable state.")}
+
+      true ->
+        case StripeClient.refund_payment_intent(
+               tenant.stripe_account_id,
+               appt.stripe_payment_intent_id
+             ) do
+          {:ok, _} ->
+            # Flip locally — Stripe will also send a charge.refunded
+            # webhook; the resource action is idempotent.
+            updated =
+              appt
+              |> Ash.Changeset.for_update(:mark_refunded, %{})
+              |> Ash.update!(authorize?: false, tenant: tenant.id)
+
+            {:noreply,
+             socket
+             |> assign(:appt, updated)
+             |> assign(:flash_msg, "Refund issued. Stripe will confirm shortly.")}
+
+          {:error, _} ->
+            {:noreply, assign(socket, :flash_msg, "Refund failed. Try again.")}
+        end
+    end
   end
 
   defp cancel_reason(socket) do
@@ -218,6 +265,19 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
                 class="btn btn-success btn-sm"
               >
                 Mark complete
+              </button>
+
+              <%!-- Refund: admin only, only on a paid appointment with a known PI --%>
+              <button
+                :if={
+                  admin?(@current_customer) and @appt.payment_status == :paid and
+                    not is_nil(@appt.stripe_payment_intent_id)
+                }
+                phx-click="refund"
+                data-confirm="Refund this charge through Stripe?"
+                class="btn btn-warning btn-sm"
+              >
+                Refund
               </button>
 
               <%!-- Cancel: anyone in scope, while it's still cancellable --%>

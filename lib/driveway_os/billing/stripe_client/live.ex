@@ -61,4 +61,17 @@ defmodule DrivewayOS.Billing.StripeClient.Live do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  @impl true
+  def refund_payment_intent(connect_account, payment_intent_id)
+      when is_binary(connect_account) and is_binary(payment_intent_id) do
+    case Stripe.Refund.create(
+           %{payment_intent: payment_intent_id},
+           connect_account: connect_account
+         ) do
+      {:ok, %{id: id, status: status}} -> {:ok, %{id: id, status: status}}
+      {:error, %Stripe.Error{} = e} -> {:error, e}
+      other -> {:error, other}
+    end
+  end
 end

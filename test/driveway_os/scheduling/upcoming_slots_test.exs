@@ -52,15 +52,19 @@ defmodule DrivewayOS.Scheduling.UpcomingSlotsTest do
       assert Scheduling.upcoming_slots(tenant.id, 14) == []
     end
 
-    test "one weekly template → ~2 slots in a 14-day window", %{tenant: tenant} do
-      # Pick today's day_of_week so we know we'll get a hit.
-      today_dow = Date.day_of_week(Date.utc_today(), :sunday)
-      mod = Integer.mod(today_dow - 1, 7)
+    # Pick a day_of_week guaranteed to be in the future regardless
+    # of when the test runs — tomorrow's weekday — so the
+    # "scheduled_at must be in the future" filter never trims our
+    # expected first slot.
+    defp tomorrow_dow do
+      Integer.mod(Date.day_of_week(Date.utc_today() |> Date.add(1), :sunday) - 1, 7)
+    end
 
+    test "one weekly template → ~2 slots in a 14-day window", %{tenant: tenant} do
       _bt =
         create_template!(tenant, %{
           name: "Daily morning",
-          day_of_week: mod,
+          day_of_week: tomorrow_dow(),
           start_time: ~T[09:00:00]
         })
 
@@ -77,19 +81,14 @@ defmodule DrivewayOS.Scheduling.UpcomingSlotsTest do
 
     test "respects capacity — slot disappears when booked-to-capacity",
          %{tenant: tenant, customer: customer, service: service} do
-      today_dow = Date.day_of_week(Date.utc_today(), :sunday)
-      mod = Integer.mod(today_dow - 1, 7)
-
       _bt =
         create_template!(tenant, %{
           name: "Daily morning",
-          day_of_week: mod,
+          day_of_week: tomorrow_dow(),
           start_time: ~T[09:00:00],
           capacity: 1
         })
 
-      # Book the next-week instance to capacity (skip "today" since
-      # that might already be in the past).
       [_, next_slot | _] = Scheduling.upcoming_slots(tenant.id, 14)
 
       {:ok, _} =
