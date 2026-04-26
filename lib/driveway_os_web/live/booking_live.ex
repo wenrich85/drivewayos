@@ -38,7 +38,8 @@ defmodule DrivewayOSWeb.BookingLive do
   alias DrivewayOS.Mailer
   alias DrivewayOS.Notifications.BookingEmail
   alias DrivewayOS.Plans
-  alias DrivewayOS.Scheduling.{Appointment, ServiceType}
+  alias DrivewayOS.Scheduling.{Appointment, Photo, ServiceType}
+  alias DrivewayOS.Uploads
 
   require Ash.Query
 
@@ -73,19 +74,32 @@ defmodule DrivewayOSWeb.BookingLive do
             do: load_saved_addresses(customer.id, tenant.id),
             else: []
 
-        {:ok,
-         socket
-         |> assign(:page_title, "Book a wash")
-         |> assign(:services, services)
-         |> assign(:slots, slots)
-         |> assign(:saved_vehicles, saved_vehicles)
-         |> assign(:saved_addresses, saved_addresses)
-         |> assign(:wizard_step, :service)
-         |> assign(:wizard_data, blank_data())
-         |> assign(:vehicle_mode, initial_mode(saved_vehicles))
-         |> assign(:address_mode, initial_mode(saved_addresses))
-         |> assign(:account_mode, :guest)
-         |> assign(:errors, %{})}
+        socket =
+          socket
+          |> assign(:page_title, "Book a wash")
+          |> assign(:services, services)
+          |> assign(:slots, slots)
+          |> assign(:saved_vehicles, saved_vehicles)
+          |> assign(:saved_addresses, saved_addresses)
+          |> assign(:wizard_step, :service)
+          |> assign(:wizard_data, blank_data())
+          |> assign(:vehicle_mode, initial_mode(saved_vehicles))
+          |> assign(:address_mode, initial_mode(saved_addresses))
+          |> assign(:account_mode, :guest)
+          |> assign(:errors, %{})
+
+        socket =
+          if Plans.tenant_can?(tenant, :booking_photos) do
+            allow_upload(socket, :photos,
+              accept: ~w(.jpg .jpeg .png .heic .webp),
+              max_entries: 5,
+              max_file_size: 10_000_000
+            )
+          else
+            socket
+          end
+
+        {:ok, socket}
     end
   end
 
@@ -287,7 +301,7 @@ defmodule DrivewayOSWeb.BookingLive do
         |> put_data(:address_id, a.id)
         |> put_data(:service_address, Address.display_label(a))
         |> assign(:errors, %{})
-        |> advance_to(:schedule)
+        |> advance_to(after_address_step(socket))
         |> noreply()
     end
   end
@@ -316,7 +330,7 @@ defmodule DrivewayOSWeb.BookingLive do
         |> put_data(:address_id, a.id)
         |> put_data(:service_address, Address.display_label(a))
         |> assign(:errors, %{})
-        |> advance_to(:schedule)
+        |> advance_to(after_address_step(socket))
         |> noreply()
 
       {:error, %Ash.Error.Invalid{} = e} ->
@@ -341,9 +355,26 @@ defmodule DrivewayOSWeb.BookingLive do
         |> put_data(:address_id, nil)
         |> put_data(:service_address, trimmed)
         |> assign(:errors, %{})
-        |> advance_to(:schedule)
+        |> advance_to(after_address_step(socket))
         |> noreply()
     end
+  end
+
+  # --- Step 3.5: photos (Pro+ only) ---
+
+  def handle_event("validate_photos", _params, socket) do
+    {:noreply, socket}
+  end
+
+  def handle_event("cancel_photo_upload", %{"ref" => ref}, socket) do
+    {:noreply, cancel_upload(socket, :photos, ref)}
+  end
+
+  def handle_event("submit_photos", _params, socket) do
+    # Photos stay in the upload struct until the schedule step
+    # creates the appointment; only then do we commit them to disk
+    # and write Photo rows. "Skip" just advances.
+    {:noreply, advance_to(socket, :schedule)}
   end
 
   # --- Step 4: schedule + final submit ---
@@ -359,6 +390,7 @@ defmodule DrivewayOSWeb.BookingLive do
          merged <- merge_schedule_step(data, params),
          {:ok, appt} <-
            create_appointment(tenant, customer, service, scheduled_at, merged) do
+      socket = consume_booking_photos(socket, tenant, customer, appt)
       handle_post_booking(socket, tenant, customer, service, appt)
     else
       {:error, :missing_service} ->
@@ -393,6 +425,12 @@ defmodule DrivewayOSWeb.BookingLive do
     if socket.assigns[:current_customer], do: :vehicle, else: :account
   end
 
+  defp after_address_step(socket) do
+    if Plans.tenant_can?(socket.assigns.current_tenant, :booking_photos),
+      do: :photos,
+      else: :schedule
+  end
+
   defp advance_to(socket, step), do: assign(socket, :wizard_step, step)
 
   defp put_data(socket, key, value) do
@@ -422,7 +460,14 @@ defmodule DrivewayOSWeb.BookingLive do
 
   defp prev_step(:vehicle, _), do: :service
   defp prev_step(:address, _), do: :vehicle
-  defp prev_step(:schedule, _), do: :address
+  defp prev_step(:photos, _), do: :address
+
+  defp prev_step(:schedule, socket) do
+    if Plans.tenant_can?(socket.assigns.current_tenant, :booking_photos),
+      do: :photos,
+      else: :address
+  end
+
   defp prev_step(_, _), do: nil
 
   defp initial_mode([]), do: :new
@@ -615,15 +660,64 @@ defmodule DrivewayOSWeb.BookingLive do
 
   defp fmt_price(cents), do: "$" <> :erlang.float_to_binary(cents / 100, decimals: 2)
 
+  defp error_to_string(:too_large), do: "That file is too big — keep it under 10 MB."
+  defp error_to_string(:too_many_files), do: "You can attach at most 5 photos."
+  defp error_to_string(:not_accepted), do: "We can only accept image files (JPG, PNG, HEIC, WebP)."
+  defp error_to_string(other), do: "Upload failed: #{inspect(other)}"
+
   # Steps the user actually sees in the progress bar. Anonymous
-  # users with guest_checkout get the :account step inserted between
-  # :service and :vehicle; everyone else skips straight to :vehicle.
+  # users with guest_checkout get :account inserted between :service
+  # and :vehicle. Pro+ tenants get :photos between :address and
+  # :schedule.
   defp visible_steps(assigns) do
-    if assigns[:current_customer] do
-      [:service, :vehicle, :address, :schedule]
+    base =
+      if assigns[:current_customer],
+        do: [:service, :vehicle, :address, :schedule],
+        else: [:service, :account, :vehicle, :address, :schedule]
+
+    if Plans.tenant_can?(assigns[:current_tenant], :booking_photos) do
+      List.insert_at(base, -2, :photos)
     else
-      [:service, :account, :vehicle, :address, :schedule]
+      base
     end
+  end
+
+  # Consume any uploaded photo entries — copy them into permanent
+  # storage and write Photo rows tying them to the appointment.
+  # Silent best-effort: a failed upload doesn't block the booking
+  # since the customer's already past the point of no return.
+  defp consume_booking_photos(socket, tenant, customer, appt) do
+    if Plans.tenant_can?(tenant, :booking_photos) and
+         Map.has_key?(socket.assigns[:uploads] || %{}, :photos) do
+      consume_uploaded_entries(socket, :photos, fn %{path: temp_path}, entry ->
+        with {:ok, meta} <- Uploads.store_entry(tenant.id, appt.id, entry, temp_path),
+             {:ok, _photo} <-
+               Photo
+               |> Ash.Changeset.for_create(
+                 :attach,
+                 %{
+                   customer_id: customer.id,
+                   appointment_id: appt.id,
+                   kind: :pre_booking,
+                   storage_path: meta.path,
+                   content_type: meta.content_type,
+                   byte_size: meta.byte_size
+                 },
+                 tenant: tenant.id
+               )
+               |> Ash.create(authorize?: false) do
+          {:ok, meta.path}
+        else
+          _ -> {:postpone, :error}
+        end
+      end)
+
+      socket
+    else
+      socket
+    end
+  rescue
+    _ -> socket
   end
 
   defp service_for(socket) do
@@ -878,6 +972,72 @@ defmodule DrivewayOSWeb.BookingLive do
           <% true -> %>
             {render_address_freetext(assigns)}
         <% end %>
+      </div>
+    </section>
+    """
+  end
+
+  defp render_step(%{wizard_step: :photos} = assigns) do
+    ~H"""
+    <section class="card bg-base-100 shadow-sm border border-base-300">
+      <div class="card-body p-6">
+        <h2 class="card-title text-base">Add photos (optional)</h2>
+        <p class="text-sm text-base-content/70 mb-3">
+          Up to 5 photos so we can size the job before we arrive.
+        </p>
+
+        <form
+          id="booking-photos-form"
+          phx-submit="submit_photos"
+          phx-change="validate_photos"
+          class="space-y-4"
+        >
+          <div
+            class="border border-dashed border-base-300 rounded-lg p-4 text-center"
+            phx-drop-target={@uploads.photos.ref}
+          >
+            <.live_file_input upload={@uploads.photos} class="file-input file-input-bordered w-full" />
+            <p class="text-xs text-base-content/60 mt-2">
+              JPG, PNG, HEIC, or WebP — up to 10 MB each.
+            </p>
+          </div>
+
+          <div :if={@uploads.photos.entries != []} class="space-y-2">
+            <div
+              :for={entry <- @uploads.photos.entries}
+              class="flex items-center justify-between text-sm border border-base-300 rounded-md px-3 py-2"
+            >
+              <span class="truncate">{entry.client_name}</span>
+              <div class="flex items-center gap-2">
+                <span class="text-base-content/60">{entry.progress}%</span>
+                <button
+                  type="button"
+                  phx-click="cancel_photo_upload"
+                  phx-value-ref={entry.ref}
+                  class="btn btn-ghost btn-xs"
+                  aria-label="Remove photo"
+                >
+                  <span class="hero-x-mark w-4 h-4" aria-hidden="true"></span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div
+            :for={err <- upload_errors(@uploads.photos)}
+            role="alert"
+            class="alert alert-error text-sm"
+          >
+            {error_to_string(err)}
+          </div>
+
+          <div class="flex justify-between gap-2 pt-2">
+            <button type="button" phx-click="back" class="btn btn-ghost">Back</button>
+            <button type="submit" class="btn btn-primary">
+              {if @uploads.photos.entries == [], do: "Skip photos", else: "Continue"}
+            </button>
+          </div>
+        </form>
       </div>
     </section>
     """

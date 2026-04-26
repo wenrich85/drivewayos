@@ -361,6 +361,8 @@ defmodule DrivewayOSWeb.BookingLiveTest do
       |> form("#step-address-pick-form", %{"booking" => %{"address_id" => ctx.address.id}})
       |> render_submit()
 
+      lv |> form("#booking-photos-form") |> render_submit()
+
       future = DateTime.utc_now() |> DateTime.add(2 * 86_400, :second)
 
       lv
@@ -582,5 +584,127 @@ defmodule DrivewayOSWeb.BookingLiveTest do
     |> render_submit()
 
     lv
+  end
+
+  describe "photo step (Pro+ tenant with :booking_photos)" do
+    setup ctx do
+      ctx.tenant
+      |> Ash.Changeset.for_update(:update, %{plan_tier: :pro})
+      |> Ash.update!(authorize?: false)
+
+      DrivewayOS.Plans.flush_cache()
+      Map.put(ctx, :tenant, Ash.reload!(ctx.tenant, authorize?: false))
+    end
+
+    test "progress bar lists :photos for Pro+ tenants", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/book")
+
+      assert html =~ "photos"
+    end
+
+    test "address step advances to :photos (not :schedule) for Pro+", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/book")
+
+      service_id = extract_service_id(html, "basic")
+
+      lv
+      |> form("#step-service-form", %{"booking" => %{"service_type_id" => service_id}})
+      |> render_submit()
+
+      lv |> render_click("set_vehicle_mode", %{"mode" => "new"})
+
+      lv
+      |> form("#step-vehicle-new-form", %{
+        "vehicle" => %{
+          "year" => "2020",
+          "make" => "Ford",
+          "model" => "F-150",
+          "color" => "White"
+        }
+      })
+      |> render_submit()
+
+      lv |> render_click("set_address_mode", %{"mode" => "new"})
+
+      html =
+        lv
+        |> form("#step-address-new-form", %{
+          "address" => %{
+            "street_line1" => "1 Main",
+            "city" => "SA",
+            "state" => "TX",
+            "zip" => "78261"
+          }
+        })
+        |> render_submit()
+
+      assert html =~ "Add photos"
+      assert html =~ "booking-photos-form"
+    end
+
+    test "Skip photos advances to schedule", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/book")
+
+      service_id = extract_service_id(html, "basic")
+
+      lv
+      |> form("#step-service-form", %{"booking" => %{"service_type_id" => service_id}})
+      |> render_submit()
+
+      lv |> render_click("set_vehicle_mode", %{"mode" => "new"})
+
+      lv
+      |> form("#step-vehicle-new-form", %{
+        "vehicle" => %{
+          "year" => "2020",
+          "make" => "Ford",
+          "model" => "F-150",
+          "color" => "White"
+        }
+      })
+      |> render_submit()
+
+      lv |> render_click("set_address_mode", %{"mode" => "new"})
+
+      lv
+      |> form("#step-address-new-form", %{
+        "address" => %{
+          "street_line1" => "1 Main",
+          "city" => "SA",
+          "state" => "TX",
+          "zip" => "78261"
+        }
+      })
+      |> render_submit()
+
+      html = lv |> form("#booking-photos-form") |> render_submit()
+
+      assert html =~ ~s(name="booking[scheduled_at]") or
+               html =~ ~s(name="booking[slot_id]")
+    end
+  end
+
+  describe "photo step (Starter tenant — feature off)" do
+    test "progress bar does NOT list :photos for Starter", %{
+      conn: conn,
+      tenant: tenant,
+      customer: customer
+    } do
+      conn = sign_in(conn, customer)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{tenant.slug}.lvh.me") |> live(~p"/book")
+
+      refute html =~ "4. photos"
+    end
   end
 end

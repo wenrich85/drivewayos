@@ -14,6 +14,7 @@ defmodule DrivewayOS.Scheduling do
     resource DrivewayOS.Scheduling.ServiceType
     resource DrivewayOS.Scheduling.Appointment
     resource DrivewayOS.Scheduling.BlockTemplate
+    resource DrivewayOS.Scheduling.Photo
   end
 
   @default_service_types [
