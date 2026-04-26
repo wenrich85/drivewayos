@@ -28,6 +28,19 @@ if config_env() != :test do
     http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 end
 
+# OAuth provider redirect base — the public-facing URL prefix
+# providers send users back to after they consent. Read in any env
+# (dev/prod alike) so the OAuth buttons on the sign-in page render
+# the moment credentials are configured. Tests don't need it.
+# See docs/OAUTH_SETUP.md.
+if config_env() != :test do
+  case System.get_env("OAUTH_REDIRECT_BASE") do
+    nil -> :ok
+    "" -> :ok
+    base -> config :driveway_os, :oauth_redirect_base, base
+  end
+end
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||

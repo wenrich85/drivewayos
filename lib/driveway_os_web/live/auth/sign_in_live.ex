@@ -20,7 +20,8 @@ defmodule DrivewayOSWeb.Auth.SignInLive do
        socket
        |> assign(:page_title, "Sign in")
        |> assign(:form_email, "")
-       |> assign(:error, nil)}
+       |> assign(:error, nil)
+       |> assign(:oauth_providers, DrivewayOS.Accounts.configured_oauth_providers())}
     else
       {:ok, push_navigate(socket, to: ~p"/")}
     end
@@ -113,19 +114,39 @@ defmodule DrivewayOSWeb.Auth.SignInLive do
               Email me a sign-in link
             </a>
 
-            <div class="divider text-xs my-2">or continue with</div>
+            <%!-- OAuth providers — only the ones with valid env-var
+                 credentials render. Empty list → no third "or
+                 continue with" divider, no dead buttons. --%>
+            <%= if @oauth_providers != [] do %>
+              <div class="divider text-xs my-2">or continue with</div>
 
-            <div class="grid grid-cols-3 gap-2">
-              <a href="/auth/customer/google" class="btn btn-outline btn-sm" aria-label="Sign in with Google">
-                <span class="hero-globe-alt w-4 h-4" aria-hidden="true"></span> Google
-              </a>
-              <a href="/auth/customer/facebook" class="btn btn-outline btn-sm" aria-label="Sign in with Facebook">
-                Facebook
-              </a>
-              <a href="/auth/customer/apple" class="btn btn-outline btn-sm" aria-label="Sign in with Apple">
-                Apple
-              </a>
-            </div>
+              <div class={"grid gap-2 grid-cols-#{length(@oauth_providers)}"}>
+                <a
+                  :if={:google in @oauth_providers}
+                  href="/auth/customer/google"
+                  class="btn btn-outline btn-sm gap-1"
+                  aria-label="Sign in with Google"
+                >
+                  <span class="hero-globe-alt w-4 h-4" aria-hidden="true"></span> Google
+                </a>
+                <a
+                  :if={:facebook in @oauth_providers}
+                  href="/auth/customer/facebook"
+                  class="btn btn-outline btn-sm"
+                  aria-label="Sign in with Facebook"
+                >
+                  Facebook
+                </a>
+                <a
+                  :if={:apple in @oauth_providers}
+                  href="/auth/customer/apple"
+                  class="btn btn-outline btn-sm"
+                  aria-label="Sign in with Apple"
+                >
+                  Apple
+                </a>
+              </div>
+            <% end %>
           </div>
         </section>
 

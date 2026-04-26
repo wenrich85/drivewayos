@@ -17,4 +17,48 @@ defmodule DrivewayOS.Accounts do
     resource DrivewayOS.Accounts.Customer
     resource DrivewayOS.Accounts.Token
   end
+
+  @doc """
+  Returns the list of OAuth providers (`:google`, `:facebook`,
+  `:apple`) that are fully configured at runtime — both the client
+  credentials AND the redirect-base env var resolve to non-nil
+  values.
+
+  Used by `Auth.SignInLive` to render only the buttons that will
+  actually work, instead of dead links to `/auth/customer/google`
+  etc. when env vars aren't set.
+  """
+  @spec configured_oauth_providers() :: [atom()]
+  def configured_oauth_providers do
+    [:google, :facebook, :apple]
+    |> Enum.filter(&provider_configured?/1)
+  end
+
+  defp provider_configured?(:google),
+    do: env_set?("GOOGLE_CLIENT_ID") and env_set?("GOOGLE_CLIENT_SECRET") and oauth_base_set?()
+
+  defp provider_configured?(:facebook),
+    do:
+      env_set?("FACEBOOK_CLIENT_ID") and env_set?("FACEBOOK_CLIENT_SECRET") and oauth_base_set?()
+
+  defp provider_configured?(:apple),
+    do:
+      env_set?("APPLE_CLIENT_ID") and env_set?("APPLE_TEAM_ID") and
+        env_set?("APPLE_PRIVATE_KEY_ID") and env_set?("APPLE_PRIVATE_KEY_PATH") and
+        oauth_base_set?()
+
+  defp env_set?(name) do
+    case System.get_env(name) do
+      nil -> false
+      "" -> false
+      _ -> true
+    end
+  end
+
+  defp oauth_base_set? do
+    case Application.fetch_env(:driveway_os, :oauth_redirect_base) do
+      {:ok, base} when is_binary(base) and base != "" -> true
+      _ -> false
+    end
+  end
 end

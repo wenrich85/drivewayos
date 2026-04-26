@@ -1,5 +1,6 @@
 defmodule DrivewayOSWeb.Router do
   use DrivewayOSWeb, :router
+  use AshAuthentication.Phoenix.Router
 
   pipeline :browser do
     plug :accepts, ["html"]
@@ -61,6 +62,12 @@ defmodule DrivewayOSWeb.Router do
     get "/auth/customer/sign-out", Auth.SessionController, :sign_out
     get "/auth/customer/verify-email", EmailVerificationController, :verify
     post "/auth/customer/resend-verification", EmailVerificationController, :resend
+
+    # OAuth-strategy routes for Customer (Google/Facebook/Apple).
+    # AshAuthentication generates /auth/customer/{provider} +
+    # /auth/customer/{provider}/callback under this prefix; the
+    # AuthController handles the success + failure callbacks.
+    auth_routes Auth.AuthController, DrivewayOS.Accounts.Customer, path: "/auth/customer"
 
     get "/onboarding/stripe/start", StripeOnboardingController, :start
     get "/onboarding/stripe/callback", StripeOnboardingController, :callback
