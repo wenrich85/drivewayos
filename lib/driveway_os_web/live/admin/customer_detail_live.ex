@@ -14,7 +14,7 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
   on_mount DrivewayOSWeb.LoadCustomerHook
 
   alias DrivewayOS.Accounts.Customer
-  alias DrivewayOS.Scheduling.{Appointment, ServiceType}
+  alias DrivewayOS.Scheduling.{Appointment, ServiceType, Subscription}
 
   require Ash.Query
 
@@ -49,12 +49,22 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
         {:ok, services} =
           ServiceType |> Ash.Query.set_tenant(tenant_id) |> Ash.read(authorize?: false)
 
+        {:ok, subscriptions} =
+          Subscription
+          |> Ash.Query.for_read(:for_customer, %{customer_id: customer.id})
+          |> Ash.Query.set_tenant(tenant_id)
+          |> Ash.read(authorize?: false)
+
         {:ok,
          socket
          |> assign(:page_title, customer.name)
          |> assign(:customer, customer)
          |> assign(:appointments, appointments)
+         |> assign(:subscriptions, subscriptions)
          |> assign(:service_map, Map.new(services, &{&1.id, &1}))
+         |> assign(:services, services)
+         |> assign(:subscribe_form?, false)
+         |> assign(:subscribe_error, nil)
          |> assign(:flash_msg, nil)
          |> assign(:notes_error, nil)}
 
@@ -82,7 +92,101 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
     end
   end
 
+  # --- Subscriptions ---
+
+  def handle_event("show_subscribe_form", _, socket) do
+    {:noreply, socket |> assign(:subscribe_form?, true) |> assign(:subscribe_error, nil)}
+  end
+
+  def handle_event("hide_subscribe_form", _, socket) do
+    {:noreply, socket |> assign(:subscribe_form?, false) |> assign(:subscribe_error, nil)}
+  end
+
+  def handle_event("create_subscription", %{"sub" => params}, socket) do
+    tenant_id = socket.assigns.current_tenant.id
+    customer = socket.assigns.customer
+
+    starts_at =
+      case DateTime.from_iso8601(params["starts_at"] <> ":00Z") do
+        {:ok, dt, _} -> dt
+        _ -> nil
+      end
+
+    attrs = %{
+      customer_id: customer.id,
+      service_type_id: params["service_type_id"],
+      frequency: String.to_existing_atom(params["frequency"] || "biweekly"),
+      starts_at: starts_at,
+      service_address: params["service_address"] |> to_string() |> String.trim(),
+      vehicle_description: params["vehicle_description"] |> to_string() |> String.trim()
+    }
+
+    case Subscription
+         |> Ash.Changeset.for_create(:subscribe, attrs, tenant: tenant_id)
+         |> Ash.create(authorize?: false) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> assign(:subscribe_form?, false)
+         |> assign(:subscribe_error, nil)
+         |> reload_subscriptions()}
+
+      {:error, %Ash.Error.Invalid{errors: errors}} ->
+        msg = errors |> Enum.map(&Map.get(&1, :message, "is invalid")) |> Enum.join("; ")
+        {:noreply, assign(socket, :subscribe_error, msg)}
+
+      _ ->
+        {:noreply, assign(socket, :subscribe_error, "Could not create subscription.")}
+    end
+  end
+
+  def handle_event("pause_subscription", %{"id" => id}, socket),
+    do: transition_subscription(socket, id, :pause)
+
+  def handle_event("resume_subscription", %{"id" => id}, socket),
+    do: transition_subscription(socket, id, :resume)
+
+  def handle_event("cancel_subscription", %{"id" => id}, socket),
+    do: transition_subscription(socket, id, :cancel)
+
+  defp transition_subscription(socket, id, action) do
+    tenant_id = socket.assigns.current_tenant.id
+
+    with {:ok, sub} <- Ash.get(Subscription, id, tenant: tenant_id, authorize?: false),
+         true <- sub.customer_id == socket.assigns.customer.id,
+         {:ok, _} <-
+           sub
+           |> Ash.Changeset.for_update(action, %{})
+           |> Ash.update(authorize?: false, tenant: tenant_id) do
+      {:noreply, reload_subscriptions(socket)}
+    else
+      _ -> {:noreply, socket}
+    end
+  end
+
+  defp reload_subscriptions(socket) do
+    {:ok, subscriptions} =
+      Subscription
+      |> Ash.Query.for_read(:for_customer, %{customer_id: socket.assigns.customer.id})
+      |> Ash.Query.set_tenant(socket.assigns.current_tenant.id)
+      |> Ash.read(authorize?: false)
+
+    assign(socket, :subscriptions, subscriptions)
+  end
+
   defp fmt_when(%DateTime{} = dt), do: Calendar.strftime(dt, "%a %b %-d, %Y · %-I:%M %p")
+
+  defp fmt_date(%DateTime{} = dt), do: Calendar.strftime(dt, "%a %b %-d")
+
+  defp sub_badge(:active), do: "badge-success"
+  defp sub_badge(:paused), do: "badge-warning"
+  defp sub_badge(:cancelled), do: "badge-ghost"
+  defp sub_badge(_), do: "badge-ghost"
+
+  defp frequency_label(:weekly), do: "weekly"
+  defp frequency_label(:biweekly), do: "biweekly"
+  defp frequency_label(:monthly), do: "monthly"
+  defp frequency_label(other), do: to_string(other)
 
   defp fmt_price(cents), do: "$" <> :erlang.float_to_binary(cents / 100, decimals: 2)
 
@@ -148,6 +252,168 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
               <button type="submit" class="btn btn-primary btn-sm gap-1">
                 <span class="hero-check w-4 h-4" aria-hidden="true"></span> Save notes
               </button>
+            </form>
+          </div>
+        </section>
+
+        <section class="card bg-base-100 shadow-sm border border-base-300">
+          <div class="card-body p-6">
+            <div class="flex items-center justify-between flex-wrap gap-2">
+              <h2 class="card-title text-lg">Recurring bookings</h2>
+              <button
+                :if={not @subscribe_form? and @services != []}
+                phx-click="show_subscribe_form"
+                class="btn btn-ghost btn-sm gap-1"
+              >
+                <span class="hero-plus w-4 h-4" aria-hidden="true"></span> Add subscription
+              </button>
+            </div>
+
+            <div :if={@subscriptions == [] and not @subscribe_form?} class="text-sm text-base-content/60 mt-2">
+              No recurring bookings.
+            </div>
+
+            <ul :if={@subscriptions != []} class="divide-y divide-base-200 mt-2">
+              <li :for={sub <- @subscriptions} class="py-3">
+                <div class="flex items-start justify-between gap-3 flex-wrap">
+                  <div class="min-w-0">
+                    <div class="font-medium flex items-center gap-2 flex-wrap">
+                      <span>{service_name(@service_map, sub.service_type_id)}</span>
+                      <span class={"badge badge-sm " <> sub_badge(sub.status)}>{sub.status}</span>
+                      <span class="text-xs text-base-content/60">
+                        {frequency_label(sub.frequency)}
+                      </span>
+                    </div>
+                    <div class="text-sm text-base-content/70 mt-1">
+                      Next: {fmt_date(sub.next_run_at)}
+                      <span class="text-base-content/40 mx-1">·</span>
+                      {sub.vehicle_description}
+                    </div>
+                    <div class="text-xs text-base-content/60 truncate mt-0.5">
+                      {sub.service_address}
+                    </div>
+                  </div>
+                  <div class="flex gap-2">
+                    <button
+                      :if={sub.status == :active}
+                      phx-click="pause_subscription"
+                      phx-value-id={sub.id}
+                      class="btn btn-ghost btn-xs gap-1"
+                    >
+                      <span class="hero-pause w-3 h-3" aria-hidden="true"></span> Pause
+                    </button>
+                    <button
+                      :if={sub.status == :paused}
+                      phx-click="resume_subscription"
+                      phx-value-id={sub.id}
+                      class="btn btn-success btn-xs gap-1"
+                    >
+                      <span class="hero-play w-3 h-3" aria-hidden="true"></span> Resume
+                    </button>
+                    <button
+                      :if={sub.status != :cancelled}
+                      phx-click="cancel_subscription"
+                      phx-value-id={sub.id}
+                      data-confirm="Cancel this recurring booking?"
+                      class="btn btn-ghost btn-xs text-error gap-1"
+                    >
+                      <span class="hero-x-mark w-3 h-3" aria-hidden="true"></span> Cancel
+                    </button>
+                  </div>
+                </div>
+              </li>
+            </ul>
+
+            <form
+              :if={@subscribe_form?}
+              id="admin-subscribe-form"
+              phx-submit="create_subscription"
+              class="mt-4 border-t border-base-200 pt-4 space-y-3"
+            >
+              <div :if={@subscribe_error} role="alert" class="alert alert-error text-sm">
+                {@subscribe_error}
+              </div>
+
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="label" for="sub-service">
+                    <span class="label-text font-medium">Service</span>
+                  </label>
+                  <select
+                    id="sub-service"
+                    name="sub[service_type_id]"
+                    class="select select-bordered w-full"
+                    required
+                  >
+                    <option value="">— Pick a service —</option>
+                    <option :for={s <- @services} value={s.id}>{s.name}</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="label" for="sub-freq">
+                    <span class="label-text font-medium">Frequency</span>
+                  </label>
+                  <select
+                    id="sub-freq"
+                    name="sub[frequency]"
+                    class="select select-bordered w-full"
+                    required
+                  >
+                    <option value="weekly">Weekly</option>
+                    <option value="biweekly" selected>Every 2 weeks</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label class="label" for="sub-starts">
+                  <span class="label-text font-medium">First run</span>
+                </label>
+                <input
+                  id="sub-starts"
+                  type="datetime-local"
+                  name="sub[starts_at]"
+                  class="input input-bordered w-full"
+                  required
+                />
+              </div>
+
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="label" for="sub-vehicle">
+                    <span class="label-text font-medium">Vehicle</span>
+                  </label>
+                  <input
+                    id="sub-vehicle"
+                    type="text"
+                    name="sub[vehicle_description]"
+                    placeholder="2022 Subaru Outback (Blue)"
+                    class="input input-bordered w-full"
+                    required
+                  />
+                </div>
+                <div>
+                  <label class="label" for="sub-address">
+                    <span class="label-text font-medium">Address</span>
+                  </label>
+                  <input
+                    id="sub-address"
+                    type="text"
+                    name="sub[service_address]"
+                    placeholder="123 Cedar St, San Antonio TX"
+                    class="input input-bordered w-full"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div class="flex justify-end gap-2">
+                <button type="button" phx-click="hide_subscribe_form" class="btn btn-ghost btn-sm">
+                  Cancel
+                </button>
+                <button type="submit" class="btn btn-primary btn-sm">Create subscription</button>
+              </div>
             </form>
           </div>
         </section>

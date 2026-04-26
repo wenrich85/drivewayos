@@ -157,4 +157,54 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLiveTest do
       assert reloaded.admin_notes == "Gate code 4321; prefers Sat"
     end
   end
+
+  describe "subscriptions" do
+    test "admin can create + manage a subscription for the customer", ctx do
+      {:ok, [service | _]} =
+        ServiceType |> Ash.Query.set_tenant(ctx.tenant.id) |> Ash.read(authorize?: false)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, _} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/admin/customers/#{ctx.alice.id}")
+
+      html = render_click(lv, "show_subscribe_form")
+      assert html =~ "admin-subscribe-form"
+
+      future = DateTime.utc_now() |> DateTime.add(7 * 86_400, :second)
+
+      lv
+      |> form("#admin-subscribe-form", %{
+        "sub" => %{
+          "service_type_id" => service.id,
+          "frequency" => "biweekly",
+          "starts_at" => DateTime.to_iso8601(future) |> String.slice(0, 16),
+          "vehicle_description" => "Admin-created vehicle",
+          "service_address" => "1 Admin Created Lane"
+        }
+      })
+      |> render_submit()
+
+      {:ok, [sub]} =
+        DrivewayOS.Scheduling.Subscription
+        |> Ash.Query.set_tenant(ctx.tenant.id)
+        |> Ash.read(authorize?: false)
+
+      assert sub.customer_id == ctx.alice.id
+      assert sub.frequency == :biweekly
+      assert sub.status == :active
+
+      render_click(lv, "pause_subscription", %{"id" => sub.id})
+
+      paused =
+        Ash.get!(DrivewayOS.Scheduling.Subscription, sub.id,
+          tenant: ctx.tenant.id,
+          authorize?: false
+        )
+
+      assert paused.status == :paused
+    end
+  end
 end
