@@ -45,15 +45,16 @@ defmodule DrivewayOSWeb.BookingLive do
   # Platform's cut on every booking, in basis points.
   @application_fee_bps 1000
 
-  @steps [:service, :vehicle, :address, :schedule]
-
   @impl true
   def mount(_params, _session, socket) do
     cond do
       is_nil(socket.assigns[:current_tenant]) ->
         {:ok, push_navigate(socket, to: ~p"/")}
 
-      is_nil(socket.assigns[:current_customer]) ->
+      is_nil(socket.assigns[:current_customer]) and
+          not Plans.tenant_can?(socket.assigns.current_tenant, :guest_checkout) ->
+        # Tenant disallows guests + nobody's signed in → bounce to
+        # /sign-in (existing V1 behavior).
         {:ok, push_navigate(socket, to: ~p"/sign-in")}
 
       true ->
@@ -63,12 +64,12 @@ defmodule DrivewayOSWeb.BookingLive do
         slots = DrivewayOS.Scheduling.upcoming_slots(tenant.id, 14)
 
         saved_vehicles =
-          if Plans.tenant_can?(tenant, :saved_vehicles),
+          if customer && Plans.tenant_can?(tenant, :saved_vehicles),
             do: load_saved_vehicles(customer.id, tenant.id),
             else: []
 
         saved_addresses =
-          if Plans.tenant_can?(tenant, :saved_addresses),
+          if customer && Plans.tenant_can?(tenant, :saved_addresses),
             do: load_saved_addresses(customer.id, tenant.id),
             else: []
 
@@ -83,6 +84,7 @@ defmodule DrivewayOSWeb.BookingLive do
          |> assign(:wizard_data, blank_data())
          |> assign(:vehicle_mode, initial_mode(saved_vehicles))
          |> assign(:address_mode, initial_mode(saved_addresses))
+         |> assign(:account_mode, :guest)
          |> assign(:errors, %{})}
     end
   end
@@ -96,11 +98,102 @@ defmodule DrivewayOSWeb.BookingLive do
         socket
         |> put_data(:service_type_id, id)
         |> assign(:errors, %{})
-        |> advance_to(:vehicle)
+        |> advance_to(after_service_step(socket))
         |> noreply()
 
       _ ->
         {:noreply, assign(socket, :errors, %{service_type_id: "Pick a service"})}
+    end
+  end
+
+  # --- Step 2 (conditional): account ---
+
+  def handle_event("set_account_mode", %{"mode" => mode}, socket) do
+    {:noreply,
+     socket
+     |> assign(:account_mode, String.to_existing_atom(mode))
+     |> assign(:errors, %{})}
+  end
+
+  def handle_event("submit_account_guest", %{"guest" => params}, socket) do
+    tenant = socket.assigns.current_tenant
+
+    attrs = %{
+      email: params["email"] |> to_string() |> String.trim() |> String.downcase(),
+      name: params["name"] |> to_string() |> String.trim(),
+      phone: params["phone"]
+    }
+
+    case DrivewayOS.Accounts.Customer
+         |> Ash.Changeset.for_create(:register_guest, attrs, tenant: tenant.id)
+         |> Ash.create(authorize?: false) do
+      {:ok, customer} ->
+        socket
+        |> assign(:current_customer, customer)
+        |> assign(:errors, %{})
+        |> advance_to(:vehicle)
+        |> noreply()
+
+      {:error, %Ash.Error.Invalid{} = e} ->
+        {:noreply, assign(socket, :errors, ash_errors_to_map(e))}
+
+      _ ->
+        {:noreply, assign(socket, :errors, %{base: "Couldn't continue as guest."})}
+    end
+  end
+
+  def handle_event("submit_account_signin", %{"signin" => %{"email" => email, "password" => pw}}, socket) do
+    tenant = socket.assigns.current_tenant
+
+    case DrivewayOS.Accounts.Customer
+         |> Ash.Query.for_read(
+           :sign_in_with_password,
+           %{email: email, password: pw},
+           tenant: tenant.id
+         )
+         |> Ash.read_one(authorize?: false) do
+      {:ok, %{__metadata__: %{token: token}} = customer} ->
+        # Store the token so the customer is signed in for the rest
+        # of the wizard + after the booking completes.
+        socket
+        |> assign(:current_customer, customer)
+        |> assign(:wizard_token, token)
+        |> assign(:errors, %{})
+        |> advance_to(:vehicle)
+        |> noreply()
+
+      _ ->
+        {:noreply, assign(socket, :errors, %{base: "Invalid email or password."})}
+    end
+  end
+
+  def handle_event("submit_account_register", %{"register" => params}, socket) do
+    tenant = socket.assigns.current_tenant
+
+    attrs = %{
+      email: params["email"] |> to_string() |> String.trim() |> String.downcase(),
+      name: params["name"] |> to_string() |> String.trim(),
+      phone: params["phone"],
+      password: params["password"],
+      password_confirmation: params["password"]
+    }
+
+    case DrivewayOS.Accounts.Customer
+         |> Ash.Changeset.for_create(:register_with_password, attrs, tenant: tenant.id)
+         |> Ash.create(authorize?: false) do
+      {:ok, %{__metadata__: %{token: token}} = customer} ->
+        socket
+        |> assign(:current_customer, customer)
+        |> assign(:wizard_token, token)
+        |> assign(:errors, %{})
+        |> advance_to(:vehicle)
+        |> noreply()
+
+      {:error, %Ash.Error.Invalid{} = e} ->
+        {:noreply, assign(socket, :errors, ash_errors_to_map(e))}
+
+      _ ->
+        {:noreply, assign(socket, :errors, %{base: "Couldn't create account."})}
     end
   end
 
@@ -288,13 +381,17 @@ defmodule DrivewayOSWeb.BookingLive do
   # --- Navigation ---
 
   def handle_event("back", _, socket) do
-    case prev_step(socket.assigns.wizard_step) do
+    case prev_step(socket.assigns.wizard_step, socket) do
       nil -> {:noreply, socket}
       step -> {:noreply, assign(socket, :wizard_step, step)}
     end
   end
 
   # --- Step state helpers ---
+
+  defp after_service_step(socket) do
+    if socket.assigns[:current_customer], do: :vehicle, else: :account
+  end
 
   defp advance_to(socket, step), do: assign(socket, :wizard_step, step)
 
@@ -314,10 +411,19 @@ defmodule DrivewayOSWeb.BookingLive do
     }
   end
 
-  defp prev_step(:vehicle), do: :service
-  defp prev_step(:address), do: :vehicle
-  defp prev_step(:schedule), do: :address
-  defp prev_step(_), do: nil
+  # Going back skips :account when the customer was already signed
+  # in at mount (step never appeared in their timeline). Anonymous
+  # customers — including ones who signed in mid-wizard — bounce
+  # vehicle ↔ account so they can re-pick their account mode.
+  defp prev_step(:account, _), do: :service
+
+  defp prev_step(:vehicle, %{assigns: %{current_customer: %{guest?: true}}}),
+    do: :account
+
+  defp prev_step(:vehicle, _), do: :service
+  defp prev_step(:address, _), do: :vehicle
+  defp prev_step(:schedule, _), do: :address
+  defp prev_step(_, _), do: nil
 
   defp initial_mode([]), do: :new
   defp initial_mode(_), do: :pick
@@ -509,7 +615,16 @@ defmodule DrivewayOSWeb.BookingLive do
 
   defp fmt_price(cents), do: "$" <> :erlang.float_to_binary(cents / 100, decimals: 2)
 
-  defp step_index(step), do: Enum.find_index(@steps, &(&1 == step)) || 0
+  # Steps the user actually sees in the progress bar. Anonymous
+  # users with guest_checkout get the :account step inserted between
+  # :service and :vehicle; everyone else skips straight to :vehicle.
+  defp visible_steps(assigns) do
+    if assigns[:current_customer] do
+      [:service, :vehicle, :address, :schedule]
+    else
+      [:service, :account, :vehicle, :address, :schedule]
+    end
+  end
 
   defp service_for(socket) do
     case socket.assigns.wizard_data["service_type_id"] do
@@ -533,21 +648,26 @@ defmodule DrivewayOSWeb.BookingLive do
             <span class="hero-arrow-left w-4 h-4" aria-hidden="true"></span> Back
           </a>
           <h1 class="text-3xl font-bold tracking-tight mt-2">Book a wash</h1>
-          <p class="text-sm text-base-content/70 mt-1">
+          <p :if={@current_customer} class="text-sm text-base-content/70 mt-1">
             Welcome back, {@current_customer.name}.
+          </p>
+          <p :if={is_nil(@current_customer)} class="text-sm text-base-content/70 mt-1">
+            No account needed — we'll email your confirmation.
           </p>
         </header>
 
-        <%!-- Progress indicator --%>
+        <%!-- Progress indicator. The :account step only appears in
+             the timeline when the customer isn't signed in yet
+             AND the tenant has guest_checkout enabled. --%>
         <ol class="flex gap-2 text-xs font-semibold uppercase tracking-wide">
           <li
-            :for={{step, idx} <- Enum.with_index([:service, :vehicle, :address, :schedule])}
+            :for={{step, idx} <- Enum.with_index(visible_steps(assigns))}
             class={
               "flex-1 py-2 px-3 rounded-md border " <>
                 cond do
                   step == @wizard_step ->
                     "border-primary bg-primary/10 text-primary"
-                  idx < step_index(@wizard_step) ->
+                  idx < (visible_steps(assigns) |> Enum.find_index(&(&1 == @wizard_step)) || 0) ->
                     "border-success/30 bg-success/10 text-success"
                   true ->
                     "border-base-300 text-base-content/40"
@@ -607,6 +727,66 @@ defmodule DrivewayOSWeb.BookingLive do
             </button>
           </div>
         </form>
+      </div>
+    </section>
+    """
+  end
+
+  defp render_step(%{wizard_step: :account} = assigns) do
+    ~H"""
+    <section class="card bg-base-100 shadow-sm border border-base-300">
+      <div class="card-body p-6 space-y-4">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <h2 class="card-title text-lg">Your details</h2>
+
+          <div class="join">
+            <button
+              type="button"
+              phx-click="set_account_mode"
+              phx-value-mode="guest"
+              class={"btn btn-sm join-item " <> if @account_mode == :guest, do: "btn-primary", else: "btn-ghost"}
+            >
+              Guest
+            </button>
+            <button
+              type="button"
+              phx-click="set_account_mode"
+              phx-value-mode="sign_in"
+              class={"btn btn-sm join-item " <> if @account_mode == :sign_in, do: "btn-primary", else: "btn-ghost"}
+            >
+              Sign in
+            </button>
+            <button
+              type="button"
+              phx-click="set_account_mode"
+              phx-value-mode="register"
+              class={"btn btn-sm join-item " <> if @account_mode == :register, do: "btn-primary", else: "btn-ghost"}
+            >
+              Register
+            </button>
+          </div>
+        </div>
+
+        <p class="text-sm text-base-content/70">
+          <span :if={@account_mode == :guest}>
+            Just want to book once? Drop your name + email below — we'll send the confirmation there. You can claim a full account later.
+          </span>
+          <span :if={@account_mode == :sign_in}>
+            Already have an account? Sign in to use your saved vehicles and addresses.
+          </span>
+          <span :if={@account_mode == :register}>
+            Create an account so your vehicles + addresses save for next time.
+          </span>
+        </p>
+
+        <%= cond do %>
+          <% @account_mode == :guest -> %>
+            {render_account_guest(assigns)}
+          <% @account_mode == :sign_in -> %>
+            {render_account_signin(assigns)}
+          <% true -> %>
+            {render_account_register(assigns)}
+        <% end %>
       </div>
     </section>
     """
@@ -1112,6 +1292,172 @@ defmodule DrivewayOSWeb.BookingLive do
         </button>
         <button type="submit" class="btn btn-primary gap-1">
           Save & continue <span class="hero-arrow-right w-4 h-4" aria-hidden="true"></span>
+        </button>
+      </div>
+    </form>
+    """
+  end
+
+  # --- Account sub-renderers ---
+
+  defp render_account_guest(assigns) do
+    ~H"""
+    <form id="step-account-guest-form" phx-submit="submit_account_guest" class="space-y-3">
+      <div>
+        <label class="label py-1" for="g-name">
+          <span class="label-text font-medium">Your name</span>
+        </label>
+        <input
+          id="g-name"
+          type="text"
+          name="guest[name]"
+          autocomplete="name"
+          class="input input-bordered w-full"
+          required
+        />
+      </div>
+      <div>
+        <label class="label py-1" for="g-email">
+          <span class="label-text font-medium">Email</span>
+        </label>
+        <input
+          id="g-email"
+          type="email"
+          name="guest[email]"
+          autocomplete="email"
+          class="input input-bordered w-full"
+          required
+        />
+      </div>
+      <div>
+        <label class="label py-1" for="g-phone">
+          <span class="label-text font-medium">Phone</span>
+          <span class="label-text-alt text-base-content/50">Optional</span>
+        </label>
+        <input
+          id="g-phone"
+          type="tel"
+          name="guest[phone]"
+          autocomplete="tel"
+          class="input input-bordered w-full"
+        />
+      </div>
+
+      <p :if={@errors[:base]} class="text-error text-xs">{@errors[:base]}</p>
+
+      <div class="flex justify-between">
+        <button type="button" phx-click="back" class="btn btn-ghost gap-1">
+          <span class="hero-arrow-left w-4 h-4" aria-hidden="true"></span> Back
+        </button>
+        <button type="submit" class="btn btn-primary gap-1">
+          Continue as guest
+          <span class="hero-arrow-right w-4 h-4" aria-hidden="true"></span>
+        </button>
+      </div>
+    </form>
+    """
+  end
+
+  defp render_account_signin(assigns) do
+    ~H"""
+    <form id="step-account-signin-form" phx-submit="submit_account_signin" class="space-y-3">
+      <div>
+        <label class="label py-1" for="si-email">
+          <span class="label-text font-medium">Email</span>
+        </label>
+        <input
+          id="si-email"
+          type="email"
+          name="signin[email]"
+          autocomplete="email"
+          class="input input-bordered w-full"
+          required
+        />
+      </div>
+      <div>
+        <label class="label py-1" for="si-pw">
+          <span class="label-text font-medium">Password</span>
+        </label>
+        <input
+          id="si-pw"
+          type="password"
+          name="signin[password]"
+          autocomplete="current-password"
+          class="input input-bordered w-full"
+          required
+        />
+      </div>
+
+      <p :if={@errors[:base]} class="text-error text-xs">{@errors[:base]}</p>
+
+      <div class="flex justify-between">
+        <button type="button" phx-click="back" class="btn btn-ghost gap-1">
+          <span class="hero-arrow-left w-4 h-4" aria-hidden="true"></span> Back
+        </button>
+        <button type="submit" class="btn btn-primary gap-1">
+          Sign in & continue
+          <span class="hero-arrow-right w-4 h-4" aria-hidden="true"></span>
+        </button>
+      </div>
+    </form>
+    """
+  end
+
+  defp render_account_register(assigns) do
+    ~H"""
+    <form id="step-account-register-form" phx-submit="submit_account_register" class="space-y-3">
+      <div>
+        <label class="label py-1" for="reg-name">
+          <span class="label-text font-medium">Your name</span>
+        </label>
+        <input
+          id="reg-name"
+          type="text"
+          name="register[name]"
+          autocomplete="name"
+          class="input input-bordered w-full"
+          required
+        />
+      </div>
+      <div>
+        <label class="label py-1" for="reg-email">
+          <span class="label-text font-medium">Email</span>
+        </label>
+        <input
+          id="reg-email"
+          type="email"
+          name="register[email]"
+          autocomplete="email"
+          class="input input-bordered w-full"
+          required
+        />
+      </div>
+      <div>
+        <label class="label py-1" for="reg-pw">
+          <span class="label-text font-medium">Password</span>
+        </label>
+        <input
+          id="reg-pw"
+          type="password"
+          name="register[password]"
+          autocomplete="new-password"
+          class="input input-bordered w-full"
+          required
+        />
+        <p class="text-xs text-base-content/60 mt-1">
+          10+ characters · at least one upper, one lower, one digit.
+        </p>
+      </div>
+
+      <p :if={@errors[:base]} class="text-error text-xs">{@errors[:base]}</p>
+
+      <div class="flex justify-between">
+        <button type="button" phx-click="back" class="btn btn-ghost gap-1">
+          <span class="hero-arrow-left w-4 h-4" aria-hidden="true"></span> Back
+        </button>
+        <button type="submit" class="btn btn-primary gap-1">
+          Create account & continue
+          <span class="hero-arrow-right w-4 h-4" aria-hidden="true"></span>
         </button>
       </div>
     </form>

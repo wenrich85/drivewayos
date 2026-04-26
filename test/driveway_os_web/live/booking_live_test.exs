@@ -418,6 +418,120 @@ defmodule DrivewayOSWeb.BookingLiveTest do
     end
   end
 
+  describe "guest checkout (Pro+ tenant, unauthenticated visitor)" do
+    setup ctx do
+      # Promote tenant to Pro so :guest_checkout is enabled.
+      ctx.tenant
+      |> Ash.Changeset.for_update(:update, %{plan_tier: :pro})
+      |> Ash.update!(authorize?: false)
+
+      DrivewayOS.Plans.flush_cache()
+      Map.put(ctx, :tenant, Ash.reload!(ctx.tenant, authorize?: false))
+    end
+
+    test "unauthenticated visit to /book renders wizard at the service step",
+         %{conn: conn, tenant: tenant} do
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{tenant.slug}.lvh.me") |> live(~p"/book")
+
+      assert html =~ "Book a wash"
+      assert html =~ ~s(name="booking[service_type_id]")
+    end
+
+    test "submitting service advances anonymous visitor to :account step",
+         %{conn: conn, tenant: tenant} do
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{tenant.slug}.lvh.me") |> live(~p"/book")
+
+      service_id = extract_service_id(html, "basic")
+
+      html =
+        lv
+        |> form("#step-service-form", %{"booking" => %{"service_type_id" => service_id}})
+        |> render_submit()
+
+      # Account step has its own form id.
+      assert html =~ "step-account-guest-form"
+      assert html =~ "Your details"
+    end
+
+    test "guest submit creates a Customer with guest?: true + advances to :vehicle",
+         %{conn: conn, tenant: tenant} do
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{tenant.slug}.lvh.me") |> live(~p"/book")
+
+      service_id = extract_service_id(html, "basic")
+
+      lv
+      |> form("#step-service-form", %{"booking" => %{"service_type_id" => service_id}})
+      |> render_submit()
+
+      email = "guest-#{System.unique_integer([:positive])}@example.com"
+
+      html =
+        lv
+        |> form("#step-account-guest-form", %{
+          "guest" => %{"name" => "Guest Greta", "email" => email}
+        })
+        |> render_submit()
+
+      # Now on vehicle step.
+      assert html =~ "Vehicle"
+      refute html =~ "step-account-guest-form"
+
+      # Customer was created as a guest.
+      {:ok, [customer | _]} =
+        Customer
+        |> Ash.Query.filter(email == ^email)
+        |> Ash.Query.set_tenant(tenant.id)
+        |> Ash.read(authorize?: false)
+
+      assert customer.guest? == true
+      assert customer.role == :customer
+      assert is_nil(customer.hashed_password)
+    end
+
+    test "back button from :vehicle returns to :account for a guest",
+         %{conn: conn, tenant: tenant} do
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{tenant.slug}.lvh.me") |> live(~p"/book")
+
+      service_id = extract_service_id(html, "basic")
+
+      lv
+      |> form("#step-service-form", %{"booking" => %{"service_type_id" => service_id}})
+      |> render_submit()
+
+      lv
+      |> form("#step-account-guest-form", %{
+        "guest" => %{
+          "name" => "Greta",
+          "email" => "back-#{System.unique_integer([:positive])}@example.com"
+        }
+      })
+      |> render_submit()
+
+      # Now click Back.
+      html =
+        lv
+        |> element("button[phx-click='back']")
+        |> render_click()
+
+      assert html =~ "step-account-guest-form"
+    end
+  end
+
+  describe "guest checkout DISABLED (Starter tenant)" do
+    test "unauthenticated visit redirects to /sign-in",
+         %{conn: conn, tenant: tenant} do
+      # tenant is Starter from the top-level setup → no guest_checkout.
+      assert {:error, {:live_redirect, %{to: "/sign-in"}}} =
+               conn
+               |> Map.put(:host, "#{tenant.slug}.lvh.me")
+               |> live(~p"/book")
+    end
+  end
+
   # --- Helpers ---
 
   defp sign_in(conn, customer) do

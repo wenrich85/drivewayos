@@ -177,6 +177,18 @@ defmodule DrivewayOS.Accounts.Customer do
       constraints max_length: 5000
     end
 
+    # Guest customers — created via the booking wizard's "continue
+    # as guest" path when the tenant has :guest_checkout enabled.
+    # They have no password (so can't sign in via /sign-in directly)
+    # but DO have email/name so we can email them the confirmation.
+    # The future "claim your account" flow promotes them to full
+    # password-auth customers.
+    attribute :guest?, :boolean do
+      default false
+      allow_nil? false
+      public? true
+    end
+
     create_timestamp :inserted_at
     update_timestamp :updated_at
   end
@@ -245,6 +257,21 @@ defmodule DrivewayOS.Accounts.Customer do
       # transaction so non-atomic is fine.
       require_atomic? false
       change set_attribute(:email_verified_at, &DateTime.utc_now/0)
+    end
+
+    create :register_guest do
+      # Booking-wizard guest checkout. No password (can't sign in
+      # via /sign-in until the customer claims the account). Upserts
+      # by email — if a real customer with this email already
+      # exists in this tenant, just return them; otherwise create a
+      # fresh guest row.
+      accept [:email, :name, :phone]
+
+      upsert? true
+      upsert_identity :unique_email
+
+      change set_attribute(:guest?, true)
+      change set_attribute(:role, :customer)
     end
 
     create :register_with_google do

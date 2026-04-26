@@ -38,6 +38,7 @@ defmodule DrivewayOSWeb.Platform.PlansLive do
     :saved_vehicles,
     :saved_addresses,
     :booking_photos,
+    :guest_checkout,
     :sms_notifications,
     :push_notifications,
     :loyalty_punch_card,
