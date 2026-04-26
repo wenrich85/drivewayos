@@ -52,6 +52,7 @@ defmodule DrivewayOSWeb.Router do
     get "/appointments/:id/calendar.ics", CalendarController, :appointment
     live "/me", CustomerProfileLive
     live "/admin", Admin.DashboardLive
+    live "/admin/today/print", Admin.TodayPrintLive
     live "/admin/domains", Admin.CustomDomainsLive
     live "/admin/schedule", Admin.ScheduleLive
     live "/admin/services", Admin.ServicesLive

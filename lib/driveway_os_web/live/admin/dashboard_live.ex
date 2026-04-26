@@ -377,9 +377,18 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
           <div class="card-body p-6">
             <div class="flex items-center justify-between flex-wrap gap-2">
               <h2 class="card-title text-lg">Today</h2>
-              <span class="text-xs text-base-content/60">
-                {length(@today)} {if length(@today) == 1, do: "appointment", else: "appointments"}
-              </span>
+              <div class="flex items-center gap-3">
+                <span class="text-xs text-base-content/60">
+                  {length(@today)} {if length(@today) == 1, do: "appointment", else: "appointments"}
+                </span>
+                <a
+                  :if={@today != []}
+                  href="/admin/today/print"
+                  class="btn btn-ghost btn-xs gap-1"
+                >
+                  <span class="hero-printer w-3 h-3" aria-hidden="true"></span> Print
+                </a>
+              </div>
             </div>
 
             <div :if={@today == []} class="text-center py-8 px-4">
