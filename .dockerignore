@@ -1,0 +1,20 @@
+# Keep the build context small + don't ship dev artifacts.
+_build/
+deps/
+.elixir_ls/
+.lexical/
+priv/static/assets/
+node_modules/
+assets/node_modules/
+.git/
+.github/
+.gitignore
+test/
+screenshots/
+cover/
+*.dump
+.DS_Store
+.env
+.env.*
+docs/
+README.md

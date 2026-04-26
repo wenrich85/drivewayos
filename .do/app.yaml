@@ -1,0 +1,98 @@
+# DigitalOcean App Platform spec for DrivewayOS.
+#
+# Apply with:  doctl apps create --spec .do/app.yaml
+# Update with: doctl apps update <APP_ID> --spec .do/app.yaml
+#
+# This spec defines:
+#   * one Dockerfile-built service (the Phoenix app)
+#   * a managed Postgres database (1GB, smallest-tier)
+#   * env vars (secrets are SECRET-marked so doctl will prompt)
+#
+# DNS is configured separately — point your domain's apex + a
+# wildcard *.<your-domain> at the resulting App URL once the app
+# is live. See docs/DEPLOY.md for the wildcard-cert dance.
+
+name: drivewayos
+region: nyc
+
+services:
+  - name: web
+    dockerfile_path: Dockerfile
+    source_dir: /
+    github:
+      repo: wenrich85/drivewayos
+      branch: main
+      deploy_on_push: true
+    instance_size_slug: basic-xs
+    instance_count: 1
+    http_port: 4000
+    health_check:
+      http_path: /
+      initial_delay_seconds: 30
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 5
+
+    envs:
+      - key: PHX_HOST
+        scope: RUN_AND_BUILD_TIME
+        value: drivewayos.com  # change after DNS is set
+      - key: PHX_SERVER
+        scope: RUN_AND_BUILD_TIME
+        value: "true"
+      - key: PORT
+        scope: RUN_AND_BUILD_TIME
+        value: "4000"
+      - key: PLATFORM_HOST
+        scope: RUN_AND_BUILD_TIME
+        value: drivewayos.com
+      - key: POOL_SIZE
+        scope: RUN_AND_BUILD_TIME
+        value: "10"
+      - key: ECTO_IPV6
+        scope: RUN_AND_BUILD_TIME
+        value: "false"
+      - key: DATABASE_URL
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+      - key: SECRET_KEY_BASE
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+      - key: PLATFORM_TOKEN_SIGNING_SECRET
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+      - key: TOKEN_SIGNING_SECRET
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+      - key: STRIPE_CLIENT_ID
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+      - key: STRIPE_SECRET_KEY
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+      - key: STRIPE_WEBHOOK_SECRET
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+      - key: SMTP_HOST
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+      - key: SMTP_USERNAME
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+      - key: SMTP_PASSWORD
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+      - key: SMTP_PORT
+        scope: RUN_AND_BUILD_TIME
+        value: "587"
+
+databases:
+  - name: db
+    engine: PG
+    production: true
+    cluster_name: drivewayos-db
+    db_name: drivewayos
+    db_user: drivewayos
+    size: db-s-dev-database
+    version: "16"

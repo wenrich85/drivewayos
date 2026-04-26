@@ -124,21 +124,28 @@ if config_env() == :prod do
   config :driveway_os,
     platform_host: System.get_env("PLATFORM_HOST") || "drivewayos.com"
 
-  # ## Configuring the mailer
-  #
-  # In production you need to configure the mailer to use a different adapter.
-  # Here is an example configuration for Mailgun:
-  #
-  #     config :driveway_os, DrivewayOS.Mailer,
-  #       adapter: Swoosh.Adapters.Mailgun,
-  #       api_key: System.get_env("MAILGUN_API_KEY"),
-  #       domain: System.get_env("MAILGUN_DOMAIN")
-  #
-  # Most non-SMTP adapters require an API client. Swoosh supports Req, Hackney,
-  # and Finch out-of-the-box. This configuration is typically done at
-  # compile-time in your config/prod.exs:
-  #
-  #     config :swoosh, :api_client, Swoosh.ApiClient.Req
-  #
-  # See https://hexdocs.pm/swoosh/Swoosh.html#module-installation for details.
+  # ## Mailer (SMTP) — used by booking confirmation emails.
+  # Swap to a different adapter if you'd rather use an HTTP API
+  # (Mailgun / SendGrid / Postmark).
+  if smtp_host = System.get_env("SMTP_HOST") do
+    config :driveway_os, DrivewayOS.Mailer,
+      adapter: Swoosh.Adapters.SMTP,
+      relay: smtp_host,
+      port: String.to_integer(System.get_env("SMTP_PORT") || "587"),
+      username: System.get_env("SMTP_USERNAME"),
+      password: System.get_env("SMTP_PASSWORD"),
+      ssl: false,
+      tls: :always,
+      auth: :always,
+      retries: 2
+
+    # SMTP needs the swoosh API client off (only for HTTP adapters)
+    config :swoosh, :api_client, false
+  end
+
+  # ## Stripe Connect (per-tenant) + SaaS billing
+  config :driveway_os,
+    stripe_client_id: System.get_env("STRIPE_CLIENT_ID") || "",
+    stripe_secret_key: System.get_env("STRIPE_SECRET_KEY") || "",
+    stripe_webhook_secret: System.get_env("STRIPE_WEBHOOK_SECRET") || ""
 end
