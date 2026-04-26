@@ -283,131 +283,162 @@ defmodule DrivewayOSWeb.BookingLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <main class="min-h-screen bg-base-200 px-4 py-12">
-      <div class="max-w-2xl mx-auto card bg-base-100 shadow-lg">
-        <div class="card-body">
-          <h1 class="card-title text-2xl">Book a wash</h1>
-          <p class="text-base-content/70 mb-2">
+    <main class="min-h-screen bg-base-200 px-4 py-8 sm:py-12">
+      <div class="max-w-2xl mx-auto space-y-6">
+        <header>
+          <a
+            href="/"
+            class="inline-flex items-center gap-1 text-sm text-base-content/60 hover:text-base-content transition-colors"
+          >
+            <span class="hero-arrow-left w-4 h-4" aria-hidden="true"></span> Back
+          </a>
+          <h1 class="text-3xl font-bold tracking-tight mt-2">Book a wash</h1>
+          <p class="text-sm text-base-content/70 mt-1">
             Welcome back, {@current_customer.name}. Pick a service and a time.
           </p>
+        </header>
 
-          <div :if={@errors[:base]} class="alert alert-error text-sm">{@errors[:base]}</div>
+        <div :if={@errors[:base]} role="alert" class="alert alert-error">
+          <span class="hero-exclamation-circle w-5 h-5 shrink-0" aria-hidden="true"></span>
+          <span class="text-sm">{@errors[:base]}</span>
+        </div>
 
-          <form id="booking-form" phx-submit="submit" class="space-y-4">
-            <div>
-              <label class="label" for="booking-service">
-                <span class="label-text">Service</span>
-              </label>
-              <select
-                id="booking-service"
-                name="booking[service_type_id]"
-                class="select select-bordered w-full"
-                required
-              >
-                <option value="">— Pick a service —</option>
-                <option
-                  :for={svc <- @services}
-                  value={svc.id}
-                  selected={@form["service_type_id"] == svc.id}
+        <form id="booking-form" phx-submit="submit" class="space-y-6">
+          <section class="card bg-base-100 shadow-sm border border-base-300">
+            <div class="card-body p-6 space-y-4">
+              <h2 class="card-title text-lg">What & when</h2>
+
+              <div>
+                <label class="label" for="booking-service">
+                  <span class="label-text font-medium">Service</span>
+                </label>
+                <select
+                  id="booking-service"
+                  name="booking[service_type_id]"
+                  class="select select-bordered w-full"
+                  required
                 >
-                  {svc.name} — {fmt_price(svc.base_price_cents)} ({svc.duration_minutes} min)
-                </option>
-              </select>
-              <p :if={@errors[:service_type_id]} class="text-error text-sm mt-1">
-                {@errors[:service_type_id]}
-              </p>
-            </div>
+                  <option value="">— Pick a service —</option>
+                  <option
+                    :for={svc <- @services}
+                    value={svc.id}
+                    selected={@form["service_type_id"] == svc.id}
+                  >
+                    {svc.name} — {fmt_price(svc.base_price_cents)} ({svc.duration_minutes} min)
+                  </option>
+                </select>
+                <p :if={@errors[:service_type_id]} class="text-error text-xs mt-1">
+                  {@errors[:service_type_id]}
+                </p>
+              </div>
 
-            <div :if={@slots != []}>
-              <label class="label" for="booking-slot">
-                <span class="label-text">Available slots</span>
-              </label>
-              <select
-                id="booking-slot"
-                name="booking[slot_id]"
-                class="select select-bordered w-full"
-                required
-              >
-                <option value="">— Pick a slot —</option>
-                <option
-                  :for={slot <- @slots}
-                  value={"#{slot.block_template_id}|#{DateTime.to_iso8601(slot.scheduled_at)}"}
+              <div :if={@slots != []}>
+                <label class="label" for="booking-slot">
+                  <span class="label-text font-medium">Available slots</span>
+                </label>
+                <select
+                  id="booking-slot"
+                  name="booking[slot_id]"
+                  class="select select-bordered w-full"
+                  required
                 >
-                  {slot.name} — {Calendar.strftime(slot.scheduled_at, "%a %b %-d, %-I:%M %p UTC")} ({slot.duration_minutes} min)
-                </option>
-              </select>
-              <p :if={@errors[:scheduled_at]} class="text-error text-sm mt-1">
-                {@errors[:scheduled_at]}
-              </p>
-            </div>
+                  <option value="">— Pick a slot —</option>
+                  <option
+                    :for={slot <- @slots}
+                    value={"#{slot.block_template_id}|#{DateTime.to_iso8601(slot.scheduled_at)}"}
+                  >
+                    {slot.name} — {Calendar.strftime(slot.scheduled_at, "%a %b %-d, %-I:%M %p UTC")} ({slot.duration_minutes} min)
+                  </option>
+                </select>
+                <p :if={@errors[:scheduled_at]} class="text-error text-xs mt-1">
+                  {@errors[:scheduled_at]}
+                </p>
+              </div>
 
-            <div :if={@slots == []}>
-              <label class="label" for="booking-scheduled-at">
-                <span class="label-text">Date & time</span>
-              </label>
-              <input
-                id="booking-scheduled-at"
-                type="datetime-local"
-                name="booking[scheduled_at]"
-                value={@form["scheduled_at"]}
-                class="input input-bordered w-full"
-                required
-              />
-              <p :if={@errors[:scheduled_at]} class="text-error text-sm mt-1">
-                {@errors[:scheduled_at]}
-              </p>
+              <div :if={@slots == []}>
+                <label class="label" for="booking-scheduled-at">
+                  <span class="label-text font-medium">Date & time</span>
+                </label>
+                <input
+                  id="booking-scheduled-at"
+                  type="datetime-local"
+                  name="booking[scheduled_at]"
+                  value={@form["scheduled_at"]}
+                  class="input input-bordered w-full"
+                  required
+                />
+                <p :if={@errors[:scheduled_at]} class="text-error text-xs mt-1">
+                  {@errors[:scheduled_at]}
+                </p>
+              </div>
             </div>
+          </section>
 
-            <div>
-              <label class="label" for="booking-vehicle">
-                <span class="label-text">Vehicle</span>
-              </label>
-              <input
-                id="booking-vehicle"
-                type="text"
-                name="booking[vehicle_description]"
-                value={@form["vehicle_description"]}
-                placeholder="Year + make + model + color"
-                class="input input-bordered w-full"
-                required
-              />
+          <section class="card bg-base-100 shadow-sm border border-base-300">
+            <div class="card-body p-6 space-y-4">
+              <h2 class="card-title text-lg">Vehicle & location</h2>
+
+              <div>
+                <label class="label" for="booking-vehicle">
+                  <span class="label-text font-medium">Vehicle</span>
+                </label>
+                <input
+                  id="booking-vehicle"
+                  type="text"
+                  name="booking[vehicle_description]"
+                  value={@form["vehicle_description"]}
+                  placeholder="Year + make + model + color"
+                  class="input input-bordered w-full"
+                  required
+                />
+              </div>
+
+              <div>
+                <label class="label" for="booking-address">
+                  <span class="label-text font-medium">Service address</span>
+                </label>
+                <input
+                  id="booking-address"
+                  type="text"
+                  name="booking[service_address]"
+                  value={@form["service_address"]}
+                  placeholder="123 Main St, San Antonio TX 78261"
+                  class="input input-bordered w-full"
+                  required
+                />
+              </div>
+
+              <div>
+                <label class="label" for="booking-notes">
+                  <span class="label-text font-medium">Notes</span>
+                  <span class="label-text-alt text-base-content/50">Optional</span>
+                </label>
+                <textarea
+                  id="booking-notes"
+                  name="booking[notes]"
+                  rows="2"
+                  placeholder="Gate code, special requests, etc."
+                  class="textarea textarea-bordered w-full"
+                >{@form["notes"]}</textarea>
+              </div>
             </div>
+          </section>
 
-            <div>
-              <label class="label" for="booking-address">
-                <span class="label-text">Service address</span>
-              </label>
-              <input
-                id="booking-address"
-                type="text"
-                name="booking[service_address]"
-                value={@form["service_address"]}
-                placeholder="123 Main St, San Antonio TX 78261"
-                class="input input-bordered w-full"
-                required
-              />
-            </div>
-
-            <div>
-              <label class="label" for="booking-notes">
-                <span class="label-text">Notes (optional)</span>
-              </label>
-              <textarea
-                id="booking-notes"
-                name="booking[notes]"
-                rows="2"
-                placeholder="Gate code, special requests, etc."
-                class="textarea textarea-bordered w-full"
-              >{@form["notes"]}</textarea>
-            </div>
-
-            <button type="submit" class="btn btn-primary w-full">Book it</button>
+          <div class="space-y-3">
+            <button type="submit" class="btn btn-primary btn-lg w-full gap-2">
+              <span class="hero-sparkles w-5 h-5" aria-hidden="true"></span> Book it
+            </button>
 
             <p class="text-xs text-base-content/60 text-center">
-              {@current_tenant.display_name} will confirm and reach out to schedule. Payment is collected on-site for now.
+              <span :if={@current_tenant.stripe_account_id}>
+                Pay securely on the next page. {@current_tenant.display_name} will confirm and reach out.
+              </span>
+              <span :if={is_nil(@current_tenant.stripe_account_id)}>
+                {@current_tenant.display_name} will confirm and reach out to schedule. Payment is collected on-site.
+              </span>
             </p>
-          </form>
-        </div>
+          </div>
+        </form>
       </div>
     </main>
     """
