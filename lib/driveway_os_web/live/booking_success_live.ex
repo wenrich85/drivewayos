@@ -12,35 +12,47 @@ defmodule DrivewayOSWeb.BookingSuccessLive do
   on_mount DrivewayOSWeb.LoadTenantHook
   on_mount DrivewayOSWeb.LoadCustomerHook
 
+  alias DrivewayOS.Accounts.Customer
   alias DrivewayOS.Scheduling.Appointment
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
-    cond do
-      is_nil(socket.assigns[:current_tenant]) ->
-        {:ok, push_navigate(socket, to: ~p"/")}
-
-      is_nil(socket.assigns[:current_customer]) ->
-        {:ok, push_navigate(socket, to: ~p"/sign-in")}
-
-      true ->
-        case Ash.get(Appointment, id, tenant: socket.assigns.current_tenant.id, authorize?: false) do
-          {:ok, %{customer_id: cid} = appt}
-          when cid == socket.assigns.current_customer.id ->
-            {:ok,
-             socket
-             |> assign(:page_title, "Booking confirmed")
-             |> assign(:appointment, appt)}
-
-          _ ->
-            # Either the appointment doesn't exist in this tenant, or
-            # it belongs to a different customer in this tenant. Both
-            # cases get the same not-found redirect — never leak
-            # which one happened.
-            {:ok, push_navigate(socket, to: ~p"/")}
-        end
+    if is_nil(socket.assigns[:current_tenant]) do
+      {:ok, push_navigate(socket, to: ~p"/")}
+    else
+      load_appointment(socket, id)
     end
   end
+
+  # Two paths land here:
+  #
+  #   1. Signed-in customer who just booked — owns the appointment via
+  #      `customer_id == current_customer.id`.
+  #   2. Anonymous guest who completed the wizard — `current_customer`
+  #      is nil because guests get no session token. We allow the
+  #      view as long as the appointment's customer is flagged
+  #      `guest?: true`. The id is a UUID, so possessing the URL is
+  #      proof of being the booker (same model as a Stripe receipt).
+  defp load_appointment(socket, id) do
+    tenant_id = socket.assigns.current_tenant.id
+    me = socket.assigns[:current_customer]
+
+    with {:ok, appt} <- Ash.get(Appointment, id, tenant: tenant_id, authorize?: false),
+         {:ok, booker} <- Ash.get(Customer, appt.customer_id, tenant: tenant_id, authorize?: false),
+         true <- can_view?(booker, me) do
+      {:ok,
+       socket
+       |> assign(:page_title, "Booking confirmed")
+       |> assign(:appointment, appt)
+       |> assign(:booker, booker)}
+    else
+      _ -> {:ok, push_navigate(socket, to: ~p"/")}
+    end
+  end
+
+  defp can_view?(%Customer{id: id}, %Customer{id: id}), do: true
+  defp can_view?(%Customer{guest?: true}, _), do: true
+  defp can_view?(_, _), do: false
 
   defp fmt_price(cents), do: "$" <> :erlang.float_to_binary(cents / 100, decimals: 2)
 
@@ -95,7 +107,20 @@ defmodule DrivewayOSWeb.BookingSuccessLive do
         </section>
 
         <div class="flex justify-end gap-2">
-          <.link navigate={~p"/appointments"} class="btn btn-ghost btn-sm">My appointments</.link>
+          <.link
+            :if={@current_customer && not @booker.guest?}
+            navigate={~p"/appointments"}
+            class="btn btn-ghost btn-sm"
+          >
+            My appointments
+          </.link>
+          <.link
+            :if={@booker.guest?}
+            navigate={~p"/register"}
+            class="btn btn-ghost btn-sm"
+          >
+            Create account
+          </.link>
           <.link navigate={~p"/book"} class="btn btn-primary btn-sm gap-2">
             <span class="hero-plus w-4 h-4" aria-hidden="true"></span> Book another
           </.link>
