@@ -37,7 +37,48 @@ defmodule DrivewayOSWeb.Admin.ScheduleLive do
          |> assign(:page_title, "Availability")
          |> assign(:days_of_week_labels, @days_of_week)
          |> assign(:form_error, nil)
+         |> assign(:editing_id, nil)
+         |> assign(:edit_error, nil)
          |> load_blocks()}
+    end
+  end
+
+  def handle_event("edit_block", %{"id" => id}, socket) do
+    {:noreply, socket |> assign(:editing_id, id) |> assign(:edit_error, nil)}
+  end
+
+  def handle_event("cancel_edit", _, socket) do
+    {:noreply, socket |> assign(:editing_id, nil) |> assign(:edit_error, nil)}
+  end
+
+  def handle_event("save_edit", %{"id" => id, "block" => params}, socket) do
+    tenant_id = socket.assigns.current_tenant.id
+
+    attrs = %{
+      name: params["name"],
+      day_of_week: parse_int(params["day_of_week"]),
+      start_time: parse_time(params["start_time"]),
+      duration_minutes: parse_int(params["duration_minutes"]),
+      capacity: parse_int(params["capacity"]) || 1
+    }
+
+    with {:ok, bt} <- Ash.get(BlockTemplate, id, tenant: tenant_id, authorize?: false),
+         {:ok, _updated} <-
+           bt
+           |> Ash.Changeset.for_update(:update, attrs)
+           |> Ash.update(authorize?: false, tenant: tenant_id) do
+      {:noreply,
+       socket
+       |> assign(:editing_id, nil)
+       |> assign(:edit_error, nil)
+       |> load_blocks()}
+    else
+      {:error, %Ash.Error.Invalid{errors: errors}} ->
+        msg = errors |> Enum.map(&Map.get(&1, :message, "is invalid")) |> Enum.join("; ")
+        {:noreply, assign(socket, :edit_error, msg)}
+
+      _ ->
+        {:noreply, assign(socket, :edit_error, "Could not save.")}
     end
   end
 
@@ -250,25 +291,126 @@ defmodule DrivewayOSWeb.Admin.ScheduleLive do
             </div>
 
             <ul :if={@blocks != []} class="divide-y divide-base-200">
-              <li
-                :for={b <- @blocks}
-                class="py-4 flex items-center justify-between gap-3 flex-wrap"
-              >
-                <div>
-                  <div class="font-semibold">{b.name}</div>
-                  <div class="text-sm text-base-content/70 mt-0.5">
-                    <span class="font-mono">{day_label(b.day_of_week)}</span>
-                    at {time_label(b.start_time)} · {b.duration_minutes} min · capacity {b.capacity}
+              <li :for={b <- @blocks} class="py-4">
+                <%= if @editing_id == b.id do %>
+                  <div :if={@edit_error} role="alert" class="alert alert-error mb-3 text-sm">
+                    {@edit_error}
                   </div>
-                </div>
-                <button
-                  phx-click="delete_block"
-                  phx-value-id={b.id}
-                  data-confirm={"Remove #{b.name}?"}
-                  class="btn btn-ghost btn-sm text-error gap-1"
-                >
-                  <span class="hero-trash w-4 h-4" aria-hidden="true"></span> Remove
-                </button>
+                  <form
+                    id={"edit-block-form-#{b.id}"}
+                    phx-submit="save_edit"
+                    phx-value-id={b.id}
+                    class="grid grid-cols-1 md:grid-cols-6 gap-3"
+                  >
+                    <div class="md:col-span-2">
+                      <label class="label" for={"edit-name-#{b.id}"}>
+                        <span class="label-text font-medium">Name</span>
+                      </label>
+                      <input
+                        id={"edit-name-#{b.id}"}
+                        type="text"
+                        name="block[name]"
+                        value={b.name}
+                        class="input input-bordered w-full"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label class="label" for={"edit-dow-#{b.id}"}>
+                        <span class="label-text font-medium">Day</span>
+                      </label>
+                      <select
+                        id={"edit-dow-#{b.id}"}
+                        name="block[day_of_week]"
+                        class="select select-bordered w-full"
+                        required
+                      >
+                        <option
+                          :for={{label, n} <- Enum.with_index(@days_of_week_labels)}
+                          value={n}
+                          selected={b.day_of_week == n}
+                        >
+                          {label}
+                        </option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="label" for={"edit-start-#{b.id}"}>
+                        <span class="label-text font-medium">Start</span>
+                      </label>
+                      <input
+                        id={"edit-start-#{b.id}"}
+                        type="time"
+                        name="block[start_time]"
+                        value={Calendar.strftime(b.start_time, "%H:%M")}
+                        class="input input-bordered w-full"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label class="label" for={"edit-dur-#{b.id}"}>
+                        <span class="label-text font-medium">Duration</span>
+                      </label>
+                      <input
+                        id={"edit-dur-#{b.id}"}
+                        type="number"
+                        name="block[duration_minutes]"
+                        value={b.duration_minutes}
+                        min="15"
+                        step="15"
+                        class="input input-bordered w-full"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label class="label" for={"edit-cap-#{b.id}"}>
+                        <span class="label-text font-medium">Capacity</span>
+                      </label>
+                      <input
+                        id={"edit-cap-#{b.id}"}
+                        type="number"
+                        name="block[capacity]"
+                        value={b.capacity}
+                        min="1"
+                        class="input input-bordered w-full"
+                        required
+                      />
+                    </div>
+                    <div class="md:col-span-6 flex justify-end gap-2">
+                      <button type="button" phx-click="cancel_edit" class="btn btn-ghost btn-sm">
+                        Cancel
+                      </button>
+                      <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                    </div>
+                  </form>
+                <% else %>
+                  <div class="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      <div class="font-semibold">{b.name}</div>
+                      <div class="text-sm text-base-content/70 mt-0.5">
+                        <span class="font-mono">{day_label(b.day_of_week)}</span>
+                        at {time_label(b.start_time)} · {b.duration_minutes} min · capacity {b.capacity}
+                      </div>
+                    </div>
+                    <div class="flex gap-2">
+                      <button
+                        phx-click="edit_block"
+                        phx-value-id={b.id}
+                        class="btn btn-ghost btn-sm gap-1"
+                      >
+                        <span class="hero-pencil w-4 h-4" aria-hidden="true"></span> Edit
+                      </button>
+                      <button
+                        phx-click="delete_block"
+                        phx-value-id={b.id}
+                        data-confirm={"Remove #{b.name}?"}
+                        class="btn btn-ghost btn-sm text-error gap-1"
+                      >
+                        <span class="hero-trash w-4 h-4" aria-hidden="true"></span> Remove
+                      </button>
+                    </div>
+                  </div>
+                <% end %>
               </li>
             </ul>
           </div>

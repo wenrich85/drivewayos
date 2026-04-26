@@ -110,4 +110,55 @@ defmodule DrivewayOSWeb.Admin.ScheduleLiveTest do
       refute html =~ "Going away"
     end
   end
+
+  describe "edit" do
+    test "Edit toggles the inline form, save persists changes", %{
+      conn: conn,
+      tenant: tenant,
+      admin: admin
+    } do
+      {:ok, bt} =
+        BlockTemplate
+        |> Ash.Changeset.for_create(
+          :create,
+          %{
+            name: "Original",
+            day_of_week: 1,
+            start_time: ~T[09:00:00],
+            duration_minutes: 60,
+            capacity: 1
+          },
+          tenant: tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      conn = sign_in(conn, admin)
+
+      {:ok, lv, _} =
+        conn |> Map.put(:host, "#{tenant.slug}.lvh.me") |> live(~p"/admin/schedule")
+
+      html = render_click(lv, "edit_block", %{"id" => bt.id})
+      assert html =~ "edit-block-form-#{bt.id}"
+
+      lv
+      |> form("#edit-block-form-#{bt.id}", %{
+        "block" => %{
+          "name" => "Renamed",
+          "day_of_week" => "2",
+          "start_time" => "10:30",
+          "duration_minutes" => "90",
+          "capacity" => "2"
+        }
+      })
+      |> render_submit()
+
+      reloaded = Ash.get!(BlockTemplate, bt.id, tenant: tenant.id, authorize?: false)
+
+      assert reloaded.name == "Renamed"
+      assert reloaded.day_of_week == 2
+      assert reloaded.start_time == ~T[10:30:00]
+      assert reloaded.duration_minutes == 90
+      assert reloaded.capacity == 2
+    end
+  end
 end
