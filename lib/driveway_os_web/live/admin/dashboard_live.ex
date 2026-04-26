@@ -73,6 +73,28 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
     end
   end
 
+  def handle_event("start_appointment", %{"id" => id}, socket),
+    do: transition_appointment(socket, id, :start_wash)
+
+  def handle_event("complete_appointment", %{"id" => id}, socket),
+    do: transition_appointment(socket, id, :complete)
+
+  defp transition_appointment(socket, id, action) do
+    tenant_id = socket.assigns.current_tenant.id
+
+    case Ash.get(Appointment, id, tenant: tenant_id, authorize?: false) do
+      {:ok, appt} ->
+        appt
+        |> Ash.Changeset.for_update(action, %{})
+        |> Ash.update!(authorize?: false, tenant: tenant_id)
+
+        {:noreply, load_dashboard(socket)}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
   # --- Private ---
 
   defp load_dashboard(socket) do
@@ -105,6 +127,7 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
 
     pending = Enum.filter(appointments, &(&1.status == :pending))
     upcoming = Enum.filter(appointments, &(&1.status in [:pending, :confirmed]))
+    today = today_appointments(appointments, socket.assigns.current_tenant.timezone)
 
     {:ok, blocks} =
       BlockTemplate |> Ash.Query.set_tenant(tenant_id) |> Ash.read(authorize?: false)
@@ -125,7 +148,47 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
     |> assign(:service_map, service_map)
     |> assign(:customer_map, customer_map)
     |> assign(:checklist, checklist)
+    |> assign(:today, today)
   end
+
+  # Returns the subset of appointments scheduled within today's
+  # local-time window for the tenant's timezone, excluding cancelled
+  # ones. Sorted by scheduled_at ascending — chronological as the
+  # operator works through the day.
+  defp today_appointments(appointments, tz) do
+    {start_utc, end_utc} = local_day_bounds_utc(tz)
+
+    appointments
+    |> Enum.filter(fn a ->
+      a.status != :cancelled and
+        DateTime.compare(a.scheduled_at, start_utc) != :lt and
+        DateTime.compare(a.scheduled_at, end_utc) == :lt
+    end)
+    |> Enum.sort_by(& &1.scheduled_at, DateTime)
+  end
+
+  defp local_day_bounds_utc(tz) do
+    case DateTime.shift_zone(DateTime.utc_now(), tz) do
+      {:ok, now_local} ->
+        date = DateTime.to_date(now_local)
+        {:ok, midnight_local} = NaiveDateTime.new(date, ~T[00:00:00]) |> from_naive_in(tz)
+        next_local = DateTime.add(midnight_local, 86_400, :second)
+
+        {DateTime.shift_zone!(midnight_local, "Etc/UTC"),
+         DateTime.shift_zone!(next_local, "Etc/UTC")}
+
+      _ ->
+        # Tzdata not loaded or unknown zone — fall back to UTC. The
+        # widget still works, just at UTC-day boundaries.
+        now = DateTime.utc_now()
+        date = DateTime.to_date(now)
+        {:ok, start_utc} = NaiveDateTime.new(date, ~T[00:00:00]) |> from_naive_in("Etc/UTC")
+        {start_utc, DateTime.add(start_utc, 86_400, :second)}
+    end
+  end
+
+  defp from_naive_in({:ok, ndt}, tz), do: DateTime.from_naive(ndt, tz)
+  defp from_naive_in(other, _), do: other
 
   # Returns a list of `{title, blurb, href}` for the open onboarding
   # items only — completed ones drop out, so when everything's done
@@ -161,6 +224,19 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
   defp fmt_when(%DateTime{} = dt) do
     Calendar.strftime(dt, "%a %b %-d · %-I:%M %p")
   end
+
+  defp fmt_local_time(%DateTime{} = dt, tz) do
+    case DateTime.shift_zone(dt, tz) do
+      {:ok, local} -> Calendar.strftime(local, "%-I:%M %p")
+      _ -> Calendar.strftime(dt, "%-I:%M %p UTC")
+    end
+  end
+
+  defp status_badge(:pending), do: "badge-warning"
+  defp status_badge(:confirmed), do: "badge-info"
+  defp status_badge(:in_progress), do: "badge-primary"
+  defp status_badge(:completed), do: "badge-success"
+  defp status_badge(_), do: "badge-ghost"
 
   defp service_name(map, id), do: get_in(map, [id, Access.key(:name)]) || "Service"
 
@@ -247,6 +323,87 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
             <div class="stat-desc text-xs text-base-content/60">All time</div>
           </article>
         </div>
+
+        <section class="card bg-base-100 shadow-sm border border-base-300">
+          <div class="card-body p-6">
+            <div class="flex items-center justify-between flex-wrap gap-2">
+              <h2 class="card-title text-lg">Today</h2>
+              <span class="text-xs text-base-content/60">
+                {length(@today)} {if length(@today) == 1, do: "appointment", else: "appointments"}
+              </span>
+            </div>
+
+            <div :if={@today == []} class="text-center py-8 px-4">
+              <span class="hero-sun w-10 h-10 mx-auto text-base-content/30" aria-hidden="true"></span>
+              <h3 class="mt-3 font-semibold">Nothing on today</h3>
+              <p class="mt-1 text-sm text-base-content/60">
+                No bookings scheduled for {Calendar.strftime(Date.utc_today(), "%a %b %-d")}.
+              </p>
+            </div>
+
+            <ul :if={@today != []} class="divide-y divide-base-200 mt-2">
+              <li
+                :for={a <- @today}
+                class="py-4 flex items-start justify-between gap-3 flex-wrap"
+              >
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-mono text-sm tabular-nums">
+                      {fmt_local_time(a.scheduled_at, @current_tenant.timezone)}
+                    </span>
+                    <.link navigate={~p"/appointments/#{a.id}"} class="font-semibold link link-hover">
+                      {service_name(@service_map, a.service_type_id)}
+                    </.link>
+                    <span class={"badge badge-sm " <> status_badge(a.status)}>{a.status}</span>
+                  </div>
+                  <div class="text-sm text-base-content/70 mt-1 flex items-center gap-1 flex-wrap">
+                    <span class="hero-user w-4 h-4" aria-hidden="true"></span>
+                    {customer_name(@customer_map, a.customer_id)}
+                    <span class="text-base-content/40 mx-1">·</span>
+                    {a.vehicle_description}
+                  </div>
+                  <div class="text-xs text-base-content/60 truncate mt-1 flex items-center gap-1">
+                    <span class="hero-map-pin w-3 h-3 shrink-0" aria-hidden="true"></span>
+                    {a.service_address}
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                  <button
+                    :if={a.status == :pending}
+                    phx-click="confirm_appointment"
+                    phx-value-id={a.id}
+                    class="btn btn-success btn-sm gap-1"
+                  >
+                    <span class="hero-check w-4 h-4" aria-hidden="true"></span> Confirm
+                  </button>
+                  <button
+                    :if={a.status == :confirmed}
+                    phx-click="start_appointment"
+                    phx-value-id={a.id}
+                    class="btn btn-primary btn-sm gap-1"
+                  >
+                    <span class="hero-play w-4 h-4" aria-hidden="true"></span> Start
+                  </button>
+                  <button
+                    :if={a.status == :in_progress}
+                    phx-click="complete_appointment"
+                    phx-value-id={a.id}
+                    class="btn btn-success btn-sm gap-1"
+                  >
+                    <span class="hero-check-circle w-4 h-4" aria-hidden="true"></span> Complete
+                  </button>
+                  <span
+                    :if={a.status == :completed}
+                    class="text-sm text-success font-medium"
+                  >
+                    Done
+                  </span>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </section>
 
         <section class="card bg-base-100 shadow-sm border border-base-300">
           <div class="card-body p-6">

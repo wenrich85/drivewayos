@@ -7,6 +7,8 @@
 # General application configuration
 import Config
 
+config :elixir, :time_zone_database, Tzdata.TimeZoneDatabase
+
 config :driveway_os,
   namespace: DrivewayOS,
   ecto_repos: [DrivewayOS.Repo],

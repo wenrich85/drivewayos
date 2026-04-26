@@ -124,6 +124,12 @@ defmodule DrivewayOS.MixProject do
       {:telemetry_metrics, "~> 1.1"},
       {:telemetry_poller, "~> 1.3"},
 
+      # --- Time-zone database for DateTime.shift_zone/2 ---
+      # Tenants pick their local timezone; admin "today" widgets,
+      # appointment scheduling, and reminder windows all need to
+      # resolve UTC -> local correctly across DST.
+      {:tzdata, "~> 1.1"},
+
       # --- I18n + JSON + DNS clustering ---
       {:gettext, "~> 1.0"},
       {:jason, "~> 1.4"},

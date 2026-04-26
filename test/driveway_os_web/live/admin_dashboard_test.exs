@@ -183,6 +183,148 @@ defmodule DrivewayOSWeb.AdminDashboardTest do
     end
   end
 
+  describe "Today widget" do
+    test "lists appointments scheduled for today in tenant timezone", ctx do
+      tz = ctx.tenant.timezone
+      noon_today = local_today_at(tz, ~T[12:00:00])
+
+      {:ok, today_appt} =
+        Appointment
+        |> Ash.Changeset.for_create(
+          :book,
+          %{
+            customer_id: ctx.customer.id,
+            service_type_id: ctx.service.id,
+            scheduled_at: noon_today,
+            duration_minutes: ctx.service.duration_minutes,
+            price_cents: ctx.service.base_price_cents,
+            vehicle_description: "Today Truck",
+            service_address: "Today Ave"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      today_appt
+      |> Ash.Changeset.for_update(:confirm, %{})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
+
+      assert html =~ "Today Truck"
+      assert html =~ "Today"
+    end
+
+    test "Today widget shows the empty state when nothing is scheduled today", ctx do
+      tz = ctx.tenant.timezone
+      tomorrow_noon = local_today_at(tz, ~T[12:00:00]) |> DateTime.add(86_400, :second)
+
+      {:ok, _tomorrow} =
+        Appointment
+        |> Ash.Changeset.for_create(
+          :book,
+          %{
+            customer_id: ctx.customer.id,
+            service_type_id: ctx.service.id,
+            scheduled_at: tomorrow_noon,
+            duration_minutes: ctx.service.duration_minutes,
+            price_cents: ctx.service.base_price_cents,
+            vehicle_description: "Tomorrow Truck",
+            service_address: "Tomorrow Ave"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
+
+      # The Today widget itself should report empty even though
+      # the appointment is in tomorrow's slot (and would correctly
+      # appear in the pending list).
+      assert html =~ "Nothing on today"
+    end
+
+    test "Start button transitions a confirmed today-appointment to in_progress", ctx do
+      tz = ctx.tenant.timezone
+      noon_today = local_today_at(tz, ~T[12:00:00])
+
+      {:ok, appt} =
+        Appointment
+        |> Ash.Changeset.for_create(
+          :book,
+          %{
+            customer_id: ctx.customer.id,
+            service_type_id: ctx.service.id,
+            scheduled_at: noon_today,
+            duration_minutes: ctx.service.duration_minutes,
+            price_cents: ctx.service.base_price_cents,
+            vehicle_description: "Start Me",
+            service_address: "Start Ave"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      appt
+      |> Ash.Changeset.for_update(:confirm, %{})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, _html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
+
+      render_click(lv, "start_appointment", %{"id" => appt.id})
+
+      {:ok, reloaded} = Ash.get(Appointment, appt.id, tenant: ctx.tenant.id, authorize?: false)
+      assert reloaded.status == :in_progress
+    end
+
+    test "Complete button transitions an in_progress today-appointment to completed", ctx do
+      tz = ctx.tenant.timezone
+      noon_today = local_today_at(tz, ~T[12:00:00])
+
+      {:ok, appt} =
+        Appointment
+        |> Ash.Changeset.for_create(
+          :book,
+          %{
+            customer_id: ctx.customer.id,
+            service_type_id: ctx.service.id,
+            scheduled_at: noon_today,
+            duration_minutes: ctx.service.duration_minutes,
+            price_cents: ctx.service.base_price_cents,
+            vehicle_description: "Done Me",
+            service_address: "Done Ave"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      appt
+      |> Ash.Changeset.for_update(:confirm, %{})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+      |> Ash.Changeset.for_update(:start_wash, %{})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, _html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
+
+      render_click(lv, "complete_appointment", %{"id" => appt.id})
+
+      {:ok, reloaded} = Ash.get(Appointment, appt.id, tenant: ctx.tenant.id, authorize?: false)
+      assert reloaded.status == :completed
+    end
+  end
+
   defp book!(tenant, customer, service) do
     Appointment
     |> Ash.Changeset.for_create(
@@ -200,6 +342,25 @@ defmodule DrivewayOSWeb.AdminDashboardTest do
       tenant: tenant.id
     )
     |> Ash.create(authorize?: false)
+  end
+
+  # Returns a UTC DateTime that's both "in the future" (so the
+  # appointment validator accepts it) AND inside today's local-day
+  # window in `tz` (so the Today widget picks it up). Strategy:
+  # take noon-local-today; if that's already passed, use now + 30
+  # minutes which is safely later today except in the last
+  # half-hour of the day (rare in CI / dev).
+  defp local_today_at(tz, %Time{} = time_of_day) do
+    {:ok, now_local} = DateTime.shift_zone(DateTime.utc_now(), tz)
+    {:ok, ndt} = NaiveDateTime.new(DateTime.to_date(now_local), time_of_day)
+    {:ok, dt_local} = DateTime.from_naive(ndt, tz)
+    candidate = DateTime.shift_zone!(dt_local, "Etc/UTC") |> DateTime.truncate(:second)
+
+    if DateTime.compare(candidate, DateTime.utc_now()) == :gt do
+      candidate
+    else
+      DateTime.utc_now() |> DateTime.add(1800, :second) |> DateTime.truncate(:second)
+    end
   end
 
   defp sign_in(conn, customer) do
