@@ -197,6 +197,52 @@ defmodule DrivewayOSWeb.BookingSuccessLiveTest do
       assert DateTime.diff(sub.starts_at, appt.scheduled_at, :day) == 14
     end
 
+    test "Starter tenant does NOT show the subscribe CTA (feature gated)", %{conn: conn} do
+      {:ok, starter_tenant} =
+        Tenant
+        |> Ash.Changeset.for_create(:create, %{
+          slug: "starsucc-#{System.unique_integer([:positive])}",
+          display_name: "Starter Success",
+          plan_tier: :starter
+        })
+        |> Ash.create(authorize?: false)
+
+      {:ok, _service} =
+        ServiceType
+        |> Ash.Changeset.for_create(
+          :create,
+          %{slug: "basic", name: "Basic Wash", base_price_cents: 5_000, duration_minutes: 45},
+          tenant: starter_tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      DrivewayOS.Plans.flush_cache()
+
+      {:ok, customer} =
+        Customer
+        |> Ash.Changeset.for_create(
+          :register_with_password,
+          %{
+            email: "starsub-#{System.unique_integer([:positive])}@example.com",
+            password: "Password123!",
+            password_confirmation: "Password123!",
+            name: "StarSub"
+          },
+          tenant: starter_tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      appt = book_for(starter_tenant, customer)
+
+      {:ok, _lv, html} =
+        conn
+        |> sign_in(customer)
+        |> Map.put(:host, "#{starter_tenant.slug}.lvh.me")
+        |> live(~p"/book/success/#{appt.id}")
+
+      refute html =~ "Make it recurring?"
+    end
+
     test "guest does NOT see the subscribe CTA", %{conn: conn, tenant: tenant} do
       {:ok, guest} =
         Customer

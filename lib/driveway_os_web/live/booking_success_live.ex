@@ -15,6 +15,7 @@ defmodule DrivewayOSWeb.BookingSuccessLive do
   alias DrivewayOS.Accounts.Customer
   alias DrivewayOS.Mailer
   alias DrivewayOS.Notifications.BookingEmail
+  alias DrivewayOS.Plans
   alias DrivewayOS.Scheduling.{Appointment, ServiceType, Subscription}
 
   @impl true
@@ -115,13 +116,20 @@ defmodule DrivewayOSWeb.BookingSuccessLive do
     end
   end
 
-  # Self-serve subscribe is gated to: signed-in (so we have a real
-  # account to attach), non-guest (their account is ephemeral), and
-  # the customer who booked this very appointment (no point letting
-  # admins subscribe their customers from this page — that's H4's job
-  # via /admin/customers/:id).
-  defp can_subscribe?(%{current_customer: %Customer{id: id}, booker: %Customer{id: id, guest?: false}}),
-    do: true
+  # Self-serve subscribe is gated to:
+  #   * tenant is on a plan that includes :customer_subscriptions
+  #     (Starter is excluded; Pro+ have it via data migration)
+  #   * signed-in (we need a real account to attach)
+  #   * non-guest (guest accounts are ephemeral; H5 doesn't apply)
+  #   * the customer who booked this appointment (admins use H4
+  #     on /admin/customers/:id, not this page)
+  defp can_subscribe?(%{
+         current_tenant: tenant,
+         current_customer: %Customer{id: id},
+         booker: %Customer{id: id, guest?: false}
+       }) do
+    Plans.tenant_can?(tenant, :customer_subscriptions)
+  end
 
   defp can_subscribe?(_), do: false
 

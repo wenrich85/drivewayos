@@ -14,6 +14,7 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
   on_mount DrivewayOSWeb.LoadCustomerHook
 
   alias DrivewayOS.Accounts.Customer
+  alias DrivewayOS.Plans
   alias DrivewayOS.Scheduling.{Appointment, ServiceType, Subscription}
 
   require Ash.Query
@@ -256,7 +257,10 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
           </div>
         </section>
 
-        <section class="card bg-base-100 shadow-sm border border-base-300">
+        <section
+          :if={Plans.tenant_can?(@current_tenant, :customer_subscriptions)}
+          class="card bg-base-100 shadow-sm border border-base-300"
+        >
           <div class="card-body p-6">
             <div class="flex items-center justify-between flex-wrap gap-2">
               <h2 class="card-title text-lg">Recurring bookings</h2>
