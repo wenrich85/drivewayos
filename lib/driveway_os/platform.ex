@@ -99,14 +99,56 @@ defmodule DrivewayOS.Platform do
   end
 
   @doc """
-  Mark a custom domain verified. After this returns, `LoadTenant`
-  will resolve requests to `domain.hostname` to the owning tenant.
+  Verify a custom domain by checking DNS. Either:
+
+    * The hostname's CNAME points at the configured edge target, OR
+    * `_drivewayos.<hostname>` has a TXT record matching the
+      `verification_token`
+
+  Returns `{:ok, domain}` and persists `verified_at` on success;
+  `{:error, :dns_not_pointing_here}` otherwise (the row is left
+  un-verified so a retry is just another click).
   """
-  @spec verify_custom_domain(CustomDomain.t()) :: {:ok, CustomDomain.t()} | {:error, term}
+  @spec verify_custom_domain(CustomDomain.t()) ::
+          {:ok, CustomDomain.t()} | {:error, :dns_not_pointing_here | term()}
   def verify_custom_domain(%CustomDomain{} = domain) do
-    domain
-    |> Ash.Changeset.for_update(:verify, %{})
-    |> Ash.update(authorize?: false)
+    if dns_points_here?(domain) do
+      domain
+      |> Ash.Changeset.for_update(:verify, %{})
+      |> Ash.update(authorize?: false)
+    else
+      {:error, :dns_not_pointing_here}
+    end
+  end
+
+  defp dns_points_here?(%CustomDomain{} = domain) do
+    cname_match?(domain) or txt_match?(domain)
+  end
+
+  defp cname_match?(%CustomDomain{hostname: hostname}) do
+    expected = expected_cname_target() |> String.downcase() |> String.trim_trailing(".")
+
+    case DrivewayOS.Platform.DnsResolver.lookup_cname(hostname) do
+      {:ok, records} ->
+        Enum.any?(records, fn r ->
+          r |> String.downcase() |> String.trim_trailing(".") |> Kernel.==(expected)
+        end)
+
+      _ ->
+        false
+    end
+  end
+
+  defp txt_match?(%CustomDomain{hostname: hostname, verification_token: token}) do
+    case DrivewayOS.Platform.DnsResolver.lookup_txt("_drivewayos." <> hostname) do
+      {:ok, records} -> Enum.member?(records, token)
+      _ -> false
+    end
+  end
+
+  defp expected_cname_target do
+    Application.get_env(:driveway_os, :custom_domain_cname_target) ||
+      "edge." <> Application.fetch_env!(:driveway_os, :platform_host)
   end
 
   @doc """

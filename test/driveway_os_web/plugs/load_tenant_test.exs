@@ -14,6 +14,7 @@ defmodule DrivewayOSWeb.Plugs.LoadTenantTest do
   """
   use DrivewayOS.DataCase, async: false
 
+  import Mox
   import Plug.Test
   import Plug.Conn
 
@@ -21,6 +22,18 @@ defmodule DrivewayOSWeb.Plugs.LoadTenantTest do
   alias DrivewayOSWeb.Plugs.LoadTenant
 
   @opts LoadTenant.init([])
+
+  setup :set_mox_global
+
+  setup do
+    # Permissive DNS stub so any verify_custom_domain call in this
+    # file's setup paths just succeeds.
+    DrivewayOS.Platform.DnsResolverMock
+    |> stub(:lookup_cname, fn _ -> {:ok, ["edge.lvh.me"]} end)
+    |> stub(:lookup_txt, fn _ -> {:ok, []} end)
+
+    :ok
+  end
 
   setup do
     {:ok, tenant} =

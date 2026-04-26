@@ -17,3 +17,13 @@ Mox.defmock(DrivewayOS.Billing.StripeClientMock,
 )
 
 Application.put_env(:driveway_os, :stripe_client, DrivewayOS.Billing.StripeClientMock)
+
+# DNS resolver mock — used by Platform.verify_custom_domain so
+# tests don't actually hit the resolver. Defaults to a permissive
+# stub that returns no records (the test fails verification by
+# default; tests that need success set explicit expectations).
+Mox.defmock(DrivewayOS.Platform.DnsResolverMock,
+  for: DrivewayOS.Platform.DnsResolver
+)
+
+Application.put_env(:driveway_os, :dns_resolver, DrivewayOS.Platform.DnsResolverMock)

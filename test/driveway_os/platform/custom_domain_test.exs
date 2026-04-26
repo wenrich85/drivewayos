@@ -16,12 +16,25 @@ defmodule DrivewayOS.Platform.CustomDomainTest do
   """
   use DrivewayOS.DataCase, async: false
 
+  import Mox
+
   alias DrivewayOS.Platform
   alias DrivewayOS.Platform.{CustomDomain, Tenant}
 
   require Ash.Query
 
+  # Tests that already call verify_custom_domain expect it to
+  # succeed; stub the DNS resolver permissively at module level so
+  # we don't have to set per-test expectations everywhere. The
+  # describe blocks that test failure paths set their own explicit
+  # expectations on top of these stubs.
+  setup :set_mox_global
+
   setup do
+    DrivewayOS.Platform.DnsResolverMock
+    |> stub(:lookup_cname, fn _ -> {:ok, ["edge.lvh.me"]} end)
+    |> stub(:lookup_txt, fn _ -> {:ok, []} end)
+
     {:ok, tenant} =
       Tenant
       |> Ash.Changeset.for_create(:create, %{
@@ -117,6 +130,51 @@ defmodule DrivewayOS.Platform.CustomDomainTest do
       assert cd.tenant_id == tenant.id
       assert cd.hostname == hostname
       assert is_nil(cd.verified_at)
+    end
+  end
+
+  describe "Platform.verify_custom_domain/1 (real DNS check)" do
+    import Mox
+    setup :verify_on_exit!
+
+    test "verifies when CNAME points at our edge", %{tenant: tenant} do
+      hostname = "cname-#{System.unique_integer([:positive])}.example.com"
+      {:ok, cd} = Platform.add_custom_domain(tenant, hostname)
+      expected_target = "edge.lvh.me"
+
+      DrivewayOS.Platform.DnsResolverMock
+      |> expect(:lookup_cname, fn ^hostname -> {:ok, [expected_target]} end)
+
+      assert {:ok, verified} = Platform.verify_custom_domain(cd)
+      assert %DateTime{} = verified.verified_at
+    end
+
+    test "verifies via TXT token when CNAME doesn't match", %{tenant: tenant} do
+      hostname = "txt-#{System.unique_integer([:positive])}.example.com"
+      {:ok, cd} = Platform.add_custom_domain(tenant, hostname)
+
+      DrivewayOS.Platform.DnsResolverMock
+      |> expect(:lookup_cname, fn _ -> {:ok, ["wrong-target.example.com"]} end)
+      |> expect(:lookup_txt, fn "_drivewayos." <> ^hostname ->
+        {:ok, [cd.verification_token]}
+      end)
+
+      assert {:ok, verified} = Platform.verify_custom_domain(cd)
+      assert %DateTime{} = verified.verified_at
+    end
+
+    test "rejects when neither CNAME nor TXT match", %{tenant: tenant} do
+      hostname = "fail-#{System.unique_integer([:positive])}.example.com"
+      {:ok, cd} = Platform.add_custom_domain(tenant, hostname)
+
+      DrivewayOS.Platform.DnsResolverMock
+      |> expect(:lookup_cname, fn _ -> {:ok, []} end)
+      |> expect(:lookup_txt, fn _ -> {:ok, []} end)
+
+      assert {:error, :dns_not_pointing_here} = Platform.verify_custom_domain(cd)
+
+      reloaded = Ash.get!(DrivewayOS.Platform.CustomDomain, cd.id, authorize?: false)
+      assert is_nil(reloaded.verified_at)
     end
   end
 

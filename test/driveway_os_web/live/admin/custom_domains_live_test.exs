@@ -10,9 +10,20 @@ defmodule DrivewayOSWeb.Admin.CustomDomainsLiveTest do
   """
   use DrivewayOSWeb.ConnCase, async: false
 
+  import Mox
   import Phoenix.LiveViewTest
 
   alias DrivewayOS.Platform
+
+  setup :set_mox_global
+
+  setup do
+    DrivewayOS.Platform.DnsResolverMock
+    |> stub(:lookup_cname, fn _ -> {:ok, ["edge.lvh.me"]} end)
+    |> stub(:lookup_txt, fn _ -> {:ok, []} end)
+
+    :ok
+  end
 
   setup do
     {:ok, %{tenant: tenant, admin: admin}} =

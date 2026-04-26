@@ -233,6 +233,14 @@ defmodule DrivewayOSWeb.Features.EndToEndTest do
 
   describe "custom domains" do
     feature "tenant admin can add + verify a custom domain", %{session: session} do
+      # Wallaby's endpoint runs in a separate process from the test,
+      # so Mox per-process expectations don't reach it. Swap in a
+      # tiny "always succeeds" DNS resolver for this test only and
+      # put the Mox back on exit.
+      previous = Application.get_env(:driveway_os, :dns_resolver)
+      Application.put_env(:driveway_os, :dns_resolver, DrivewayOSWeb.AlwaysOkDnsResolver)
+      on_exit(fn -> Application.put_env(:driveway_os, :dns_resolver, previous) end)
+
       %{tenant: tenant, admin: admin} =
         provision_test_tenant!(display_name: "Custom Domain Co")
 

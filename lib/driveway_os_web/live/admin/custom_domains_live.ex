@@ -92,8 +92,24 @@ defmodule DrivewayOSWeb.Admin.CustomDomainsLive do
          |> Ash.Query.filter(id == ^id and tenant_id == ^tenant_id)
          |> Ash.read_one(authorize?: false) do
       {:ok, %CustomDomain{} = cd} ->
-        {:ok, _} = Platform.verify_custom_domain(cd)
-        {:noreply, load_domains(socket)}
+        case Platform.verify_custom_domain(cd) do
+          {:ok, _} ->
+            {:noreply,
+             socket
+             |> assign(:form_error, nil)
+             |> load_domains()}
+
+          {:error, :dns_not_pointing_here} ->
+            {:noreply,
+             assign(
+               socket,
+               :form_error,
+               "DNS isn't pointing here yet. CNAME or TXT record not found — give it a few minutes after adding records and try again."
+             )}
+
+          {:error, _other} ->
+            {:noreply, assign(socket, :form_error, "Verification failed. Try again.")}
+        end
 
       _ ->
         {:noreply, socket}
