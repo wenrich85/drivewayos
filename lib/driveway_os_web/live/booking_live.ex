@@ -47,7 +47,7 @@ defmodule DrivewayOSWeb.BookingLive do
   @application_fee_bps 1000
 
   @impl true
-  def mount(_params, _session, socket) do
+  def mount(params, _session, socket) do
     cond do
       is_nil(socket.assigns[:current_tenant]) ->
         {:ok, push_navigate(socket, to: ~p"/")}
@@ -74,7 +74,18 @@ defmodule DrivewayOSWeb.BookingLive do
             do: load_saved_addresses(customer.id, tenant.id),
             else: []
 
-        {restored_step, restored_data} = restore_draft(tenant.id, customer)
+        {restored_step, restored_data} =
+          case params["from"] do
+            from when is_binary(from) and from != "" ->
+              # ?from=<appt_id> seeds the wizard with that prior
+              # appointment's service / vehicle / address. The
+              # signed-in customer must own it (Ash multitenancy
+              # filters cross-tenant; we double-check ownership).
+              prefill_from_appointment(tenant.id, customer, from)
+
+            _ ->
+              restore_draft(tenant.id, customer)
+          end
 
         socket =
           socket
@@ -467,6 +478,34 @@ defmodule DrivewayOSWeb.BookingLive do
   end
 
   # --- Draft persistence (signed-in customers only) ---
+
+  # Returns {step, data} when the customer's referenced appointment
+  # is fetchable + ownership-checked; falls back to the normal draft
+  # restore path otherwise.
+  defp prefill_from_appointment(_tenant_id, nil, _from), do: {:service, blank_data()}
+
+  defp prefill_from_appointment(_tenant_id, %{guest?: true}, _from),
+    do: {:service, blank_data()}
+
+  defp prefill_from_appointment(tenant_id, customer, from) do
+    case Ash.get(Appointment, from, tenant: tenant_id, authorize?: false) do
+      {:ok, %{customer_id: cid} = appt} when cid == customer.id ->
+        data =
+          blank_data()
+          |> Map.merge(%{
+            "service_type_id" => appt.service_type_id,
+            "vehicle_id" => appt.vehicle_id,
+            "vehicle_description" => appt.vehicle_description,
+            "address_id" => appt.address_id,
+            "service_address" => appt.service_address
+          })
+
+        {:vehicle, data}
+
+      _ ->
+        restore_draft(tenant_id, customer)
+    end
+  end
 
   defp restore_draft(_tenant_id, nil), do: {:service, blank_data()}
 

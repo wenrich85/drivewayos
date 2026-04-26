@@ -444,6 +444,21 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
                 <span class="hero-x-mark w-4 h-4" aria-hidden="true"></span> Cancel
               </button>
 
+              <%!-- Book again: customer-facing utility on terminal-state
+                   appointments. Skips the rebook hop for guests since
+                   their account is ephemeral. --%>
+              <.link
+                :if={
+                  @appt.status in [:completed, :cancelled] and
+                    @current_customer && @current_customer.id == @booker.id and
+                    not @booker.guest?
+                }
+                navigate={~p"/book?from=#{@appt.id}"}
+                class="btn btn-primary btn-sm gap-1"
+              >
+                <span class="hero-arrow-path w-4 h-4" aria-hidden="true"></span> Book again
+              </.link>
+
               <p
                 :if={@appt.status in [:completed, :cancelled]}
                 class="text-sm text-base-content/60"

@@ -708,6 +708,120 @@ defmodule DrivewayOSWeb.BookingLiveTest do
     end
   end
 
+  describe "rebook from a prior appointment" do
+    test "?from=<id> prefills the wizard at :vehicle with prior service + address", ctx do
+      # Promote tenant to Pro so saved-vehicle path is exercised. Add
+      # a saved vehicle + a prior appointment that references it.
+      ctx.tenant
+      |> Ash.Changeset.for_update(:update, %{plan_tier: :pro})
+      |> Ash.update!(authorize?: false)
+
+      DrivewayOS.Plans.flush_cache()
+
+      {:ok, vehicle} =
+        DrivewayOS.Fleet.Vehicle
+        |> Ash.Changeset.for_create(
+          :add,
+          %{
+            customer_id: ctx.customer.id,
+            year: 2022,
+            make: "Subaru",
+            model: "Outback",
+            color: "Blue"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      {:ok, [s | _]} =
+        ServiceType |> Ash.Query.set_tenant(ctx.tenant.id) |> Ash.read(authorize?: false)
+
+      {:ok, prior} =
+        Appointment
+        |> Ash.Changeset.for_create(
+          :book,
+          %{
+            customer_id: ctx.customer.id,
+            service_type_id: s.id,
+            vehicle_id: vehicle.id,
+            scheduled_at:
+              DateTime.utc_now() |> DateTime.add(86_400, :second) |> DateTime.truncate(:second),
+            duration_minutes: s.duration_minutes,
+            price_cents: s.base_price_cents,
+            vehicle_description: "2022 Subaru Outback (Blue)",
+            service_address: "123 Cedar St, San Antonio TX 78261"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, _lv, html} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/book?from=#{prior.id}")
+
+      # We landed on :vehicle (skipped :service because it's already
+      # known) and the prior address ended up in wizard_data.
+      assert html =~ "step-vehicle-pick-form"
+      # The prior appointment's vehicle_description survives into
+      # the wizard's accumulated data.
+      assert html =~ "2022 Subaru Outback (Blue)" or html =~ "Subaru"
+    end
+
+    test "?from=<other-customer-id> falls back to normal mount (doesn't leak)", ctx do
+      # Prior appointment owned by a DIFFERENT customer — the rebook
+      # path must NOT prefill from it.
+      {:ok, stranger} =
+        Customer
+        |> Ash.Changeset.for_create(
+          :register_with_password,
+          %{
+            email: "stranger-#{System.unique_integer([:positive])}@example.com",
+            password: "Password123!",
+            password_confirmation: "Password123!",
+            name: "Stranger"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      {:ok, [s | _]} =
+        ServiceType |> Ash.Query.set_tenant(ctx.tenant.id) |> Ash.read(authorize?: false)
+
+      {:ok, stranger_appt} =
+        Appointment
+        |> Ash.Changeset.for_create(
+          :book,
+          %{
+            customer_id: stranger.id,
+            service_type_id: s.id,
+            scheduled_at:
+              DateTime.utc_now() |> DateTime.add(86_400, :second) |> DateTime.truncate(:second),
+            duration_minutes: s.duration_minutes,
+            price_cents: s.base_price_cents,
+            vehicle_description: "Stranger Truck",
+            service_address: "999 Stranger Ave"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, _lv, html} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/book?from=#{stranger_appt.id}")
+
+      # Wizard at :service step, no leaked stranger data.
+      assert html =~ ~s(name="booking[service_type_id]")
+      refute html =~ "Stranger Truck"
+      refute html =~ "999 Stranger Ave"
+    end
+  end
+
   describe "operator alert on new booking" do
     setup ctx do
       {:ok, admin} =
