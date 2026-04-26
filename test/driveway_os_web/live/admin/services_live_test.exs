@@ -91,4 +91,63 @@ defmodule DrivewayOSWeb.Admin.ServicesLiveTest do
       assert reloaded.active == false
     end
   end
+
+  describe "edit" do
+    test "Edit toggles inline form, save persists name + price + duration", %{
+      conn: conn,
+      tenant: tenant,
+      admin: admin
+    } do
+      {:ok, [svc | _]} =
+        ServiceType |> Ash.Query.set_tenant(tenant.id) |> Ash.read(authorize?: false)
+
+      conn = sign_in(conn, admin)
+
+      {:ok, lv, _} =
+        conn |> Map.put(:host, "#{tenant.slug}.lvh.me") |> live(~p"/admin/services")
+
+      html = render_click(lv, "edit_service", %{"id" => svc.id})
+      assert html =~ "edit-service-form-#{svc.id}"
+
+      lv
+      |> form("#edit-service-form-#{svc.id}", %{
+        "service" => %{
+          "name" => "Express Wash",
+          "base_price_dollars" => "75.00",
+          "duration_minutes" => "30",
+          "description" => "Quick exterior only"
+        }
+      })
+      |> render_submit()
+
+      reloaded = Ash.get!(ServiceType, svc.id, tenant: tenant.id, authorize?: false)
+      assert reloaded.name == "Express Wash"
+      assert reloaded.base_price_cents == 7500
+      assert reloaded.duration_minutes == 30
+      assert reloaded.description == "Quick exterior only"
+    end
+
+    test "Cancel returns to read mode without changing the row", %{
+      conn: conn,
+      tenant: tenant,
+      admin: admin
+    } do
+      {:ok, [svc | _]} =
+        ServiceType |> Ash.Query.set_tenant(tenant.id) |> Ash.read(authorize?: false)
+      original_name = svc.name
+
+      conn = sign_in(conn, admin)
+
+      {:ok, lv, _} =
+        conn |> Map.put(:host, "#{tenant.slug}.lvh.me") |> live(~p"/admin/services")
+
+      render_click(lv, "edit_service", %{"id" => svc.id})
+      html = render_click(lv, "cancel_edit")
+
+      refute html =~ "edit-service-form-#{svc.id}"
+
+      reloaded = Ash.get!(ServiceType, svc.id, tenant: tenant.id, authorize?: false)
+      assert reloaded.name == original_name
+    end
+  end
 end

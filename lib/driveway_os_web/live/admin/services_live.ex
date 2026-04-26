@@ -36,7 +36,47 @@ defmodule DrivewayOSWeb.Admin.ServicesLive do
          socket
          |> assign(:page_title, "Services")
          |> assign(:form_error, nil)
+         |> assign(:editing_id, nil)
+         |> assign(:edit_error, nil)
          |> load_services()}
+    end
+  end
+
+  def handle_event("edit_service", %{"id" => id}, socket) do
+    {:noreply, socket |> assign(:editing_id, id) |> assign(:edit_error, nil)}
+  end
+
+  def handle_event("cancel_edit", _, socket) do
+    {:noreply, socket |> assign(:editing_id, nil) |> assign(:edit_error, nil)}
+  end
+
+  def handle_event("save_edit", %{"id" => id, "service" => params}, socket) do
+    tenant_id = socket.assigns.current_tenant.id
+
+    attrs = %{
+      name: params["name"] |> to_string() |> String.trim(),
+      description: params["description"],
+      base_price_cents: dollars_to_cents(params["base_price_dollars"]),
+      duration_minutes: parse_int(params["duration_minutes"])
+    }
+
+    with {:ok, svc} <- Ash.get(ServiceType, id, tenant: tenant_id, authorize?: false),
+         {:ok, _updated} <-
+           svc
+           |> Ash.Changeset.for_update(:update, attrs)
+           |> Ash.update(authorize?: false, tenant: tenant_id) do
+      {:noreply,
+       socket
+       |> assign(:editing_id, nil)
+       |> assign(:edit_error, nil)
+       |> load_services()}
+    else
+      {:error, %Ash.Error.Invalid{errors: errors}} ->
+        msg = errors |> Enum.map(&Map.get(&1, :message, "is invalid")) |> Enum.join("; ")
+        {:noreply, assign(socket, :edit_error, msg)}
+
+      _ ->
+        {:noreply, assign(socket, :edit_error, "Could not save changes.")}
     end
   end
 
@@ -240,33 +280,117 @@ defmodule DrivewayOSWeb.Admin.ServicesLive do
             </div>
 
             <ul :if={@services != []} class="divide-y divide-base-200">
-              <li
-                :for={s <- @services}
-                class="py-4 flex items-center justify-between gap-3 flex-wrap"
-              >
-                <div class="flex-1 min-w-0">
-                  <div class="font-semibold flex items-center gap-2">
-                    <span>{s.name}</span>
-                    <span :if={not s.active} class="badge badge-ghost badge-sm">Inactive</span>
+              <li :for={s <- @services} class="py-4">
+                <%= if @editing_id == s.id do %>
+                  <div :if={@edit_error} role="alert" class="alert alert-error mb-3 text-sm">
+                    {@edit_error}
                   </div>
-                  <div class="text-sm text-base-content/70 mt-0.5">
-                    {fmt_price(s.base_price_cents)} · {s.duration_minutes} min
+                  <form
+                    id={"edit-service-form-#{s.id}"}
+                    phx-submit="save_edit"
+                    phx-value-id={s.id}
+                    class="grid grid-cols-1 md:grid-cols-6 gap-3"
+                  >
+
+                    <div class="md:col-span-3">
+                      <label class="label" for={"edit-name-#{s.id}"}>
+                        <span class="label-text font-medium">Name</span>
+                      </label>
+                      <input
+                        id={"edit-name-#{s.id}"}
+                        type="text"
+                        name="service[name]"
+                        value={s.name}
+                        class="input input-bordered w-full"
+                        required
+                      />
+                    </div>
+                    <div class="md:col-span-3">
+                      <label class="label" for={"edit-price-#{s.id}"}>
+                        <span class="label-text font-medium">Price (USD)</span>
+                      </label>
+                      <input
+                        id={"edit-price-#{s.id}"}
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        name="service[base_price_dollars]"
+                        value={:erlang.float_to_binary(s.base_price_cents / 100, decimals: 2)}
+                        class="input input-bordered w-full"
+                        required
+                      />
+                    </div>
+                    <div class="md:col-span-3">
+                      <label class="label" for={"edit-duration-#{s.id}"}>
+                        <span class="label-text font-medium">Duration (min)</span>
+                      </label>
+                      <input
+                        id={"edit-duration-#{s.id}"}
+                        type="number"
+                        step="5"
+                        min="1"
+                        name="service[duration_minutes]"
+                        value={s.duration_minutes}
+                        class="input input-bordered w-full"
+                        required
+                      />
+                    </div>
+                    <div class="md:col-span-6">
+                      <label class="label" for={"edit-desc-#{s.id}"}>
+                        <span class="label-text font-medium">Description</span>
+                        <span class="label-text-alt text-base-content/50">Optional</span>
+                      </label>
+                      <textarea
+                        id={"edit-desc-#{s.id}"}
+                        name="service[description]"
+                        rows="2"
+                        class="textarea textarea-bordered w-full"
+                      >{s.description}</textarea>
+                    </div>
+
+                    <div class="md:col-span-6 flex justify-end gap-2">
+                      <button type="button" phx-click="cancel_edit" class="btn btn-ghost btn-sm">
+                        Cancel
+                      </button>
+                      <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                    </div>
+                  </form>
+                <% else %>
+                  <div class="flex items-center justify-between gap-3 flex-wrap">
+                    <div class="flex-1 min-w-0">
+                      <div class="font-semibold flex items-center gap-2">
+                        <span>{s.name}</span>
+                        <span :if={not s.active} class="badge badge-ghost badge-sm">Inactive</span>
+                      </div>
+                      <div class="text-sm text-base-content/70 mt-0.5">
+                        {fmt_price(s.base_price_cents)} · {s.duration_minutes} min
+                      </div>
+                      <div :if={s.description} class="text-xs text-base-content/60 mt-1">
+                        {s.description}
+                      </div>
+                    </div>
+                    <div class="flex gap-2">
+                      <button
+                        phx-click="edit_service"
+                        phx-value-id={s.id}
+                        class="btn btn-ghost btn-sm gap-1"
+                      >
+                        <span class="hero-pencil w-4 h-4" aria-hidden="true"></span> Edit
+                      </button>
+                      <button
+                        phx-click="toggle_active"
+                        phx-value-id={s.id}
+                        class={"btn btn-sm gap-1 #{if s.active, do: "btn-ghost", else: "btn-success"}"}
+                      >
+                        <span
+                          class={if s.active, do: "hero-pause w-4 h-4", else: "hero-play w-4 h-4"}
+                          aria-hidden="true"
+                        ></span>
+                        {if s.active, do: "Deactivate", else: "Activate"}
+                      </button>
+                    </div>
                   </div>
-                  <div :if={s.description} class="text-xs text-base-content/60 mt-1">
-                    {s.description}
-                  </div>
-                </div>
-                <button
-                  phx-click="toggle_active"
-                  phx-value-id={s.id}
-                  class={"btn btn-sm gap-1 #{if s.active, do: "btn-ghost", else: "btn-success"}"}
-                >
-                  <span
-                    class={if s.active, do: "hero-pause w-4 h-4", else: "hero-play w-4 h-4"}
-                    aria-hidden="true"
-                  ></span>
-                  {if s.active, do: "Deactivate", else: "Activate"}
-                </button>
+                <% end %>
               </li>
             </ul>
           </div>
