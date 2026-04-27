@@ -22,6 +22,9 @@ defmodule DrivewayOS.Scheduling.SubscriptionScheduler do
   require Ash.Query
   require Logger
 
+  alias DrivewayOS.Accounts.Customer
+  alias DrivewayOS.Mailer
+  alias DrivewayOS.Notifications.BookingEmail
   alias DrivewayOS.Platform.Tenant
   alias DrivewayOS.Scheduling.{Appointment, ServiceType, Subscription}
 
@@ -110,7 +113,7 @@ defmodule DrivewayOS.Scheduling.SubscriptionScheduler do
   defp materialize_one(tenant, sub) do
     with {:ok, service} <-
            Ash.get(ServiceType, sub.service_type_id, tenant: tenant.id, authorize?: false),
-         {:ok, _appt} <-
+         {:ok, appt} <-
            Appointment
            |> Ash.Changeset.for_create(
              :book,
@@ -133,6 +136,7 @@ defmodule DrivewayOS.Scheduling.SubscriptionScheduler do
            sub
            |> Ash.Changeset.for_update(:advance_next_run, %{ran_at: DateTime.utc_now()})
            |> Ash.update(authorize?: false, tenant: tenant.id) do
+      notify_customer_of_auto_booking(tenant, sub, appt, service)
       true
     else
       err ->
@@ -142,6 +146,22 @@ defmodule DrivewayOS.Scheduling.SubscriptionScheduler do
 
         false
     end
+  end
+
+  # Best-effort customer email — a mailer hiccup must not roll back
+  # the appointment we just created or undo the scheduler's
+  # next_run_at advance.
+  defp notify_customer_of_auto_booking(tenant, sub, appt, service) do
+    with {:ok, customer} <-
+           Ash.get(Customer, sub.customer_id, tenant: tenant.id, authorize?: false) do
+      tenant
+      |> BookingEmail.subscription_appointment_created(customer, appt, service)
+      |> Mailer.deliver()
+    end
+
+    :ok
+  rescue
+    _ -> :ok
   end
 
   defp subscription_note(nil), do: "Created from subscription."

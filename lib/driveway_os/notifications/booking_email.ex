@@ -110,6 +110,49 @@ defmodule DrivewayOS.Notifications.BookingEmail do
   end
 
   @doc """
+  Customer-side notification: their recurring subscription just
+  materialized into a concrete Appointment N days out. Distinct
+  from `confirmation/4` because the customer didn't actively
+  click "Book" — we want them to know an auto-booking landed and
+  give them an obvious cancel path.
+  """
+  @spec subscription_appointment_created(
+          Tenant.t(),
+          Customer.t(),
+          Appointment.t(),
+          ServiceType.t()
+        ) :: Swoosh.Email.t()
+  def subscription_appointment_created(
+        %Tenant{} = tenant,
+        %Customer{} = customer,
+        %Appointment{} = appt,
+        %ServiceType{} = service
+      ) do
+    new()
+    |> to({customer.name, to_string(customer.email)})
+    |> from(Branding.from_address(tenant))
+    |> subject("Your next #{service.name} is on the books")
+    |> text_body("""
+    Hey #{customer.name},
+
+    Your recurring booking with #{Branding.display_name(tenant)}
+    just auto-scheduled the next one:
+
+      Service:  #{service.name}
+      When:     #{format_when(appt.scheduled_at)}
+      Vehicle:  #{appt.vehicle_description}
+      Where:    #{appt.service_address}
+      Total:    #{format_price(appt.price_cents)}
+
+    We'll send a reminder the day before. If anything's changed,
+    cancel from your appointment page or pause the recurring plan
+    from your profile.
+
+    -- #{Branding.display_name(tenant)}
+    """)
+  end
+
+  @doc """
   Customer-side reminder: appointment is ~24h out. Fired by the
   ReminderScheduler GenServer; the appointment row is then marked
   `reminder_sent_at` so we never double-send.

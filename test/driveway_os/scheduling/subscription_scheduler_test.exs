@@ -128,6 +128,28 @@ defmodule DrivewayOS.Scheduling.SubscriptionSchedulerTest do
       assert SubscriptionScheduler.dispatch_due(now) == 0
     end
 
+    test "fires the auto-booking confirmation email when materializing", ctx do
+      now = DateTime.utc_now() |> DateTime.add(-3600, :second)
+      due_at = DateTime.add(now, 86_400, :second)
+
+      _sub = subscribe!(ctx, starts_at: due_at, frequency: :biweekly)
+
+      SubscriptionScheduler.dispatch_due(now)
+
+      received = drain_emails([])
+      subjects = Enum.map(received, & &1.subject)
+
+      assert Enum.any?(subjects, &String.contains?(&1, "next"))
+    end
+
+    defp drain_emails(acc) do
+      receive do
+        {:email, %Swoosh.Email{} = e} -> drain_emails([e | acc])
+      after
+        0 -> acc
+      end
+    end
+
     test "tenant isolation: tenant A's sub doesn't create tenant B's appointment", ctx do
       {:ok, %{tenant: tenant_b}} =
         Platform.provision_tenant(%{
