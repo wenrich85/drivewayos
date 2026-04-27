@@ -151,6 +151,7 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
     today = today_appointments(appointments, socket.assigns.current_tenant.timezone)
     {revenue_week, revenue_month} = revenue_summary(appointments)
     channels = channel_summary(appointments)
+    cancel_reasons = cancellation_reason_summary(appointments)
 
     {:ok, blocks} =
       BlockTemplate |> Ash.Query.set_tenant(tenant_id) |> Ash.read(authorize?: false)
@@ -179,7 +180,50 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
     |> assign(:revenue_week, revenue_week)
     |> assign(:revenue_month, revenue_month)
     |> assign(:channels, channels)
+    |> assign(:cancel_reasons, cancel_reasons)
   end
+
+  # Last-30-days breakdown of cancelled appointments grouped by
+  # parsed reason. Customer-side cancellations land as
+  # "Customer: <label> — <details>" (J3 dropdown); admin-side
+  # cancellations land as "Cancelled by admin". We strip the
+  # `— details` suffix so the histogram groups by reason class
+  # rather than fragmenting on freetext.
+  defp cancellation_reason_summary(appointments) do
+    cutoff = DateTime.add(DateTime.utc_now(), -30 * 86_400, :second)
+
+    appointments
+    |> Enum.filter(fn a ->
+      a.status == :cancelled and
+        DateTime.compare(a.scheduled_at, cutoff) != :lt
+    end)
+    |> Enum.frequencies_by(&parse_cancel_reason/1)
+    |> Enum.sort_by(fn {_, count} -> -count end)
+  end
+
+  defp parse_cancel_reason(%{cancellation_reason: nil}), do: "Unspecified"
+  defp parse_cancel_reason(%{cancellation_reason: ""}), do: "Unspecified"
+
+  defp parse_cancel_reason(%{cancellation_reason: text}) when is_binary(text) do
+    cond do
+      String.starts_with?(text, "Customer: ") ->
+        text
+        |> String.replace_prefix("Customer: ", "")
+        |> String.split(" — ", parts: 2)
+        |> List.first()
+
+      String.starts_with?(text, "Cancelled by admin") ->
+        "Admin-cancelled"
+
+      String.starts_with?(text, "Cancelled by customer") ->
+        "Customer (no reason)"
+
+      true ->
+        text
+    end
+  end
+
+  defp parse_cancel_reason(_), do: "Unspecified"
 
   # Last-30-days breakdown of acquisition_channel counts. Rolls
   # nils into "Not asked" so the operator sees what fraction of
@@ -525,25 +569,47 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
           </div>
         </section>
 
-        <section
-          :if={@channels != []}
-          class="card bg-base-100 shadow-sm border border-base-300"
-        >
-          <div class="card-body p-6">
-            <h2 class="card-title text-lg">How customers found you</h2>
-            <p class="text-sm text-base-content/60 mb-3">Last 30 days</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <section
+            :if={@channels != []}
+            class="card bg-base-100 shadow-sm border border-base-300"
+          >
+            <div class="card-body p-6">
+              <h2 class="card-title text-lg">How customers found you</h2>
+              <p class="text-sm text-base-content/60 mb-3">Last 30 days</p>
 
-            <ul class="space-y-2">
-              <li
-                :for={{channel, count} <- @channels}
-                class="flex items-center justify-between text-sm"
-              >
-                <span class="text-base-content/80">{channel}</span>
-                <span class="font-semibold tabular-nums">{count}</span>
-              </li>
-            </ul>
-          </div>
-        </section>
+              <ul class="space-y-2">
+                <li
+                  :for={{channel, count} <- @channels}
+                  class="flex items-center justify-between text-sm"
+                >
+                  <span class="text-base-content/80">{channel}</span>
+                  <span class="font-semibold tabular-nums">{count}</span>
+                </li>
+              </ul>
+            </div>
+          </section>
+
+          <section
+            :if={@cancel_reasons != []}
+            class="card bg-base-100 shadow-sm border border-base-300"
+          >
+            <div class="card-body p-6">
+              <h2 class="card-title text-lg">Why customers cancel</h2>
+              <p class="text-sm text-base-content/60 mb-3">Last 30 days</p>
+
+              <ul class="space-y-2">
+                <li
+                  :for={{reason, count} <- @cancel_reasons}
+                  class="flex items-center justify-between text-sm"
+                >
+                  <span class="text-base-content/80">{reason}</span>
+                  <span class="font-semibold tabular-nums">{count}</span>
+                </li>
+              </ul>
+            </div>
+          </section>
+        </div>
 
         <section class="card bg-base-100 shadow-sm border border-base-300">
           <div class="card-body p-6">

@@ -219,6 +219,62 @@ defmodule DrivewayOSWeb.AdminDashboardTest do
     end
   end
 
+  describe "cancellation reason breakdown" do
+    test "groups cancelled appointments by parsed reason", ctx do
+      now = DateTime.utc_now()
+
+      reasons = [
+        "Customer: Bad weather — Forecast says rain",
+        "Customer: Bad weather",
+        "Customer: Schedule conflict",
+        "Cancelled by admin"
+      ]
+
+      Enum.with_index(reasons, fn reason, i ->
+        {:ok, appt} =
+          Appointment
+          |> Ash.Changeset.for_create(
+            :book,
+            %{
+              customer_id: ctx.customer.id,
+              service_type_id: ctx.service.id,
+              scheduled_at:
+                DateTime.add(now, (i + 1) * 86_400, :second) |> DateTime.truncate(:second),
+              duration_minutes: ctx.service.duration_minutes,
+              price_cents: ctx.service.base_price_cents,
+              vehicle_description: "Truck #{i}",
+              service_address: "#{i} Lane"
+            },
+            tenant: ctx.tenant.id
+          )
+          |> Ash.create(authorize?: false)
+
+        appt
+        |> Ash.Changeset.for_update(:cancel, %{cancellation_reason: reason})
+        |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+      end)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
+
+      assert html =~ "Why customers cancel"
+      assert html =~ "Bad weather"
+      assert html =~ "Schedule conflict"
+      assert html =~ "Admin-cancelled"
+    end
+
+    test "card hidden when no recent cancellations", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
+
+      refute html =~ "Why customers cancel"
+    end
+  end
+
   describe "acquisition channel breakdown" do
     test "shows last-30-day counts grouped by channel", ctx do
       now = DateTime.utc_now()
