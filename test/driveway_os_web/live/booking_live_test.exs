@@ -797,6 +797,155 @@ defmodule DrivewayOSWeb.BookingLiveTest do
     end
   end
 
+  describe "loyalty redemption" do
+    setup ctx do
+      ctx.tenant
+      |> Ash.Changeset.for_update(:update, %{loyalty_threshold: 5})
+      |> Ash.update!(authorize?: false)
+
+      # Bring the customer up to the threshold.
+      Enum.each(1..5, fn _ ->
+        ctx.customer
+        |> Ash.reload!(authorize?: false)
+        |> Ash.Changeset.for_update(:increment_loyalty, %{})
+        |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+      end)
+
+      DrivewayOS.Plans.flush_cache()
+      Map.put(ctx, :tenant, Ash.reload!(ctx.tenant, authorize?: false))
+    end
+
+    test "schedule step shows the redemption CTA when count >= threshold", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/book")
+
+      service_id = extract_service_id(html, "basic")
+
+      lv
+      |> form("#step-service-form", %{"booking" => %{"service_type_id" => service_id}})
+      |> render_submit()
+
+      lv
+      |> form("#step-vehicle-text-form", %{
+        "booking" => %{"vehicle_description" => "Loyal Truck"}
+      })
+      |> render_submit()
+
+      html =
+        lv
+        |> form("#step-address-text-form", %{
+          "booking" => %{"service_address" => "1 Loyalty Lane"}
+        })
+        |> render_submit()
+
+      assert html =~ "Use your free wash"
+    end
+
+    test "submitting with redemption sets price=0, flag=true, and resets loyalty_count",
+         ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/book")
+
+      service_id = extract_service_id(html, "basic")
+
+      lv
+      |> form("#step-service-form", %{"booking" => %{"service_type_id" => service_id}})
+      |> render_submit()
+
+      lv
+      |> form("#step-vehicle-text-form", %{
+        "booking" => %{"vehicle_description" => "Loyal Truck"}
+      })
+      |> render_submit()
+
+      lv
+      |> form("#step-address-text-form", %{
+        "booking" => %{"service_address" => "1 Loyalty Lane"}
+      })
+      |> render_submit()
+
+      future = DateTime.utc_now() |> DateTime.add(2 * 86_400, :second)
+
+      lv
+      |> form("#booking-form", %{
+        "booking" => %{
+          "scheduled_at" => DateTime.to_iso8601(future) |> String.slice(0, 16),
+          "is_loyalty_redemption" => "true"
+        }
+      })
+      |> render_submit()
+
+      {:ok, [appt]} =
+        Appointment |> Ash.Query.set_tenant(ctx.tenant.id) |> Ash.read(authorize?: false)
+
+      assert appt.is_loyalty_redemption == true
+      assert appt.price_cents == 0
+
+      reloaded =
+        Ash.get!(Customer, ctx.customer.id, tenant: ctx.tenant.id, authorize?: false)
+
+      assert reloaded.loyalty_count == 0
+    end
+
+    test "redemption appointment doesn't earn a new loyalty punch when completed",
+         ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/book")
+
+      service_id = extract_service_id(html, "basic")
+
+      lv
+      |> form("#step-service-form", %{"booking" => %{"service_type_id" => service_id}})
+      |> render_submit()
+
+      lv
+      |> form("#step-vehicle-text-form", %{
+        "booking" => %{"vehicle_description" => "Loyal Truck"}
+      })
+      |> render_submit()
+
+      lv
+      |> form("#step-address-text-form", %{
+        "booking" => %{"service_address" => "1 Loyalty Lane"}
+      })
+      |> render_submit()
+
+      future = DateTime.utc_now() |> DateTime.add(2 * 86_400, :second)
+
+      lv
+      |> form("#booking-form", %{
+        "booking" => %{
+          "scheduled_at" => DateTime.to_iso8601(future) |> String.slice(0, 16),
+          "is_loyalty_redemption" => "true"
+        }
+      })
+      |> render_submit()
+
+      {:ok, [appt]} =
+        Appointment |> Ash.Query.set_tenant(ctx.tenant.id) |> Ash.read(authorize?: false)
+
+      appt
+      |> Ash.Changeset.for_update(:confirm, %{})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+      |> Ash.Changeset.for_update(:start_wash, %{})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+      |> Ash.Changeset.for_update(:complete, %{})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      reloaded =
+        Ash.get!(Customer, ctx.customer.id, tenant: ctx.tenant.id, authorize?: false)
+
+      # Still 0 — completing the redemption doesn't earn another punch.
+      assert reloaded.loyalty_count == 0
+    end
+  end
+
   describe "rebook from a prior appointment" do
     test "?from=<id> prefills the wizard at :vehicle with prior service + address", ctx do
       # Promote tenant to Pro so saved-vehicle path is exercised. Add

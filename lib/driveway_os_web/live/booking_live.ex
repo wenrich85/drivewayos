@@ -99,6 +99,7 @@ defmodule DrivewayOSWeb.BookingLive do
           |> assign(:vehicle_mode, initial_mode(saved_vehicles))
           |> assign(:address_mode, initial_mode(saved_addresses))
           |> assign(:account_mode, :guest)
+          |> assign(:loyalty_can_redeem?, loyalty_can_redeem?(tenant, customer))
           |> assign(:errors, %{})
 
         socket =
@@ -474,7 +475,8 @@ defmodule DrivewayOSWeb.BookingLive do
       "address_id" => nil,
       "service_address" => "",
       "notes" => "",
-      "acquisition_channel" => ""
+      "acquisition_channel" => "",
+      "is_loyalty_redemption" => false
     }
   end
 
@@ -611,9 +613,25 @@ defmodule DrivewayOSWeb.BookingLive do
     Map.merge(data, %{
       "notes" => params["notes"] || data["notes"] || "",
       "acquisition_channel" =>
-        params["acquisition_channel"] || data["acquisition_channel"] || ""
+        params["acquisition_channel"] || data["acquisition_channel"] || "",
+      "is_loyalty_redemption" => params["is_loyalty_redemption"] in ["true", "on", true]
     })
   end
+
+  # Loyalty redemption is offered when:
+  #   * The tenant has loyalty configured (threshold non-nil)
+  #   * The customer is signed in (so we can identify their punch
+  #     count) and not a guest.
+  #   * The customer's loyalty_count >= threshold.
+  defp loyalty_can_redeem?(_tenant, nil), do: false
+
+  defp loyalty_can_redeem?(_tenant, %{guest?: true}), do: false
+
+  defp loyalty_can_redeem?(%{loyalty_threshold: threshold}, %{loyalty_count: count})
+       when is_integer(threshold) and is_integer(count),
+       do: count >= threshold
+
+  defp loyalty_can_redeem?(_, _), do: false
 
   # Fixed list for the V1 wizard. Values are stored as the literal
   # string in `Appointment.acquisition_channel` so simple aggregate
@@ -702,25 +720,41 @@ defmodule DrivewayOSWeb.BookingLive do
   defp parse_scheduled_at(_), do: {:error, :bad_datetime}
 
   defp create_appointment(tenant, customer, service, scheduled_at, data) do
-    Appointment
-    |> Ash.Changeset.for_create(
-      :book,
-      %{
-        customer_id: customer.id,
-        service_type_id: service.id,
-        scheduled_at: scheduled_at,
-        duration_minutes: service.duration_minutes,
-        price_cents: service.base_price_cents,
-        vehicle_id: data["vehicle_id"],
-        vehicle_description: data["vehicle_description"] |> to_string() |> String.trim(),
-        address_id: data["address_id"],
-        service_address: data["service_address"] |> to_string() |> String.trim(),
-        notes: data["notes"],
-        acquisition_channel: data["acquisition_channel"] |> presence()
-      },
-      tenant: tenant.id
-    )
-    |> Ash.create(authorize?: false)
+    redemption = data["is_loyalty_redemption"] == true
+
+    price = if redemption, do: 0, else: service.base_price_cents
+
+    result =
+      Appointment
+      |> Ash.Changeset.for_create(
+        :book,
+        %{
+          customer_id: customer.id,
+          service_type_id: service.id,
+          scheduled_at: scheduled_at,
+          duration_minutes: service.duration_minutes,
+          price_cents: price,
+          vehicle_id: data["vehicle_id"],
+          vehicle_description: data["vehicle_description"] |> to_string() |> String.trim(),
+          address_id: data["address_id"],
+          service_address: data["service_address"] |> to_string() |> String.trim(),
+          notes: data["notes"],
+          acquisition_channel: data["acquisition_channel"] |> presence(),
+          is_loyalty_redemption: redemption
+        },
+        tenant: tenant.id
+      )
+      |> Ash.create(authorize?: false)
+
+    # Reset loyalty_count immediately on successful redemption so a
+    # double-submit can't claim two free washes from one credit.
+    if redemption and match?({:ok, _}, result) do
+      customer
+      |> Ash.Changeset.for_update(:reset_loyalty, %{})
+      |> Ash.update(authorize?: false, tenant: tenant.id)
+    end
+
+    result
   end
 
   defp handle_post_booking(socket, tenant, customer, service, appt) do
@@ -1307,6 +1341,29 @@ defmodule DrivewayOSWeb.BookingLive do
               placeholder="Gate code, special requests, etc."
               class="textarea textarea-bordered w-full"
             >{@wizard_data["notes"]}</textarea>
+          </div>
+
+          <div
+            :if={@loyalty_can_redeem?}
+            class="alert bg-primary/10 border border-primary/30"
+          >
+            <span class="hero-gift w-5 h-5 text-primary shrink-0" aria-hidden="true"></span>
+            <div class="flex-1">
+              <label class="cursor-pointer flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  name="booking[is_loyalty_redemption]"
+                  value="true"
+                  class="checkbox checkbox-primary mt-1"
+                />
+                <div>
+                  <span class="font-semibold">Use your free wash</span>
+                  <p class="text-sm text-base-content/70 mt-0.5">
+                    Apply your loyalty reward to this booking — total drops to $0.
+                  </p>
+                </div>
+              </label>
+            </div>
           </div>
 
           <div>

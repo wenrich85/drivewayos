@@ -146,6 +146,17 @@ defmodule DrivewayOS.Scheduling.Appointment do
       constraints max_length: 60
     end
 
+    # True when the booking redeemed a loyalty punch-card credit:
+    # price_cents is forced to 0 at create time and the customer's
+    # loyalty_count is reset. The completion hook ALSO checks this
+    # to skip incrementing loyalty (you don't earn a punch on a
+    # punch-redemption wash).
+    attribute :is_loyalty_redemption, :boolean do
+      default false
+      allow_nil? false
+      public? true
+    end
+
     create_timestamp :inserted_at
     update_timestamp :updated_at
   end
@@ -195,7 +206,8 @@ defmodule DrivewayOS.Scheduling.Appointment do
         :notes,
         :vehicle_id,
         :address_id,
-        :acquisition_channel
+        :acquisition_channel,
+        :is_loyalty_redemption
       ]
 
       validate compare(:scheduled_at, greater_than: &DateTime.utc_now/0),
@@ -263,17 +275,21 @@ defmodule DrivewayOS.Scheduling.Appointment do
       # progress bar when threshold is set.
       change fn changeset, _ctx ->
         Ash.Changeset.after_action(changeset, fn _, appt ->
-          case Ash.get(DrivewayOS.Accounts.Customer, appt.customer_id,
-                 tenant: appt.tenant_id,
-                 authorize?: false
-               ) do
-            {:ok, customer} ->
-              customer
-              |> Ash.Changeset.for_update(:increment_loyalty, %{})
-              |> Ash.update(authorize?: false, tenant: appt.tenant_id)
+          # Redemption appointments don't earn a punch — that
+          # would let a customer cycle one free wash forever.
+          unless appt.is_loyalty_redemption do
+            case Ash.get(DrivewayOS.Accounts.Customer, appt.customer_id,
+                   tenant: appt.tenant_id,
+                   authorize?: false
+                 ) do
+              {:ok, customer} ->
+                customer
+                |> Ash.Changeset.for_update(:increment_loyalty, %{})
+                |> Ash.update(authorize?: false, tenant: appt.tenant_id)
 
-            _ ->
-              :ok
+              _ ->
+                :ok
+            end
           end
 
           {:ok, appt}
