@@ -149,4 +149,37 @@ defmodule DrivewayOSWeb.Admin.BrandingLiveTest do
       refute reloaded_other.display_name == "Hijacked Name"
     end
   end
+
+  describe "loyalty threshold" do
+    test "operator can set + clear it via the branding form", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, _} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin/branding")
+
+      lv
+      |> form("#branding-form", %{
+        "tenant" => %{
+          "display_name" => ctx.tenant.display_name,
+          "loyalty_threshold" => "10"
+        }
+      })
+      |> render_submit()
+
+      reloaded = Ash.get!(Tenant, ctx.tenant.id, authorize?: false)
+      assert reloaded.loyalty_threshold == 10
+
+      lv
+      |> form("#branding-form", %{
+        "tenant" => %{
+          "display_name" => ctx.tenant.display_name,
+          "loyalty_threshold" => ""
+        }
+      })
+      |> render_submit()
+
+      cleared = Ash.get!(Tenant, ctx.tenant.id, authorize?: false)
+      assert cleared.loyalty_threshold == nil
+    end
+  end
 end

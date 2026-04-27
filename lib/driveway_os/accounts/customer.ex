@@ -189,6 +189,18 @@ defmodule DrivewayOS.Accounts.Customer do
       public? true
     end
 
+    # Loyalty punch card progress. Increments by 1 each time an
+    # Appointment for this customer transitions to :completed
+    # (UNLESS that appointment was itself a loyalty redemption —
+    # see Phase J3). Resets to 0 when a redemption is created so
+    # the punch card cycles cleanly.
+    attribute :loyalty_count, :integer do
+      default 0
+      allow_nil? false
+      public? true
+      constraints min: 0
+    end
+
     create_timestamp :inserted_at
     update_timestamp :updated_at
   end
@@ -257,6 +269,20 @@ defmodule DrivewayOS.Accounts.Customer do
       # transaction so non-atomic is fine.
       require_atomic? false
       change set_attribute(:email_verified_at, &DateTime.utc_now/0)
+    end
+
+    update :increment_loyalty do
+      require_atomic? false
+
+      change fn changeset, _ ->
+        current = changeset.data.loyalty_count || 0
+        Ash.Changeset.force_change_attribute(changeset, :loyalty_count, current + 1)
+      end
+    end
+
+    update :reset_loyalty do
+      require_atomic? false
+      change set_attribute(:loyalty_count, 0)
     end
 
     create :register_guest do

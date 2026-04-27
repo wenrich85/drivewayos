@@ -45,11 +45,22 @@ defmodule DrivewayOSWeb.Admin.BrandingLive do
         support_phone: params["support_phone"],
         primary_color_hex: params["primary_color_hex"],
         logo_url: params["logo_url"],
-        timezone: params["timezone"]
+        timezone: params["timezone"],
+        loyalty_threshold: parse_loyalty(params["loyalty_threshold"])
       }
       # Drop blank optional fields so we don't write empty-string
-      # over a previously-meaningful value.
-      |> Enum.reject(fn {_k, v} -> v in [nil, ""] end)
+      # over a previously-meaningful value. loyalty_threshold uses
+      # the explicit nil-or-int contract: blank string -> nil
+      # (meaning "feature off"), valid int -> int. The reject below
+      # drops the key entirely on blank-string but KEEPS it on
+      # explicit nil so the operator can disable the feature.
+      |> Enum.reject(fn {k, v} ->
+        cond do
+          k == :loyalty_threshold -> false
+          v in [nil, ""] -> true
+          true -> false
+        end
+      end)
       |> Map.new()
 
     case tenant
@@ -77,6 +88,18 @@ defmodule DrivewayOSWeb.Admin.BrandingLive do
         {:noreply, assign(socket, :errors, %{base: "Could not save."})}
     end
   end
+
+  defp parse_loyalty(nil), do: nil
+  defp parse_loyalty(""), do: nil
+
+  defp parse_loyalty(s) when is_binary(s) do
+    case Integer.parse(String.trim(s)) do
+      {n, _} when n >= 2 -> n
+      _ -> nil
+    end
+  end
+
+  defp parse_loyalty(_), do: nil
 
   defp errors_to_map(errors) do
     Enum.reduce(errors, %{}, fn err, acc ->
@@ -218,6 +241,31 @@ defmodule DrivewayOSWeb.Admin.BrandingLive do
                 />
                 <p class="text-xs text-base-content/60 mt-1">
                   Direct image URL. You host the file (S3, Cloudflare R2, etc.).
+                </p>
+              </div>
+
+              <div>
+                <label class="label" for="b-loyalty">
+                  <span class="label-text font-medium">Loyalty punch card</span>
+                  <span class="label-text-alt text-base-content/50">
+                    Optional · 2-50 washes
+                  </span>
+                </label>
+                <input
+                  id="b-loyalty"
+                  type="number"
+                  name="tenant[loyalty_threshold]"
+                  value={@current_tenant.loyalty_threshold}
+                  min="2"
+                  max="50"
+                  placeholder="e.g. 10"
+                  class="input input-bordered w-full"
+                />
+                <p class="text-xs text-base-content/60 mt-1">
+                  Every Nth completed wash earns the customer a free wash. Leave blank to disable.
+                </p>
+                <p :if={@errors[:loyalty_threshold]} class="text-error text-xs mt-1">
+                  {@errors[:loyalty_threshold]}
                 </p>
               </div>
 

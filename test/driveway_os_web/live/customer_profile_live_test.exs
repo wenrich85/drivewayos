@@ -462,6 +462,72 @@ defmodule DrivewayOSWeb.CustomerProfileLiveTest do
     end
   end
 
+  describe "loyalty punch card" do
+    test "shows progress when tenant has loyalty_threshold set", %{
+      conn: conn,
+      tenant: tenant,
+      customer: customer
+    } do
+      tenant
+      |> Ash.Changeset.for_update(:update, %{loyalty_threshold: 10})
+      |> Ash.update!(authorize?: false)
+
+      customer
+      |> Ash.Changeset.for_update(:increment_loyalty, %{})
+      |> Ash.update!(authorize?: false, tenant: tenant.id)
+      |> Ash.Changeset.for_update(:increment_loyalty, %{})
+      |> Ash.update!(authorize?: false, tenant: tenant.id)
+      |> Ash.Changeset.for_update(:increment_loyalty, %{})
+      |> Ash.update!(authorize?: false, tenant: tenant.id)
+
+      conn = sign_in(conn, customer)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{tenant.slug}.lvh.me") |> live(~p"/me")
+
+      assert html =~ "3/10"
+      assert html =~ "washes toward your next free one"
+    end
+
+    test "shows 'earned a free wash' once count >= threshold", %{
+      conn: conn,
+      tenant: tenant,
+      customer: customer
+    } do
+      tenant
+      |> Ash.Changeset.for_update(:update, %{loyalty_threshold: 3})
+      |> Ash.update!(authorize?: false)
+
+      Enum.each(1..3, fn _ ->
+        customer
+        |> Ash.reload!(authorize?: false)
+        |> Ash.Changeset.for_update(:increment_loyalty, %{})
+        |> Ash.update!(authorize?: false, tenant: tenant.id)
+      end)
+
+      conn = sign_in(conn, customer)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{tenant.slug}.lvh.me") |> live(~p"/me")
+
+      assert html =~ "earned a free wash"
+    end
+
+    test "card hidden when tenant has no threshold set", %{
+      conn: conn,
+      tenant: tenant,
+      customer: customer
+    } do
+      conn = sign_in(conn, customer)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{tenant.slug}.lvh.me") |> live(~p"/me")
+
+      refute html =~ "washes toward your next free one"
+      refute html =~ "earned a free wash"
+    end
+  end
+
   defp sign_in(conn, customer) do
     {:ok, token, _} = AshAuthentication.Jwt.token_for_user(customer)
     conn |> Plug.Test.init_test_session(%{customer_token: token})

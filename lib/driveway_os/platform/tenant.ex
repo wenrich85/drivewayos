@@ -121,6 +121,15 @@ defmodule DrivewayOS.Platform.Tenant do
       public? true
     end
 
+    # Loyalty punch card threshold. Nil = the feature is off for
+    # this tenant. Otherwise, every Nth completed appointment
+    # earns the customer a free wash. Operators set this from
+    # /admin/branding.
+    attribute :loyalty_threshold, :integer do
+      public? true
+      constraints min: 2, max: 50
+    end
+
     create_timestamp :inserted_at
     update_timestamp :updated_at
   end
@@ -180,7 +189,8 @@ defmodule DrivewayOS.Platform.Tenant do
         :support_phone,
         :timezone,
         :status,
-        :plan_tier
+        :plan_tier,
+        :loyalty_threshold
       ]
     end
 

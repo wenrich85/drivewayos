@@ -287,6 +287,35 @@ defmodule DrivewayOSWeb.CustomerProfileLive do
           </nav>
         </header>
 
+        <section
+          :if={loyalty_visible?(@current_tenant, @current_customer)}
+          class="card bg-primary/5 border border-primary/20 shadow-sm"
+        >
+          <div class="card-body p-6">
+            <div class="flex items-center gap-3">
+              <span class="hero-gift w-6 h-6 text-primary shrink-0" aria-hidden="true"></span>
+              <div class="flex-1">
+                <h2 class="font-semibold">
+                  <%= if loyalty_earned?(@current_tenant, @current_customer) do %>
+                    You've earned a free wash!
+                  <% else %>
+                    {@current_customer.loyalty_count}/{@current_tenant.loyalty_threshold} washes toward your next free one
+                  <% end %>
+                </h2>
+                <p :if={not loyalty_earned?(@current_tenant, @current_customer)} class="text-sm text-base-content/70 mt-1">
+                  We'll let you know when you hit {@current_tenant.loyalty_threshold}.
+                </p>
+                <p :if={loyalty_earned?(@current_tenant, @current_customer)} class="text-sm text-base-content/70 mt-1">
+                  Apply it on your next booking.
+                </p>
+              </div>
+              <div class="text-2xl font-bold text-primary tabular-nums">
+                {@current_customer.loyalty_count}/{@current_tenant.loyalty_threshold}
+              </div>
+            </div>
+          </div>
+        </section>
+
         <div
           :if={is_nil(@current_customer.email_verified_at)}
           class="alert alert-warning shadow-sm"
@@ -653,6 +682,20 @@ defmodule DrivewayOSWeb.CustomerProfileLive do
   defp sub_badge(:active), do: "badge-success"
   defp sub_badge(:paused), do: "badge-warning"
   defp sub_badge(:cancelled), do: "badge-ghost"
+
+  # Loyalty card is visible whenever the tenant has configured a
+  # threshold (nil = feature off). The card shows progress for
+  # everyone who's tenant-onboarded loyalty, including brand-new
+  # customers at 0 — the "earn a free wash" prompt is itself a
+  # conversion lever.
+  defp loyalty_visible?(%{loyalty_threshold: t}, %{loyalty_count: _}) when is_integer(t), do: true
+  defp loyalty_visible?(_, _), do: false
+
+  defp loyalty_earned?(%{loyalty_threshold: t}, %{loyalty_count: c})
+       when is_integer(t) and is_integer(c),
+       do: c >= t
+
+  defp loyalty_earned?(_, _), do: false
 
   defp frequency_label(:weekly), do: "week"
   defp frequency_label(:biweekly), do: "2 weeks"

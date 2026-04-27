@@ -245,7 +245,40 @@ defmodule DrivewayOS.Scheduling.Appointment do
     end
 
     update :complete do
+      # The after_action hook below is non-atomic (it touches a
+      # second resource), so the whole action runs in a regular
+      # txn. The two writes (appointment status + customer count)
+      # land in the same DB transaction so a crash mid-action
+      # rolls both back.
+      require_atomic? false
+
       change set_attribute(:status, :completed)
+
+      # Loyalty: bump the customer's loyalty_count when their
+      # wash actually happens. Best-effort — if the increment
+      # fails (e.g. customer was deleted concurrently), the
+      # status transition still commits. Tenant.loyalty_threshold
+      # being nil doesn't change anything here; the count rolls
+      # forward regardless and the /me display only shows the
+      # progress bar when threshold is set.
+      change fn changeset, _ctx ->
+        Ash.Changeset.after_action(changeset, fn _, appt ->
+          case Ash.get(DrivewayOS.Accounts.Customer, appt.customer_id,
+                 tenant: appt.tenant_id,
+                 authorize?: false
+               ) do
+            {:ok, customer} ->
+              customer
+              |> Ash.Changeset.for_update(:increment_loyalty, %{})
+              |> Ash.update(authorize?: false, tenant: appt.tenant_id)
+
+            _ ->
+              :ok
+          end
+
+          {:ok, appt}
+        end)
+      end
     end
 
     update :cancel do
