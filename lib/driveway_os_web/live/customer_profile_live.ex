@@ -22,6 +22,7 @@ defmodule DrivewayOSWeb.CustomerProfileLive do
 
   alias DrivewayOS.Fleet.{Address, Vehicle}
   alias DrivewayOS.Scheduling.{ServiceType, Subscription}
+  alias DrivewayOS.SubscriptionBroadcaster
 
   require Ash.Query
 
@@ -35,8 +36,23 @@ defmodule DrivewayOSWeb.CustomerProfileLive do
         {:ok, push_navigate(socket, to: ~p"/sign-in")}
 
       true ->
+        if connected?(socket) do
+          SubscriptionBroadcaster.subscribe(
+            socket.assigns.current_tenant.id,
+            socket.assigns.current_customer.id
+          )
+        end
+
         {:ok, base_assigns(socket)}
     end
+  end
+
+  @impl true
+  def handle_info({:subscription, _event, _payload}, socket) do
+    customer_id = socket.assigns.current_customer.id
+    tenant_id = socket.assigns.current_tenant.id
+
+    {:noreply, assign(socket, :subscriptions, load_subscriptions(customer_id, tenant_id))}
   end
 
   defp base_assigns(socket) do
@@ -243,6 +259,8 @@ defmodule DrivewayOSWeb.CustomerProfileLive do
            sub
            |> Ash.Changeset.for_update(action, %{})
            |> Ash.update(authorize?: false, tenant: tenant.id) do
+      SubscriptionBroadcaster.broadcast(tenant.id, me.id, action, %{id: id})
+
       {:noreply, assign(socket, :subscriptions, load_subscriptions(me.id, tenant.id))}
     else
       _ -> {:noreply, socket}

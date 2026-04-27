@@ -26,4 +26,29 @@ defmodule DrivewayOS.AppointmentBroadcasterTest do
 
     refute_receive {:appointment, _, _}, 200
   end
+
+  describe "DrivewayOS.SubscriptionBroadcaster" do
+    alias DrivewayOS.SubscriptionBroadcaster
+
+    test "subscribe + broadcast round-trip per (tenant, customer)" do
+      tenant = "11111111-1111-1111-1111-111111111111"
+      customer = "22222222-2222-2222-2222-222222222222"
+
+      :ok = SubscriptionBroadcaster.subscribe(tenant, customer)
+      SubscriptionBroadcaster.broadcast(tenant, customer, :pause, %{id: "sub-1"})
+
+      assert_receive {:subscription, :pause, %{id: "sub-1"}}, 500
+    end
+
+    test "different customers in the same tenant don't cross-receive" do
+      tenant = "33333333-3333-3333-3333-333333333333"
+      a = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+      b = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+
+      :ok = SubscriptionBroadcaster.subscribe(tenant, a)
+      SubscriptionBroadcaster.broadcast(tenant, b, :cancel, %{id: "sub-b"})
+
+      refute_receive {:subscription, _, _}, 200
+    end
+  end
 end

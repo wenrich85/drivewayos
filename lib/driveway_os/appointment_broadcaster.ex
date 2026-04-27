@@ -37,3 +37,40 @@ defmodule DrivewayOS.AppointmentBroadcaster do
 
   defp topic_for(tenant_id), do: "tenant:#{tenant_id}:appointments"
 end
+
+defmodule DrivewayOS.SubscriptionBroadcaster do
+  @moduledoc """
+  Per-tenant + per-customer fan-out for Subscription state
+  changes. /me subscribes per-customer; /admin/customers/:id
+  subscribes per-customer too (only one customer per page). The
+  per-customer scoping means a customer with two open tabs
+  doesn't get noise from the admin acting on a different
+  customer's row.
+  """
+  alias Phoenix.PubSub
+
+  @pubsub DrivewayOS.PubSub
+
+  @spec subscribe(binary(), binary()) :: :ok | {:error, term()}
+  def subscribe(tenant_id, customer_id)
+      when is_binary(tenant_id) and is_binary(customer_id) do
+    PubSub.subscribe(@pubsub, topic_for(tenant_id, customer_id))
+  end
+
+  @spec broadcast(binary(), binary(), atom(), map()) :: :ok
+  def broadcast(tenant_id, customer_id, event, payload \\ %{}) do
+    PubSub.broadcast(
+      @pubsub,
+      topic_for(tenant_id, customer_id),
+      {:subscription, event, payload}
+    )
+  rescue
+    _ -> :ok
+  catch
+    _, _ -> :ok
+  end
+
+  defp topic_for(tenant_id, customer_id),
+    do: "tenant:#{tenant_id}:customer:#{customer_id}:subscriptions"
+end
+

@@ -16,6 +16,7 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
   alias DrivewayOS.Accounts.Customer
   alias DrivewayOS.Plans
   alias DrivewayOS.Scheduling.{Appointment, ServiceType, Subscription}
+  alias DrivewayOS.SubscriptionBroadcaster
 
   require Ash.Query
 
@@ -159,6 +160,8 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
            sub
            |> Ash.Changeset.for_update(action, %{})
            |> Ash.update(authorize?: false, tenant: tenant_id) do
+      SubscriptionBroadcaster.broadcast(tenant_id, socket.assigns.customer.id, action, %{id: id})
+
       {:noreply, reload_subscriptions(socket)}
     else
       _ -> {:noreply, socket}
