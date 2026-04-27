@@ -33,6 +33,7 @@ defmodule DrivewayOSWeb.BookingLive do
   on_mount DrivewayOSWeb.LoadTenantHook
   on_mount DrivewayOSWeb.LoadCustomerHook
 
+  alias DrivewayOS.AppointmentBroadcaster
   alias DrivewayOS.Billing.StripeClient
   alias DrivewayOS.Fleet.{Address, Vehicle}
   alias DrivewayOS.Mailer
@@ -406,6 +407,7 @@ defmodule DrivewayOSWeb.BookingLive do
            create_appointment(tenant, customer, service, scheduled_at, merged) do
       socket = consume_booking_photos(socket, tenant, customer, appt)
       clear_draft(socket)
+      AppointmentBroadcaster.broadcast(tenant.id, :booked, %{id: appt.id})
       handle_post_booking(socket, tenant, customer, service, appt)
     else
       {:error, :missing_service} ->
