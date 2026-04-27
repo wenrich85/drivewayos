@@ -22,7 +22,7 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
   alias DrivewayOS.Mailer
   alias DrivewayOS.Notifications.BookingEmail
   alias DrivewayOS.Platform.CustomDomain
-  alias DrivewayOS.Scheduling.{Appointment, BlockTemplate, ServiceType}
+  alias DrivewayOS.Scheduling.{Appointment, BlockTemplate, ServiceType, Subscription}
 
   require Ash.Query
 
@@ -153,6 +153,8 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
     channels = channel_summary(appointments)
     cancel_reasons = cancellation_reason_summary(appointments)
 
+    {active_sub_count, mrr_cents} = subscription_summary(tenant_id)
+
     {:ok, blocks} =
       BlockTemplate |> Ash.Query.set_tenant(tenant_id) |> Ash.read(authorize?: false)
 
@@ -181,7 +183,52 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
     |> assign(:revenue_month, revenue_month)
     |> assign(:channels, channels)
     |> assign(:cancel_reasons, cancel_reasons)
+    |> assign(:active_sub_count, active_sub_count)
+    |> assign(:mrr_cents, mrr_cents)
   end
+
+  # Active subscriptions and rough monthly recurring revenue. The
+  # frequency multipliers are calendar averages — weekly = 52/12,
+  # biweekly = 26/12, monthly = 1 — applied to each sub's service
+  # base price at lookup time so a price change is reflected without
+  # a backfill. Refunded / cancelled appointments aren't subtracted
+  # here; this is a forward-looking signal, not an accounting figure.
+  defp subscription_summary(tenant_id) do
+    {:ok, subs} =
+      Subscription
+      |> Ash.Query.filter(status == :active)
+      |> Ash.Query.set_tenant(tenant_id)
+      |> Ash.read(authorize?: false)
+
+    case subs do
+      [] ->
+        {0, 0}
+
+      _ ->
+        service_ids = subs |> Enum.map(& &1.service_type_id) |> Enum.uniq()
+
+        prices =
+          ServiceType
+          |> Ash.Query.filter(id in ^service_ids)
+          |> Ash.Query.set_tenant(tenant_id)
+          |> Ash.read!(authorize?: false)
+          |> Map.new(&{&1.id, &1.base_price_cents})
+
+        cents =
+          subs
+          |> Enum.reduce(0, fn sub, acc ->
+            base = Map.get(prices, sub.service_type_id, 0)
+            acc + round(base * frequency_factor(sub.frequency))
+          end)
+
+        {length(subs), cents}
+    end
+  end
+
+  defp frequency_factor(:weekly), do: 52 / 12
+  defp frequency_factor(:biweekly), do: 26 / 12
+  defp frequency_factor(:monthly), do: 1
+  defp frequency_factor(_), do: 0
 
   # Last-30-days breakdown of cancelled appointments grouped by
   # parsed reason. Customer-side cancellations land as
@@ -476,6 +523,18 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
               {fmt_price(@revenue_month)}
             </div>
             <div class="stat-desc text-xs text-base-content/60">Trailing 30 days</div>
+          </article>
+          <article
+            :if={@active_sub_count > 0}
+            class="stat bg-base-100 rounded-xl shadow-sm border border-base-300"
+          >
+            <div class="stat-title text-xs font-medium uppercase tracking-wide text-base-content/60">
+              Subscriptions
+            </div>
+            <div class="stat-value text-2xl font-bold text-primary">{@active_sub_count}</div>
+            <div class="stat-desc text-xs text-base-content/60">
+              ~{fmt_price(@mrr_cents)}/mo Recurring
+            </div>
           </article>
         </div>
 

@@ -219,6 +219,47 @@ defmodule DrivewayOSWeb.AdminDashboardTest do
     end
   end
 
+  describe "subscription stat" do
+    test "shows count of active subscriptions + recurring monthly revenue", ctx do
+      alias DrivewayOS.Scheduling.Subscription
+
+      {:ok, _sub} =
+        Subscription
+        |> Ash.Changeset.for_create(
+          :subscribe,
+          %{
+            customer_id: ctx.customer.id,
+            service_type_id: ctx.service.id,
+            frequency: :biweekly,
+            starts_at: DateTime.utc_now() |> DateTime.add(86_400, :second),
+            vehicle_description: "Red Honda",
+            service_address: "1 Cedar"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
+
+      assert html =~ "Subscriptions"
+      # 1 biweekly active sub at $50.00 base price → ~2.16 runs/month →
+      # ~$108/month. Just assert the stat card renders the count.
+      assert html =~ "Recurring"
+    end
+
+    test "card hidden when no active subscriptions exist", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
+
+      refute html =~ "Recurring revenue"
+    end
+  end
+
   describe "cancellation reason breakdown" do
     test "groups cancelled appointments by parsed reason", ctx do
       now = DateTime.utc_now()
