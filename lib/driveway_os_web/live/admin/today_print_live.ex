@@ -181,6 +181,11 @@ defmodule DrivewayOSWeb.Admin.TodayPrintLive do
             <dt class="text-base-content/60">Address</dt>
             <dd class="col-span-3 font-medium">{a.service_address}</dd>
 
+            <%= if a.acquisition_channel && a.acquisition_channel != "" do %>
+              <dt class="text-base-content/60">Source</dt>
+              <dd class="col-span-3">{a.acquisition_channel}</dd>
+            <% end %>
+
             <%= if a.notes && a.notes != "" do %>
               <dt class="text-base-content/60">Notes</dt>
               <dd class="col-span-3 italic">{a.notes}</dd>

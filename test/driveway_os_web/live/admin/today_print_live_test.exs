@@ -119,6 +119,74 @@ defmodule DrivewayOSWeb.Admin.TodayPrintLiveTest do
       assert html =~ "1 Print Lane"
     end
 
+    test "shows acquisition_channel as 'Source' when set", ctx do
+      tz = ctx.tenant.timezone
+      noon_today = local_today_at(tz, ~T[12:00:00])
+
+      {:ok, appt} =
+        Appointment
+        |> Ash.Changeset.for_create(
+          :book,
+          %{
+            customer_id: ctx.customer.id,
+            service_type_id: ctx.service.id,
+            scheduled_at: noon_today,
+            duration_minutes: ctx.service.duration_minutes,
+            price_cents: ctx.service.base_price_cents,
+            vehicle_description: "Source RX",
+            service_address: "1 Source Lane",
+            acquisition_channel: "Friend / family"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      appt
+      |> Ash.Changeset.for_update(:confirm, %{})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin/today/print")
+
+      assert html =~ "Source"
+      assert html =~ "Friend / family"
+    end
+
+    test "hides Source row when acquisition_channel is nil", ctx do
+      tz = ctx.tenant.timezone
+      noon_today = local_today_at(tz, ~T[12:00:00])
+
+      {:ok, appt} =
+        Appointment
+        |> Ash.Changeset.for_create(
+          :book,
+          %{
+            customer_id: ctx.customer.id,
+            service_type_id: ctx.service.id,
+            scheduled_at: noon_today,
+            duration_minutes: ctx.service.duration_minutes,
+            price_cents: ctx.service.base_price_cents,
+            vehicle_description: "Quiet RX",
+            service_address: "1 Quiet Lane"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      appt
+      |> Ash.Changeset.for_update(:confirm, %{})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin/today/print")
+
+      refute html =~ "Source"
+    end
+
     test "empty state when nothing today", ctx do
       conn = sign_in(ctx.conn, ctx.admin)
 
