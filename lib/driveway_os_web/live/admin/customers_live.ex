@@ -35,11 +35,16 @@ defmodule DrivewayOSWeb.Admin.CustomersLive do
          |> assign(:page_title, "Customers")
          |> assign(:add_form_open?, false)
          |> assign(:add_error, nil)
+         |> assign(:search_q, "")
          |> load_customers()}
     end
   end
 
   @impl true
+  def handle_event("search", %{"q" => q}, socket) do
+    {:noreply, assign(socket, :search_q, q || "")}
+  end
+
   def handle_event("show_add_form", _, socket) do
     {:noreply, socket |> assign(:add_form_open?, true) |> assign(:add_error, nil)}
   end
@@ -115,6 +120,31 @@ defmodule DrivewayOSWeb.Admin.CustomersLive do
        do: c >= t
 
   defp loyalty_earned?(_, _), do: false
+
+  # Case-insensitive substring match across name + email. Phone match
+  # is intentional too — operators often paste the number from a
+  # missed call to find who's calling.
+  defp filter_customers(customers, "") do
+    customers
+  end
+
+  defp filter_customers(customers, q) when is_binary(q) do
+    needle = q |> String.trim() |> String.downcase()
+
+    if needle == "" do
+      customers
+    else
+      Enum.filter(customers, fn c ->
+        name = String.downcase(c.name || "")
+        email = c.email |> to_string() |> String.downcase()
+        phone = String.downcase(c.phone || "")
+
+        String.contains?(name, needle) or
+          String.contains?(email, needle) or
+          String.contains?(phone, needle)
+      end)
+    end
+  end
 
   @impl true
   def render(assigns) do
@@ -218,6 +248,26 @@ defmodule DrivewayOSWeb.Admin.CustomersLive do
 
         <section class="card bg-base-100 shadow-sm border border-base-300">
           <div class="card-body p-6">
+            <form
+              :if={@customers != []}
+              id="customers-search-form"
+              phx-change="search"
+              class="flex items-center gap-2 mb-2"
+            >
+              <span
+                class="hero-magnifying-glass w-4 h-4 text-base-content/40"
+                aria-hidden="true"
+              ></span>
+              <input
+                type="search"
+                name="q"
+                value={@search_q}
+                placeholder="Name, email, or phone…"
+                class="input input-bordered input-sm w-full max-w-xs"
+                phx-debounce="300"
+              />
+            </form>
+
             <div :if={@customers == []} class="text-center py-12 px-4">
               <span
                 class="hero-user-group w-12 h-12 mx-auto text-base-content/30"
@@ -226,7 +276,18 @@ defmodule DrivewayOSWeb.Admin.CustomersLive do
               <p class="mt-2 text-sm text-base-content/60">No customers yet.</p>
             </div>
 
-            <div :if={@customers != []} class="overflow-x-auto">
+            <% filtered = filter_customers(@customers, @search_q) %>
+
+            <div
+              :if={@customers != [] and filtered == []}
+              class="text-center py-8 px-4"
+            >
+              <p class="text-sm text-base-content/60">
+                No customers match "{@search_q}".
+              </p>
+            </div>
+
+            <div :if={filtered != []} class="overflow-x-auto">
               <table class="table table-zebra">
                 <thead>
                   <tr>
@@ -248,7 +309,7 @@ defmodule DrivewayOSWeb.Admin.CustomersLive do
                   </tr>
                 </thead>
                 <tbody>
-                  <tr :for={c <- @customers} class="hover:bg-base-200/50 cursor-pointer">
+                  <tr :for={c <- filtered} class="hover:bg-base-200/50 cursor-pointer">
                     <td class="font-semibold">
                       <div class="flex items-center gap-2 flex-wrap">
                         <.link navigate={~p"/admin/customers/#{c.id}"} class="link link-hover">

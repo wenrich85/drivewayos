@@ -211,4 +211,39 @@ defmodule DrivewayOSWeb.Admin.CustomersLiveTest do
       refute html =~ "Free wash"
     end
   end
+
+  describe "search" do
+    test "filters the table to rows matching the query", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin/customers")
+
+      assert html =~ ctx.alice.name
+      assert html =~ "Owner"
+
+      # Search for "alice" — Owner should drop out.
+      filtered =
+        lv
+        |> element("#customers-search-form")
+        |> render_change(%{"q" => "alice"})
+
+      assert filtered =~ ctx.alice.name
+      refute filtered =~ "Owner"
+    end
+
+    test "shows empty-result message when nothing matches", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, _} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin/customers")
+
+      filtered =
+        lv
+        |> element("#customers-search-form")
+        |> render_change(%{"q" => "zzznevermatch"})
+
+      assert filtered =~ "No customers match"
+    end
+  end
 end
