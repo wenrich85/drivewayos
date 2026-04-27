@@ -301,6 +301,24 @@ defmodule DrivewayOSWeb.AdminDashboardTest do
     end
   end
 
+  describe "live broadcasts" do
+    test "confirming a pending appointment fires a :confirmed broadcast", ctx do
+      {:ok, appt} = book!(ctx.tenant, ctx.customer, ctx.service)
+
+      DrivewayOS.AppointmentBroadcaster.subscribe(ctx.tenant.id)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, _html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
+
+      render_click(lv, "confirm_appointment", %{"id" => appt.id})
+
+      assert_receive {:appointment, :confirmed, %{id: id}}, 500
+      assert id == appt.id
+    end
+  end
+
   describe "Today widget" do
     test "lists appointments scheduled for today in tenant timezone", ctx do
       tz = ctx.tenant.timezone

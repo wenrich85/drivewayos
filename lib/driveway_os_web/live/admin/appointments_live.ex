@@ -12,6 +12,7 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLive do
   on_mount DrivewayOSWeb.LoadCustomerHook
 
   alias DrivewayOS.Accounts.Customer
+  alias DrivewayOS.AppointmentBroadcaster
   alias DrivewayOS.Scheduling.{Appointment, ServiceType}
 
   require Ash.Query
@@ -29,6 +30,10 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLive do
         {:ok, push_navigate(socket, to: ~p"/")}
 
       true ->
+        if connected?(socket) do
+          AppointmentBroadcaster.subscribe(socket.assigns.current_tenant.id)
+        end
+
         {:ok,
          socket
          |> assign(:page_title, "Appointments")
@@ -36,6 +41,11 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLive do
          |> assign(:search_q, "")
          |> load_data()}
     end
+  end
+
+  @impl true
+  def handle_info({:appointment, _event, _payload}, socket) do
+    {:noreply, load_data(socket)}
   end
 
   @impl true
@@ -71,9 +81,12 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLive do
 
     case Ash.get(Appointment, id, tenant: tenant_id, authorize?: false) do
       {:ok, appt} ->
-        appt
-        |> build_changeset.()
-        |> Ash.update!(authorize?: false, tenant: tenant_id)
+        updated =
+          appt
+          |> build_changeset.()
+          |> Ash.update!(authorize?: false, tenant: tenant_id)
+
+        AppointmentBroadcaster.broadcast(tenant_id, :payment_changed, %{id: updated.id})
 
         {:noreply, load_data(socket)}
 

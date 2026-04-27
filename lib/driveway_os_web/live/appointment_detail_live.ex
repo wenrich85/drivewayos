@@ -17,6 +17,7 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
   on_mount DrivewayOSWeb.LoadCustomerHook
 
   alias DrivewayOS.Accounts.Customer
+  alias DrivewayOS.AppointmentBroadcaster
   alias DrivewayOS.Billing.StripeClient
   alias DrivewayOS.Mailer
   alias DrivewayOS.Notifications.BookingEmail
@@ -218,6 +219,7 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
          |> Ash.update(authorize?: false, tenant: tenant_id) do
       {:ok, updated} ->
         send_state_change_emails(socket, action, updated)
+        AppointmentBroadcaster.broadcast(tenant_id, action_event(action), %{id: updated.id})
 
         {:noreply,
          socket
@@ -228,6 +230,12 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
         {:noreply, assign(socket, :flash_msg, "Could not update.")}
     end
   end
+
+  defp action_event(:confirm), do: :confirmed
+  defp action_event(:cancel), do: :cancelled
+  defp action_event(:start_wash), do: :started
+  defp action_event(:complete), do: :completed
+  defp action_event(_), do: :payment_changed
 
   # Side-effect: emails on state change. Confirm + cancel notify the
   # customer; cancellations from a customer also alert the admins.

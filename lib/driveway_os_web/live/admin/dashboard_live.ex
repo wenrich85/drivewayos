@@ -18,6 +18,7 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
   on_mount DrivewayOSWeb.LoadCustomerHook
 
   alias DrivewayOS.Accounts.Customer
+  alias DrivewayOS.AppointmentBroadcaster
   alias DrivewayOS.Mailer
   alias DrivewayOS.Notifications.BookingEmail
   alias DrivewayOS.Platform.CustomDomain
@@ -38,8 +39,17 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
         {:ok, push_navigate(socket, to: ~p"/")}
 
       true ->
+        if connected?(socket) do
+          AppointmentBroadcaster.subscribe(socket.assigns.current_tenant.id)
+        end
+
         {:ok, load_dashboard(socket)}
     end
+  end
+
+  @impl true
+  def handle_info({:appointment, _event, _payload}, socket) do
+    {:noreply, load_dashboard(socket)}
   end
 
   @impl true
@@ -66,6 +76,7 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
           |> Ash.update!(authorize?: false, tenant: tenant_id)
 
         send_state_change_email(socket, action, updated)
+        AppointmentBroadcaster.broadcast(tenant_id, broadcast_event(action), %{id: updated.id})
 
         {:noreply, load_dashboard(socket)}
 
@@ -73,6 +84,12 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
         {:noreply, socket}
     end
   end
+
+  defp broadcast_event(:confirm), do: :confirmed
+  defp broadcast_event(:cancel), do: :cancelled
+  defp broadcast_event(:start_wash), do: :started
+  defp broadcast_event(:complete), do: :completed
+  defp broadcast_event(_), do: :payment_changed
 
   # Customer-side email on admin-initiated confirm / cancel.
   defp send_state_change_email(socket, action, %Appointment{} = appt)

@@ -11,6 +11,7 @@ defmodule DrivewayOSWeb.AppointmentsLive do
   on_mount DrivewayOSWeb.LoadTenantHook
   on_mount DrivewayOSWeb.LoadCustomerHook
 
+  alias DrivewayOS.AppointmentBroadcaster
   alias DrivewayOS.Scheduling.Appointment
   alias DrivewayOS.Scheduling.ServiceType
 
@@ -26,36 +27,48 @@ defmodule DrivewayOSWeb.AppointmentsLive do
         {:ok, push_navigate(socket, to: ~p"/sign-in")}
 
       true ->
-        tenant_id = socket.assigns.current_tenant.id
-        customer_id = socket.assigns.current_customer.id
-
-        appts =
-          Appointment
-          |> Ash.Query.for_read(:for_customer, %{customer_id: customer_id})
-          |> Ash.Query.set_tenant(tenant_id)
-          |> Ash.read!(authorize?: false)
-
-        # One small lookup keyed by service_type_id so the row render
-        # can show the service name without an N+1.
-        service_ids = appts |> Enum.map(& &1.service_type_id) |> Enum.uniq()
-
-        services =
-          if service_ids == [] do
-            %{}
-          else
-            ServiceType
-            |> Ash.Query.filter(id in ^service_ids)
-            |> Ash.Query.set_tenant(tenant_id)
-            |> Ash.read!(authorize?: false)
-            |> Map.new(&{&1.id, &1})
-          end
+        if connected?(socket) do
+          AppointmentBroadcaster.subscribe(socket.assigns.current_tenant.id)
+        end
 
         {:ok,
          socket
          |> assign(:page_title, "My appointments")
-         |> assign(:appointments, appts)
-         |> assign(:services, services)}
+         |> load_appointments()}
     end
+  end
+
+  @impl true
+  def handle_info({:appointment, _event, _payload}, socket) do
+    {:noreply, load_appointments(socket)}
+  end
+
+  defp load_appointments(socket) do
+    tenant_id = socket.assigns.current_tenant.id
+    customer_id = socket.assigns.current_customer.id
+
+    appts =
+      Appointment
+      |> Ash.Query.for_read(:for_customer, %{customer_id: customer_id})
+      |> Ash.Query.set_tenant(tenant_id)
+      |> Ash.read!(authorize?: false)
+
+    service_ids = appts |> Enum.map(& &1.service_type_id) |> Enum.uniq()
+
+    services =
+      if service_ids == [] do
+        %{}
+      else
+        ServiceType
+        |> Ash.Query.filter(id in ^service_ids)
+        |> Ash.Query.set_tenant(tenant_id)
+        |> Ash.read!(authorize?: false)
+        |> Map.new(&{&1.id, &1})
+      end
+
+    socket
+    |> assign(:appointments, appts)
+    |> assign(:services, services)
   end
 
   defp fmt_price(cents), do: "$" <> :erlang.float_to_binary(cents / 100, decimals: 2)
