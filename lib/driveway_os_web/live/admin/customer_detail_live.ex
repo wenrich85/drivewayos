@@ -448,7 +448,12 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
                 <div class="flex items-start justify-between gap-3 flex-wrap">
                   <div class="min-w-0">
                     <div class="font-medium flex items-center gap-2 flex-wrap">
-                      <span>{service_name(@service_map, sub.service_type_id)}</span>
+                      <.link
+                        navigate={~p"/subscriptions/#{sub.id}"}
+                        class="link link-hover"
+                      >
+                        {service_name(@service_map, sub.service_type_id)}
+                      </.link>
                       <span class={"badge badge-sm " <> sub_badge(sub.status)}>{sub.status}</span>
                       <span class="text-xs text-base-content/60">
                         {frequency_label(sub.frequency)}

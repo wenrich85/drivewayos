@@ -704,7 +704,12 @@ defmodule DrivewayOSWeb.CustomerProfileLive do
                 <div class="flex items-start justify-between gap-3 flex-wrap">
                   <div class="min-w-0">
                     <div class="font-medium flex items-center gap-2">
-                      <span>{(@service_map[sub.service_type_id] || %{name: "Service"}).name}</span>
+                      <.link
+                        navigate={~p"/subscriptions/#{sub.id}"}
+                        class="link link-hover"
+                      >
+                        {(@service_map[sub.service_type_id] || %{name: "Service"}).name}
+                      </.link>
                       <span class={"badge badge-sm " <> sub_badge(sub.status)}>
                         {sub.status}
                       </span>
