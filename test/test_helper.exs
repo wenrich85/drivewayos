@@ -27,3 +27,12 @@ Mox.defmock(DrivewayOS.Platform.DnsResolverMock,
 )
 
 Application.put_env(:driveway_os, :dns_resolver, DrivewayOS.Platform.DnsResolverMock)
+
+# SMS client mock. Tests that need to assert on outgoing SMS
+# expectations explicitly (Mox.expect/3); other tests fall through
+# to a default stub that returns a synthetic success.
+Mox.defmock(DrivewayOS.Notifications.SmsClientMock,
+  for: DrivewayOS.Notifications.SmsClient
+)
+
+Application.put_env(:driveway_os, :sms_client, DrivewayOS.Notifications.SmsClientMock)

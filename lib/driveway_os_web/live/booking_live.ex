@@ -37,7 +37,7 @@ defmodule DrivewayOSWeb.BookingLive do
   alias DrivewayOS.Billing.StripeClient
   alias DrivewayOS.Fleet.{Address, Vehicle}
   alias DrivewayOS.Mailer
-  alias DrivewayOS.Notifications.BookingEmail
+  alias DrivewayOS.Notifications.{BookingEmail, BookingSms}
   alias DrivewayOS.Plans
   alias DrivewayOS.Scheduling.{Appointment, BookingDraft, Photo, ServiceType}
   alias DrivewayOS.Uploads
@@ -793,8 +793,24 @@ defmodule DrivewayOSWeb.BookingLive do
     tenant
     |> BookingEmail.confirmation(customer, appt, service)
     |> Mailer.deliver()
+
+    maybe_send_confirmation_sms(tenant, customer, appt, service)
   rescue
     _ -> :error
+  end
+
+  # SMS is gated on the tenant's plan AND the customer having a
+  # phone number. BookingSms.confirmation/4 itself short-circuits
+  # via {:error, :no_phone} / {:error, :no_from_number} so we
+  # don't need to re-check those here.
+  defp maybe_send_confirmation_sms(tenant, customer, appt, service) do
+    if Plans.tenant_can?(tenant, :sms_notifications) do
+      BookingSms.confirmation(tenant, customer, appt, service)
+    end
+
+    :ok
+  rescue
+    _ -> :ok
   end
 
   defp notify_admins_of_new_booking(tenant, customer, appt, service) do
