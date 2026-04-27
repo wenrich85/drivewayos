@@ -186,6 +186,12 @@ defmodule DrivewayOSWeb.Admin.TodayPrintLive do
               <dd class="col-span-3">{a.acquisition_channel}</dd>
             <% end %>
 
+            <% pinned = (@customer_map[a.customer_id] || %{admin_notes: nil}).admin_notes %>
+            <%= if pinned && pinned != "" do %>
+              <dt class="text-base-content/60">Pinned</dt>
+              <dd class="col-span-3 font-semibold">{pinned}</dd>
+            <% end %>
+
             <%= if a.notes && a.notes != "" do %>
               <dt class="text-base-content/60">Notes</dt>
               <dd class="col-span-3 italic">{a.notes}</dd>
