@@ -158,6 +158,64 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLiveTest do
     end
   end
 
+  describe "loyalty visibility" do
+    test "shows progress card when tenant has a threshold set", ctx do
+      ctx.tenant
+      |> Ash.Changeset.for_update(:update, %{loyalty_threshold: 10})
+      |> Ash.update!(authorize?: false)
+
+      ctx.alice
+      |> Ash.Changeset.for_update(:increment_loyalty, %{})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+      |> Ash.Changeset.for_update(:increment_loyalty, %{})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/admin/customers/#{ctx.alice.id}")
+
+      assert html =~ "Loyalty"
+      assert html =~ "2/10"
+    end
+
+    test "shows 'free wash earned' state when count >= threshold", ctx do
+      ctx.tenant
+      |> Ash.Changeset.for_update(:update, %{loyalty_threshold: 2})
+      |> Ash.update!(authorize?: false)
+
+      Enum.each(1..2, fn _ ->
+        ctx.alice
+        |> Ash.reload!(authorize?: false)
+        |> Ash.Changeset.for_update(:increment_loyalty, %{})
+        |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+      end)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/admin/customers/#{ctx.alice.id}")
+
+      assert html =~ "free wash earned"
+    end
+
+    test "card hidden when tenant has no threshold set", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/admin/customers/#{ctx.alice.id}")
+
+      refute html =~ "Loyalty:"
+      refute html =~ "free wash earned"
+    end
+  end
+
   describe "subscriptions" do
     test "admin can create + manage a subscription for the customer", ctx do
       {:ok, [service | _]} =

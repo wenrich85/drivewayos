@@ -192,6 +192,20 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
   defp frequency_label(:monthly), do: "monthly"
   defp frequency_label(other), do: to_string(other)
 
+  # Mirror of CustomerProfileLive's loyalty helpers — operators
+  # see exactly what the customer sees on their /me, plus a hint
+  # about how the wizard's redemption checkbox actually applies
+  # the credit (since some operators won't intuit that without
+  # context).
+  defp loyalty_visible?(%{loyalty_threshold: t}, %{loyalty_count: _}) when is_integer(t), do: true
+  defp loyalty_visible?(_, _), do: false
+
+  defp loyalty_earned?(%{loyalty_threshold: t}, %{loyalty_count: c})
+       when is_integer(t) and is_integer(c),
+       do: c >= t
+
+  defp loyalty_earned?(_, _), do: false
+
   defp fmt_price(cents), do: "$" <> :erlang.float_to_binary(cents / 100, decimals: 2)
 
   defp service_name(map, id), do: get_in(map, [id, Access.key(:name)]) || "Service"
@@ -236,6 +250,43 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
           <span class="hero-exclamation-circle w-5 h-5 shrink-0" aria-hidden="true"></span>
           <span class="text-sm">{@notes_error}</span>
         </div>
+
+        <section
+          :if={loyalty_visible?(@current_tenant, @customer)}
+          class={
+            "card shadow-sm border " <>
+              if loyalty_earned?(@current_tenant, @customer),
+                do: "bg-success/10 border-success/30",
+                else: "bg-primary/5 border-primary/20"
+          }
+        >
+          <div class="card-body p-4 flex-row items-center gap-3">
+            <span
+              class={
+                "w-6 h-6 shrink-0 hero-gift " <>
+                  if loyalty_earned?(@current_tenant, @customer),
+                    do: "text-success",
+                    else: "text-primary"
+              }
+              aria-hidden="true"
+            ></span>
+            <div class="flex-1 min-w-0">
+              <div class="font-semibold">
+                <%= if loyalty_earned?(@current_tenant, @customer) do %>
+                  Loyalty: free wash earned
+                <% else %>
+                  Loyalty: {@customer.loyalty_count}/{@current_tenant.loyalty_threshold}
+                <% end %>
+              </div>
+              <div :if={loyalty_earned?(@current_tenant, @customer)} class="text-xs text-base-content/70 mt-0.5">
+                Apply on their next booking — wizard's redemption checkbox handles the discount.
+              </div>
+            </div>
+            <div class="text-xl font-bold tabular-nums shrink-0">
+              {@customer.loyalty_count}/{@current_tenant.loyalty_threshold}
+            </div>
+          </div>
+        </section>
 
         <section class="card bg-base-100 shadow-sm border border-base-300">
           <div class="card-body p-6 space-y-3">
