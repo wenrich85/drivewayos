@@ -33,9 +33,55 @@ defmodule DrivewayOSWeb.Admin.CustomersLive do
         {:ok,
          socket
          |> assign(:page_title, "Customers")
+         |> assign(:add_form_open?, false)
+         |> assign(:add_error, nil)
          |> load_customers()}
     end
   end
+
+  @impl true
+  def handle_event("show_add_form", _, socket) do
+    {:noreply, socket |> assign(:add_form_open?, true) |> assign(:add_error, nil)}
+  end
+
+  def handle_event("hide_add_form", _, socket) do
+    {:noreply, socket |> assign(:add_form_open?, false) |> assign(:add_error, nil)}
+  end
+
+  def handle_event("create_customer", %{"customer" => params}, socket) do
+    tenant_id = socket.assigns.current_tenant.id
+
+    attrs = %{
+      email: params["email"] |> to_string() |> String.trim() |> String.downcase(),
+      name: params["name"] |> to_string() |> String.trim(),
+      phone: params["phone"] |> to_string() |> String.trim() |> presence()
+    }
+
+    # :register_guest upserts on email — same person being added
+    # twice gets returned, not duplicated. The customer can later
+    # claim the account by self-registering with the same email,
+    # which sets a password without breaking the customer_id FKs.
+    case Customer
+         |> Ash.Changeset.for_create(:register_guest, attrs, tenant: tenant_id)
+         |> Ash.create(authorize?: false) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> assign(:add_form_open?, false)
+         |> assign(:add_error, nil)
+         |> load_customers()}
+
+      {:error, %Ash.Error.Invalid{errors: errors}} ->
+        msg = errors |> Enum.map(&Map.get(&1, :message, "is invalid")) |> Enum.join("; ")
+        {:noreply, assign(socket, :add_error, msg)}
+
+      _ ->
+        {:noreply, assign(socket, :add_error, "Couldn't add the customer.")}
+    end
+  end
+
+  defp presence(""), do: nil
+  defp presence(v), do: v
 
   defp load_customers(socket) do
     tenant_id = socket.assigns.current_tenant.id
@@ -82,11 +128,93 @@ defmodule DrivewayOSWeb.Admin.CustomersLive do
           >
             <span class="hero-arrow-left w-4 h-4" aria-hidden="true"></span> Dashboard
           </a>
-          <h1 class="text-3xl font-bold tracking-tight mt-2">Customers</h1>
-          <p class="text-sm text-base-content/70 mt-1">
-            Everyone who's signed up at <span class="font-semibold">{@current_tenant.display_name}</span>.
-          </p>
+          <div class="mt-2 flex items-end justify-between gap-3 flex-wrap">
+            <div>
+              <h1 class="text-3xl font-bold tracking-tight">Customers</h1>
+              <p class="text-sm text-base-content/70 mt-1">
+                Everyone who's signed up at
+                <span class="font-semibold">{@current_tenant.display_name}</span>.
+              </p>
+            </div>
+            <button
+              :if={not @add_form_open?}
+              phx-click="show_add_form"
+              class="btn btn-primary btn-sm gap-1"
+            >
+              <span class="hero-plus w-4 h-4" aria-hidden="true"></span> Add customer
+            </button>
+          </div>
         </header>
+
+        <section
+          :if={@add_form_open?}
+          class="card bg-base-100 shadow-sm border border-base-300"
+        >
+          <div class="card-body p-6 space-y-4">
+            <div>
+              <h2 class="card-title text-lg">Add a customer</h2>
+              <p class="text-xs text-base-content/60 mt-1">
+                For phone-call walk-ins. They'll get a guest record they can later
+                claim by self-registering with the same email.
+              </p>
+            </div>
+
+            <div :if={@add_error} role="alert" class="alert alert-error text-sm">
+              {@add_error}
+            </div>
+
+            <form
+              id="add-customer-form"
+              phx-submit="create_customer"
+              class="grid grid-cols-1 md:grid-cols-2 gap-3"
+            >
+              <div>
+                <label class="label" for="ac-name">
+                  <span class="label-text font-medium">Name</span>
+                </label>
+                <input
+                  id="ac-name"
+                  type="text"
+                  name="customer[name]"
+                  class="input input-bordered w-full"
+                  required
+                  autofocus
+                />
+              </div>
+              <div>
+                <label class="label" for="ac-email">
+                  <span class="label-text font-medium">Email</span>
+                </label>
+                <input
+                  id="ac-email"
+                  type="email"
+                  name="customer[email]"
+                  class="input input-bordered w-full"
+                  required
+                />
+              </div>
+              <div class="md:col-span-2">
+                <label class="label" for="ac-phone">
+                  <span class="label-text font-medium">Phone</span>
+                  <span class="label-text-alt text-base-content/50">Optional</span>
+                </label>
+                <input
+                  id="ac-phone"
+                  type="tel"
+                  name="customer[phone]"
+                  class="input input-bordered w-full"
+                  placeholder="+1 555-555-1234"
+                />
+              </div>
+              <div class="md:col-span-2 flex justify-end gap-2">
+                <button type="button" phx-click="hide_add_form" class="btn btn-ghost btn-sm">
+                  Cancel
+                </button>
+                <button type="submit" class="btn btn-primary btn-sm">Add customer</button>
+              </div>
+            </form>
+          </div>
+        </section>
 
         <section class="card bg-base-100 shadow-sm border border-base-300">
           <div class="card-body p-6">

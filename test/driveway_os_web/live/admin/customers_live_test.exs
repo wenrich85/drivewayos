@@ -6,6 +6,8 @@ defmodule DrivewayOSWeb.Admin.CustomersLiveTest do
   alias DrivewayOS.Accounts.Customer
   alias DrivewayOS.Platform
 
+  require Ash.Query
+
   setup do
     {:ok, %{tenant: tenant, admin: admin}} =
       Platform.provision_tenant(%{
@@ -86,6 +88,83 @@ defmodule DrivewayOSWeb.Admin.CustomersLiveTest do
       conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin/customers")
 
     refute html =~ "Stranger Danger"
+  end
+
+  describe "add customer (operator phone-call workflow)" do
+    test "Add customer toggles inline form, submit creates a guest row", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, _html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin/customers")
+
+      html = render_click(lv, "show_add_form")
+      assert html =~ "add-customer-form"
+
+      lv
+      |> form("#add-customer-form", %{
+        "customer" => %{
+          "name" => "Walk In Wendy",
+          "email" => "wendy-#{System.unique_integer([:positive])}@example.com",
+          "phone" => "+15125550123"
+        }
+      })
+      |> render_submit()
+
+      {:ok, all} =
+        Customer
+        |> Ash.Query.set_tenant(ctx.tenant.id)
+        |> Ash.read(authorize?: false)
+
+      wendy = Enum.find(all, &(&1.name == "Walk In Wendy"))
+      assert wendy != nil
+      assert wendy.guest? == true
+      assert wendy.role == :customer
+      assert wendy.hashed_password == nil
+    end
+
+    test "duplicate email upserts (returns the existing row)", ctx do
+      existing_email = "dup-#{System.unique_integer([:positive])}@example.com"
+
+      {:ok, original} =
+        Customer
+        |> Ash.Changeset.for_create(
+          :register_with_password,
+          %{
+            email: existing_email,
+            password: "Password123!",
+            password_confirmation: "Password123!",
+            name: "Original"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, _html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin/customers")
+
+      render_click(lv, "show_add_form")
+
+      lv
+      |> form("#add-customer-form", %{
+        "customer" => %{
+          "name" => "Different Name",
+          "email" => existing_email
+        }
+      })
+      |> render_submit()
+
+      {:ok, matches} =
+        Customer
+        |> Ash.Query.filter(email == ^existing_email)
+        |> Ash.Query.set_tenant(ctx.tenant.id)
+        |> Ash.read(authorize?: false)
+
+      assert length(matches) == 1
+      [row] = matches
+      assert row.id == original.id
+    end
   end
 
   describe "loyalty badge" do
