@@ -174,6 +174,25 @@ defmodule DrivewayOS.LoyaltyTest do
       assert addr == to_string(ctx.customer.email)
     end
 
+    test "respects the customer's marketing_emails_ok? opt-out", ctx do
+      ctx.tenant
+      |> Ash.Changeset.for_update(:update, %{loyalty_threshold: 2})
+      |> Ash.update!(authorize?: false)
+
+      ctx.customer
+      |> Ash.Changeset.for_update(:update, %{marketing_emails_ok?: false})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      drain_inbox()
+
+      _ = book_and_complete!(ctx)
+      _ = book_and_complete!(ctx)
+
+      received = drain_emails([])
+      free_wash_count = Enum.count(received, &String.contains?(&1.subject, "free wash"))
+      assert free_wash_count == 0
+    end
+
     test "doesn't fire the earned email on completions past the threshold", ctx do
       ctx.tenant
       |> Ash.Changeset.for_update(:update, %{loyalty_threshold: 2})

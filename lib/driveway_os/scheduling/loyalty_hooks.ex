@@ -43,7 +43,10 @@ defmodule DrivewayOS.Scheduling.LoyaltyHooks do
       :ok
   end
 
-  defp maybe_send_earned_email(%Tenant{loyalty_threshold: t}, %Customer{loyalty_count: c} = customer)
+  defp maybe_send_earned_email(
+         %Tenant{loyalty_threshold: t},
+         %Customer{loyalty_count: c, marketing_emails_ok?: true} = customer
+       )
        when is_integer(t) and is_integer(c) and c == t do
     tenant = Ash.get!(Tenant, customer.tenant_id, authorize?: false)
 
@@ -56,5 +59,6 @@ defmodule DrivewayOS.Scheduling.LoyaltyHooks do
     _ -> :ok
   end
 
+  # Customer opted out of marketing-style emails — silent.
   defp maybe_send_earned_email(_, _), do: :ok
 end

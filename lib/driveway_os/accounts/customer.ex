@@ -221,6 +221,20 @@ defmodule DrivewayOS.Accounts.Customer do
       constraints min: 0
     end
 
+    # Marketing-comms opt-out. Operational emails (booking
+    # confirmation / reminder / status changes / cancellation /
+    # payment-failed / account-deleted) ALWAYS send — they're
+    # transactional and customers expect them. This flag gates
+    # things like the "you earned a free wash" loyalty email +
+    # any future re-engagement campaigns. Default `true` so
+    # existing customers keep getting the loyalty perk; the
+    # opt-out is on the customer's profile.
+    attribute :marketing_emails_ok?, :boolean do
+      default true
+      allow_nil? false
+      public? true
+    end
+
     # GDPR-style anonymization timestamp. Customer hits "Delete
     # my account" on /me; we set this + scrub identifying fields
     # rather than DELETE the row outright (keeping the row

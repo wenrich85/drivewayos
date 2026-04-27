@@ -192,6 +192,30 @@ defmodule DrivewayOSWeb.CustomerProfileLiveTest do
       assert reloaded.phone == "+15125559999"
     end
 
+    test "Save persists the marketing_emails_ok? opt-out", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, _} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/me")
+
+      render_click(lv, "edit_profile")
+
+      # Submit with marketing_emails_ok=false (the hidden-input
+      # half of the checkbox pair, simulating the unchecked state).
+      lv
+      |> form("#profile-edit-form", %{
+        "profile" => %{
+          "name" => ctx.customer.name,
+          "phone" => ctx.customer.phone || "",
+          "marketing_emails_ok" => "false"
+        }
+      })
+      |> render_submit()
+
+      reloaded = Ash.get!(Customer, ctx.customer.id, tenant: ctx.tenant.id, authorize?: false)
+      assert reloaded.marketing_emails_ok? == false
+    end
+
     test "Cancel returns to read mode without changing the row", ctx do
       conn = sign_in(ctx.conn, ctx.customer)
 

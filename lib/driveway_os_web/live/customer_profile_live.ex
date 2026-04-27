@@ -121,7 +121,8 @@ defmodule DrivewayOSWeb.CustomerProfileLive do
     case me
          |> Ash.Changeset.for_update(:update, %{
            name: params["name"],
-           phone: params["phone"]
+           phone: params["phone"],
+           marketing_emails_ok?: params["marketing_emails_ok"] in ["true", "on", true]
          })
          |> Ash.update(authorize?: false, tenant: socket.assigns.current_tenant.id) do
       {:ok, updated} ->
@@ -448,6 +449,28 @@ defmodule DrivewayOSWeb.CustomerProfileLive do
                   class="input input-bordered w-full"
                   placeholder="+1 555-555-1234"
                 />
+              </div>
+              <div class="border-t border-base-200 pt-3">
+                <label class="cursor-pointer flex items-start gap-3">
+                  <%!-- Hidden input ensures unchecked state still
+                       posts a value (browsers omit unchecked
+                       checkboxes from POST otherwise). --%>
+                  <input type="hidden" name="profile[marketing_emails_ok]" value="false" />
+                  <input
+                    type="checkbox"
+                    name="profile[marketing_emails_ok]"
+                    value="true"
+                    checked={@current_customer.marketing_emails_ok?}
+                    class="checkbox checkbox-sm mt-1"
+                  />
+                  <div class="text-sm">
+                    <div class="font-medium">Marketing emails</div>
+                    <div class="text-xs text-base-content/60 mt-0.5">
+                      Loyalty rewards + occasional shop updates. Booking confirmations
+                      and reminders always go through regardless.
+                    </div>
+                  </div>
+                </label>
               </div>
               <div :if={@errors[:profile]} role="alert" class="alert alert-error text-sm">
                 {@errors[:profile]}
