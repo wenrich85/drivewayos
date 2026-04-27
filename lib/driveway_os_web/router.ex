@@ -45,6 +45,8 @@ defmodule DrivewayOSWeb.Router do
     live "/sign-in", Auth.SignInLive
     live "/magic-link", Auth.MagicLinkLive
     live "/register", Auth.RegisterLive
+    live "/forgot-password", Auth.ForgotPasswordLive
+    live "/reset-password/:token", Auth.ResetPasswordLive
     live "/book", BookingLive
     live "/book/success/:id", BookingSuccessLive
     live "/appointments", AppointmentsLive

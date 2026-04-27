@@ -105,6 +105,12 @@ defmodule DrivewayOSWeb.Auth.SignInLive do
                 <span class="hero-arrow-right-on-rectangle w-5 h-5" aria-hidden="true"></span>
                 Sign in
               </button>
+
+              <p class="text-sm text-center text-base-content/60">
+                <.link navigate={~p"/forgot-password"} class="link link-hover">
+                  Forgot your password?
+                </.link>
+              </p>
             </form>
 
             <div class="divider text-xs my-2">or</div>
