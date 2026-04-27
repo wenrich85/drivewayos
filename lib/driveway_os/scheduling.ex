@@ -17,6 +17,7 @@ defmodule DrivewayOS.Scheduling do
     resource DrivewayOS.Scheduling.Photo
     resource DrivewayOS.Scheduling.BookingDraft
     resource DrivewayOS.Scheduling.Subscription
+    resource DrivewayOS.Scheduling.BlockedDate
   end
 
   @default_service_types [
@@ -83,6 +84,13 @@ defmodule DrivewayOS.Scheduling do
       |> Ash.Query.set_tenant(tenant_id)
       |> Ash.read(authorize?: false)
 
+    {:ok, blocked} =
+      DrivewayOS.Scheduling.BlockedDate
+      |> Ash.Query.set_tenant(tenant_id)
+      |> Ash.read(authorize?: false)
+
+    blocked_dates = MapSet.new(blocked, & &1.blocked_on)
+
     booked_counts =
       appointments
       |> Enum.frequencies_by(fn a -> a.scheduled_at end)
@@ -92,6 +100,7 @@ defmodule DrivewayOS.Scheduling do
     for template <- templates,
         offset <- 0..(days - 1),
         date = Date.add(today, offset),
+        not MapSet.member?(blocked_dates, date),
         Integer.mod(Date.day_of_week(date, :sunday) - 1, 7) == template.day_of_week,
         scheduled_at = combine_date_time(date, template.start_time),
         DateTime.compare(scheduled_at, DateTime.utc_now()) == :gt,

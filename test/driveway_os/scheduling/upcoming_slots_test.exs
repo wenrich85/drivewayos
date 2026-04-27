@@ -121,5 +121,24 @@ defmodule DrivewayOS.Scheduling.UpcomingSlotsTest do
 
       assert Scheduling.upcoming_slots(tenant.id, 14) == []
     end
+
+    test "skips dates the operator has blocked", %{tenant: tenant} do
+      tomorrow = Date.utc_today() |> Date.add(1)
+      tomorrow_dow = (Date.day_of_week(tomorrow, :sunday) - 1) |> Integer.mod(7)
+
+      _bt = create_template!(tenant, %{day_of_week: tomorrow_dow, start_time: ~T[09:00:00]})
+
+      DrivewayOS.Scheduling.BlockedDate
+      |> Ash.Changeset.for_create(
+        :block,
+        %{blocked_on: tomorrow, reason: "Vacation"},
+        tenant: tenant.id
+      )
+      |> Ash.create!(authorize?: false)
+
+      slots = Scheduling.upcoming_slots(tenant.id, 14)
+
+      assert Enum.all?(slots, fn s -> DateTime.to_date(s.scheduled_at) != tomorrow end)
+    end
   end
 end

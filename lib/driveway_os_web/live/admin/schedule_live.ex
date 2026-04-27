@@ -39,7 +39,45 @@ defmodule DrivewayOSWeb.Admin.ScheduleLive do
          |> assign(:form_error, nil)
          |> assign(:editing_id, nil)
          |> assign(:edit_error, nil)
-         |> load_blocks()}
+         |> assign(:blocked_error, nil)
+         |> load_blocks()
+         |> load_blocked_dates()}
+    end
+  end
+
+  def handle_event("block_date", %{"blocked" => params}, socket) do
+    tenant_id = socket.assigns.current_tenant.id
+
+    attrs = %{
+      blocked_on: parse_date(params["blocked_on"]),
+      reason: params["reason"]
+    }
+
+    case DrivewayOS.Scheduling.BlockedDate
+         |> Ash.Changeset.for_create(:block, attrs, tenant: tenant_id)
+         |> Ash.create(authorize?: false) do
+      {:ok, _} ->
+        {:noreply, socket |> assign(:blocked_error, nil) |> load_blocked_dates()}
+
+      {:error, %Ash.Error.Invalid{errors: errors}} ->
+        msg = errors |> Enum.map(&Map.get(&1, :message, "is invalid")) |> Enum.join("; ")
+        {:noreply, assign(socket, :blocked_error, msg)}
+
+      _ ->
+        {:noreply, assign(socket, :blocked_error, "Couldn't block that date.")}
+    end
+  end
+
+  def handle_event("unblock_date", %{"id" => id}, socket) do
+    tenant_id = socket.assigns.current_tenant.id
+
+    case Ash.get(DrivewayOS.Scheduling.BlockedDate, id, tenant: tenant_id, authorize?: false) do
+      {:ok, row} ->
+        Ash.destroy(row, authorize?: false, tenant: tenant_id)
+        {:noreply, load_blocked_dates(socket)}
+
+      _ ->
+        {:noreply, socket}
     end
   end
 
@@ -140,6 +178,27 @@ defmodule DrivewayOSWeb.Admin.ScheduleLive do
       |> Ash.read!(authorize?: false)
 
     assign(socket, :blocks, blocks)
+  end
+
+  defp load_blocked_dates(socket) do
+    tenant_id = socket.assigns.current_tenant.id
+
+    {:ok, blocked} =
+      DrivewayOS.Scheduling.BlockedDate
+      |> Ash.Query.for_read(:upcoming)
+      |> Ash.Query.set_tenant(tenant_id)
+      |> Ash.read(authorize?: false)
+
+    assign(socket, :blocked_dates, blocked)
+  end
+
+  defp parse_date(nil), do: nil
+  defp parse_date(""), do: nil
+  defp parse_date(s) when is_binary(s) do
+    case Date.from_iso8601(s) do
+      {:ok, d} -> d
+      _ -> nil
+    end
   end
 
   defp parse_int(nil), do: nil
@@ -411,6 +470,80 @@ defmodule DrivewayOSWeb.Admin.ScheduleLive do
                     </div>
                   </div>
                 <% end %>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="card bg-base-100 shadow-sm border border-base-300">
+          <div class="card-body p-6 space-y-4">
+            <div>
+              <h2 class="card-title text-lg">Blocked dates</h2>
+              <p class="text-sm text-base-content/60">
+                Specific days you're not taking bookings — vacation, weather,
+                etc. Customers won't see slots on these days.
+              </p>
+            </div>
+
+            <div :if={@blocked_error} role="alert" class="alert alert-error text-sm">
+              {@blocked_error}
+            </div>
+
+            <form
+              id="block-date-form"
+              phx-submit="block_date"
+              class="grid grid-cols-1 md:grid-cols-3 gap-3"
+            >
+              <div>
+                <label class="label" for="bd-date">
+                  <span class="label-text font-medium">Date</span>
+                </label>
+                <input
+                  id="bd-date"
+                  type="date"
+                  name="blocked[blocked_on]"
+                  class="input input-bordered w-full"
+                  required
+                />
+              </div>
+              <div class="md:col-span-2">
+                <label class="label" for="bd-reason">
+                  <span class="label-text font-medium">Reason</span>
+                  <span class="label-text-alt text-base-content/50">Optional</span>
+                </label>
+                <input
+                  id="bd-reason"
+                  type="text"
+                  name="blocked[reason]"
+                  placeholder="Vacation, holiday, weather…"
+                  class="input input-bordered w-full"
+                />
+              </div>
+              <button type="submit" class="btn btn-primary md:col-span-3 gap-2">
+                <span class="hero-no-symbol w-5 h-5" aria-hidden="true"></span> Block this date
+              </button>
+            </form>
+
+            <ul :if={@blocked_dates != []} class="divide-y divide-base-200 mt-4">
+              <li
+                :for={bd <- @blocked_dates}
+                class="py-3 flex items-center justify-between gap-3 flex-wrap"
+              >
+                <div>
+                  <div class="font-semibold">
+                    {Calendar.strftime(bd.blocked_on, "%a %b %-d, %Y")}
+                  </div>
+                  <div :if={bd.reason} class="text-xs text-base-content/60 mt-0.5">
+                    {bd.reason}
+                  </div>
+                </div>
+                <button
+                  phx-click="unblock_date"
+                  phx-value-id={bd.id}
+                  class="btn btn-ghost btn-xs text-error gap-1"
+                >
+                  <span class="hero-x-mark w-3 h-3" aria-hidden="true"></span> Unblock
+                </button>
               </li>
             </ul>
           </div>
