@@ -31,6 +31,7 @@ defmodule DrivewayOS.Application do
     if Application.get_env(:driveway_os, :start_schedulers?, true) do
       [
         DrivewayOS.Notifications.ReminderScheduler,
+        DrivewayOS.Notifications.WeeklyDigestScheduler,
         DrivewayOS.Scheduling.SubscriptionScheduler
       ]
     else

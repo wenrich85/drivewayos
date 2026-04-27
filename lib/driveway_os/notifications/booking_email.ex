@@ -412,6 +412,73 @@ defmodule DrivewayOS.Notifications.BookingEmail do
     """)
   end
 
+  @doc """
+  Operator-side notification: weekly Monday-morning recap. Fired
+  by `Notifications.WeeklyDigestScheduler`. Stats map shape:
+
+      %{
+        bookings_this_week: integer,
+        pending_now: integer,
+        revenue_week_cents: integer,
+        cancellations_week: integer,
+        today_count: integer,
+        top_channel: nil | String.t()
+      }
+  """
+  @spec weekly_digest(Tenant.t(), Customer.t(), map()) :: Swoosh.Email.t()
+  def weekly_digest(%Tenant{} = tenant, %Customer{} = admin, %{} = stats) do
+    new()
+    |> to({admin.name, to_string(admin.email)})
+    |> from(Branding.from_address(tenant))
+    |> subject(
+      "Your week at #{Branding.display_name(tenant)} — #{stats.bookings_this_week} bookings"
+    )
+    |> text_body(digest_body(tenant, admin, stats))
+  end
+
+  defp digest_body(tenant, admin, stats) do
+    pad = fn n -> n |> to_string() |> String.pad_leading(4) end
+
+    top_line =
+      case stats.top_channel do
+        nil -> ""
+        channel -> "      Top channel:    #{channel}\n"
+      end
+
+    """
+    Hi #{admin.name},
+
+    Last 7 days at #{Branding.display_name(tenant)}:
+
+      #{pad.(stats.bookings_this_week)}  new bookings
+      #{pad.(stats.pending_now)}  pending right now
+      #{pad.(stats.cancellations_week)}  cancellations
+      #{pad.(stats.today_count)}  scheduled today
+
+      Revenue:        #{format_price(stats.revenue_week_cents)}
+    #{top_line}
+    See the full picture on your dashboard:
+      #{tenant_admin_url(tenant)}
+
+    -- #{Branding.display_name(tenant)}
+    """
+  end
+
+  defp tenant_admin_url(tenant) do
+    host = Application.get_env(:driveway_os, :platform_host, "drivewayos.com")
+    http_opts = Application.get_env(:driveway_os, DrivewayOSWeb.Endpoint)[:http] || []
+    port = Keyword.get(http_opts, :port)
+
+    {scheme, port_suffix} =
+      cond do
+        host == "lvh.me" -> {"http", ":#{port || 4000}"}
+        port in [nil, 80, 443] -> {"https", ""}
+        true -> {"https", ":#{port}"}
+      end
+
+    "#{scheme}://#{tenant.slug}.#{host}#{port_suffix}/admin"
+  end
+
   defp alert_body(tenant, admin, customer, appt, service) do
     """
     Hi #{admin.name},

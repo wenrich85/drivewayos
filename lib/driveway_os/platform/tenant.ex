@@ -130,6 +130,14 @@ defmodule DrivewayOS.Platform.Tenant do
       constraints min: 2, max: 50
     end
 
+    # Stamped after the WeeklyDigestScheduler emails this tenant's
+    # admins their Monday-morning recap. The scheduler skips
+    # tenants stamped within the last 6 days so a sweeper that
+    # runs hourly can't double-send.
+    attribute :last_digest_sent_at, :utc_datetime_usec do
+      public? true
+    end
+
     create_timestamp :inserted_at
     update_timestamp :updated_at
   end
@@ -197,6 +205,10 @@ defmodule DrivewayOS.Platform.Tenant do
     update :archive do
       change set_attribute(:status, :archived)
       change set_attribute(:archived_at, &DateTime.utc_now/0)
+    end
+
+    update :mark_digest_sent do
+      change set_attribute(:last_digest_sent_at, &DateTime.utc_now/0)
     end
 
     update :suspend do
