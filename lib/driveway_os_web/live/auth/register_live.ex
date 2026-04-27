@@ -38,7 +38,23 @@ defmodule DrivewayOSWeb.Auth.RegisterLive do
   @impl true
   def handle_event("submit", %{"register" => params}, socket) do
     tenant = socket.assigns.current_tenant
+    rl_key = "register:#{tenant.id}"
 
+    with :ok <- DrivewayOS.RateLimiter.check(rl_key, 5, 60 * 60 * 1000) do
+      do_register(socket, tenant, params)
+    else
+      {:error, :rate_limited, retry_after_ms} ->
+        {:noreply,
+         socket
+         |> assign(:errors, %{
+           base:
+             "Too many signups from this shop right now. Try again in about #{div(retry_after_ms, 60_000) + 1} min."
+         })
+         |> assign(:form, params)}
+    end
+  end
+
+  defp do_register(socket, tenant, params) do
     case Customer
          |> Ash.Changeset.for_create(
            :register_with_password,

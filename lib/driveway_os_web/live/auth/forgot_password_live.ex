@@ -33,17 +33,24 @@ defmodule DrivewayOSWeb.Auth.ForgotPasswordLive do
   def handle_event("submit", %{"forgot" => %{"email" => email}}, socket) do
     tenant = socket.assigns.current_tenant
     normalized = email |> to_string() |> String.trim() |> String.downcase()
+    rl_key = "forgot:#{tenant.id}:#{normalized}"
 
-    # Best-effort fire-and-forget. The action's runtime behavior
-    # is "always succeed visibly to the caller" — even when the
-    # email doesn't match a row — so we don't branch on the
-    # return.
-    _ =
-      Customer
-      |> Ash.Query.for_read(:request_password_reset_with_password, %{email: normalized},
-        tenant: tenant.id
-      )
-      |> Ash.read(authorize?: false)
+    # Rate-limit before doing the work. We always render the
+    # success state visibly so this doesn't become an enumeration
+    # oracle ('I see "rate limited" → email exists') — limiter
+    # decision happens silently.
+    case DrivewayOS.RateLimiter.check(rl_key, 3, 60 * 60 * 1000) do
+      :ok ->
+        _ =
+          Customer
+          |> Ash.Query.for_read(:request_password_reset_with_password, %{email: normalized},
+            tenant: tenant.id
+          )
+          |> Ash.read(authorize?: false)
+
+      {:error, :rate_limited, _} ->
+        :ok
+    end
 
     {:noreply, assign(socket, :sent?, true)}
   rescue

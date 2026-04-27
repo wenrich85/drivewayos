@@ -41,22 +41,23 @@ defmodule DrivewayOSWeb.Auth.MagicLinkLive do
   def handle_event("submit", %{"signin" => %{"email" => email}}, socket) do
     tenant = socket.assigns.current_tenant
     normalized = email |> to_string() |> String.trim() |> String.downcase()
+    rl_key = "magic:#{tenant.id}:#{normalized}"
 
-    # Look up the customer in this tenant. We don't tell the user
-    # whether the lookup succeeded — same UI either way.
-    case lookup_customer(normalized, tenant.id) do
-      {:ok, customer} ->
-        case mint_token(customer) do
-          {:ok, token, _claims} ->
-            link_url = magic_link_url(tenant, token)
-            send_email(tenant, customer, link_url)
-
-          _ ->
-            :noop
+    # Same enumeration-safety pattern as forgot-password: render
+    # the success state regardless, but only do the actual lookup
+    # + email work if we're under the rate limit. Limit is per
+    # email so a single user can't be DDoS'd into spending the
+    # tenant's email budget.
+    case DrivewayOS.RateLimiter.check(rl_key, 3, 60 * 60 * 1000) do
+      :ok ->
+        with {:ok, customer} <- lookup_customer(normalized, tenant.id),
+             {:ok, token, _claims} <- mint_token(customer) do
+          link_url = magic_link_url(tenant, token)
+          send_email(tenant, customer, link_url)
         end
 
-      _ ->
-        :noop
+      {:error, :rate_limited, _} ->
+        :ok
     end
 
     {:noreply, assign(socket, :sent?, true)}

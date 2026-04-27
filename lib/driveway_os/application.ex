@@ -12,7 +12,8 @@ defmodule DrivewayOS.Application do
         DrivewayOSWeb.Telemetry,
         DrivewayOS.Repo,
         {DNSCluster, query: Application.get_env(:driveway_os, :dns_cluster_query) || :ignore},
-        {Phoenix.PubSub, name: DrivewayOS.PubSub}
+        {Phoenix.PubSub, name: DrivewayOS.PubSub},
+        DrivewayOS.RateLimiter
       ] ++
         scheduler_children() ++
         [DrivewayOSWeb.Endpoint]
