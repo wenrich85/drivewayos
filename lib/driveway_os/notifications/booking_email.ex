@@ -307,6 +307,47 @@ defmodule DrivewayOS.Notifications.BookingEmail do
   defp frequency_label(other), do: to_string(other)
 
   @doc """
+  Customer-side notification: their recurring subscription was
+  just cancelled (either by them via /me or by the admin from
+  /admin/customers/:id). Closes the loop on subscription_confirmed
+  — symmetrical create + destroy emails so the customer never
+  wonders whether the auto-bookings will keep coming.
+  """
+  @spec subscription_cancelled(
+          Tenant.t(),
+          Customer.t(),
+          DrivewayOS.Scheduling.Subscription.t(),
+          ServiceType.t()
+        ) :: Swoosh.Email.t()
+  def subscription_cancelled(
+        %Tenant{} = tenant,
+        %Customer{} = customer,
+        %DrivewayOS.Scheduling.Subscription{} = sub,
+        %ServiceType{} = service
+      ) do
+    new()
+    |> to({customer.name, to_string(customer.email)})
+    |> from(Branding.from_address(tenant))
+    |> subject("Your recurring #{service.name} has been cancelled")
+    |> text_body("""
+    Hey #{customer.name},
+
+    Your recurring booking with #{Branding.display_name(tenant)}
+    is cancelled. We won't auto-book any more #{service.name}
+    appointments — any already-scheduled ones are still on the
+    books unless you cancel them individually.
+
+      Service was: #{service.name}
+      Frequency:   #{frequency_label(sub.frequency)}
+
+    Want to start over? You can subscribe again from the booking
+    success page after your next one-off booking.
+
+    -- #{Branding.display_name(tenant)}
+    """)
+  end
+
+  @doc """
   Customer-side notification: their loyalty punch card just hit
   the threshold and they've earned a free wash. Fired exactly
   once per cycle from the Appointment.:complete after_action when

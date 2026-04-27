@@ -411,6 +411,31 @@ defmodule DrivewayOSWeb.CustomerProfileLiveTest do
       assert reloaded.status == :paused
     end
 
+    test "Cancel sends a 'subscription cancelled' email", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, _} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/me")
+
+      drained_before = drain_emails([])
+      _ = drained_before
+
+      render_click(lv, "cancel_subscription", %{"id" => ctx.sub.id})
+
+      received = drain_emails([])
+      subjects = Enum.map(received, & &1.subject)
+
+      assert Enum.any?(subjects, &String.contains?(&1, "cancelled"))
+    end
+
+    defp drain_emails(acc) do
+      receive do
+        {:email, %Swoosh.Email{} = e} -> drain_emails([e | acc])
+      after
+        0 -> acc
+      end
+    end
+
     test "Cancel flips a sub to :cancelled (terminal)", ctx do
       conn = sign_in(ctx.conn, ctx.customer)
 

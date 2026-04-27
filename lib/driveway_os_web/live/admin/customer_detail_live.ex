@@ -14,6 +14,8 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
   on_mount DrivewayOSWeb.LoadCustomerHook
 
   alias DrivewayOS.Accounts.Customer
+  alias DrivewayOS.Mailer
+  alias DrivewayOS.Notifications.BookingEmail
   alias DrivewayOS.Plans
   alias DrivewayOS.Scheduling.{Appointment, ServiceType, Subscription}
   alias DrivewayOS.SubscriptionBroadcaster
@@ -153,19 +155,41 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
 
   defp transition_subscription(socket, id, action) do
     tenant_id = socket.assigns.current_tenant.id
+    tenant = socket.assigns.current_tenant
+    customer = socket.assigns.customer
 
     with {:ok, sub} <- Ash.get(Subscription, id, tenant: tenant_id, authorize?: false),
-         true <- sub.customer_id == socket.assigns.customer.id,
-         {:ok, _} <-
+         true <- sub.customer_id == customer.id,
+         {:ok, updated} <-
            sub
            |> Ash.Changeset.for_update(action, %{})
            |> Ash.update(authorize?: false, tenant: tenant_id) do
-      SubscriptionBroadcaster.broadcast(tenant_id, socket.assigns.customer.id, action, %{id: id})
+      SubscriptionBroadcaster.broadcast(tenant_id, customer.id, action, %{id: id})
+
+      if action == :cancel do
+        notify_subscription_cancelled(tenant, customer, updated)
+      end
 
       {:noreply, reload_subscriptions(socket)}
     else
       _ -> {:noreply, socket}
     end
+  end
+
+  defp notify_subscription_cancelled(tenant, customer, sub) do
+    case Ash.get(ServiceType, sub.service_type_id, tenant: tenant.id, authorize?: false) do
+      {:ok, service} ->
+        tenant
+        |> BookingEmail.subscription_cancelled(customer, sub, service)
+        |> Mailer.deliver()
+
+      _ ->
+        :ok
+    end
+
+    :ok
+  rescue
+    _ -> :ok
   end
 
   defp reload_subscriptions(socket) do

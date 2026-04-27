@@ -21,6 +21,8 @@ defmodule DrivewayOSWeb.CustomerProfileLive do
   on_mount DrivewayOSWeb.LoadCustomerHook
 
   alias DrivewayOS.Fleet.{Address, Vehicle}
+  alias DrivewayOS.Mailer
+  alias DrivewayOS.Notifications.BookingEmail
   alias DrivewayOS.Scheduling.{ServiceType, Subscription}
   alias DrivewayOS.SubscriptionBroadcaster
 
@@ -255,16 +257,36 @@ defmodule DrivewayOSWeb.CustomerProfileLive do
 
     with {:ok, sub} <- Ash.get(Subscription, id, tenant: tenant.id, authorize?: false),
          true <- sub.customer_id == me.id,
-         {:ok, _} <-
+         {:ok, updated} <-
            sub
            |> Ash.Changeset.for_update(action, %{})
            |> Ash.update(authorize?: false, tenant: tenant.id) do
       SubscriptionBroadcaster.broadcast(tenant.id, me.id, action, %{id: id})
 
+      if action == :cancel do
+        notify_subscription_cancelled(tenant, me, updated)
+      end
+
       {:noreply, assign(socket, :subscriptions, load_subscriptions(me.id, tenant.id))}
     else
       _ -> {:noreply, socket}
     end
+  end
+
+  defp notify_subscription_cancelled(tenant, customer, sub) do
+    case Ash.get(ServiceType, sub.service_type_id, tenant: tenant.id, authorize?: false) do
+      {:ok, service} ->
+        tenant
+        |> BookingEmail.subscription_cancelled(customer, sub, service)
+        |> Mailer.deliver()
+
+      _ ->
+        :ok
+    end
+
+    :ok
+  rescue
+    _ -> :ok
   end
 
   # --- Helpers ---
