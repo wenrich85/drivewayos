@@ -98,6 +98,54 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
 
   # --- Subscriptions ---
 
+  # --- Promote / demote (multi-admin per tenant) ---
+
+  def handle_event("promote_to_admin", _, socket) do
+    update_customer_role(socket, :admin, "Promoted to admin.")
+  end
+
+  def handle_event("demote_to_customer", _, socket) do
+    cond do
+      socket.assigns.customer.id == socket.assigns.current_customer.id ->
+        # Don't let the operator lock themselves out by demoting
+        # their own admin role mid-session.
+        {:noreply, assign(socket, :flash_msg, "You can't demote yourself.")}
+
+      last_admin?(socket) ->
+        {:noreply,
+         assign(
+           socket,
+           :flash_msg,
+           "Can't demote the last admin — promote someone else first."
+         )}
+
+      true ->
+        update_customer_role(socket, :customer, "Demoted to customer.")
+    end
+  end
+
+  defp update_customer_role(socket, role, success_msg) do
+    case socket.assigns.customer
+         |> Ash.Changeset.for_update(:update, %{role: role})
+         |> Ash.update(authorize?: false, tenant: socket.assigns.current_tenant.id) do
+      {:ok, updated} ->
+        {:noreply,
+         socket
+         |> assign(:customer, updated)
+         |> assign(:flash_msg, success_msg)}
+
+      _ ->
+        {:noreply, assign(socket, :flash_msg, "Couldn't update the role.")}
+    end
+  end
+
+  defp last_admin?(socket) do
+    case DrivewayOS.Accounts.tenant_admins(socket.assigns.current_tenant.id) do
+      [%{id: only_id}] -> only_id == socket.assigns.customer.id
+      _ -> false
+    end
+  end
+
   def handle_event("show_subscribe_form", _, socket) do
     {:noreply, socket |> assign(:subscribe_form?, true) |> assign(:subscribe_error, nil)}
   end
@@ -253,7 +301,31 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
           >
             <span class="hero-arrow-left w-4 h-4" aria-hidden="true"></span> All customers
           </a>
-          <h1 class="text-3xl font-bold tracking-tight mt-2">{@customer.name}</h1>
+          <div class="mt-2 flex justify-between items-start gap-3 flex-wrap">
+            <h1 class="text-3xl font-bold tracking-tight">{@customer.name}</h1>
+            <div class="flex gap-2">
+              <button
+                :if={@customer.role != :admin}
+                phx-click="promote_to_admin"
+                data-confirm={"Give #{@customer.name} full admin access?"}
+                class="btn btn-ghost btn-sm gap-1"
+                title="Grant operator privileges"
+              >
+                <span class="hero-shield-check w-4 h-4" aria-hidden="true"></span>
+                Promote to admin
+              </button>
+              <button
+                :if={@customer.role == :admin and @customer.id != @current_customer.id}
+                phx-click="demote_to_customer"
+                data-confirm={"Remove admin access from #{@customer.name}?"}
+                class="btn btn-ghost btn-sm gap-1 text-warning"
+                title="Revoke operator privileges"
+              >
+                <span class="hero-shield-exclamation w-4 h-4" aria-hidden="true"></span>
+                Demote
+              </button>
+            </div>
+          </div>
           <p class="text-sm text-base-content/70 mt-1 flex items-center gap-3 flex-wrap">
             <span class="inline-flex items-center gap-1">
               <span class="hero-envelope w-4 h-4" aria-hidden="true"></span>

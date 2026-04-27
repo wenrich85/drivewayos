@@ -158,6 +158,57 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLiveTest do
     end
   end
 
+  describe "promote / demote" do
+    test "Promote flips a customer's role to :admin", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, _} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/admin/customers/#{ctx.alice.id}")
+
+      render_click(lv, "promote_to_admin")
+
+      reloaded = Ash.get!(Customer, ctx.alice.id, tenant: ctx.tenant.id, authorize?: false)
+      assert reloaded.role == :admin
+    end
+
+    test "Demote flips a non-self admin back to :customer", ctx do
+      ctx.alice
+      |> Ash.Changeset.for_update(:update, %{role: :admin})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, _} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/admin/customers/#{ctx.alice.id}")
+
+      render_click(lv, "demote_to_customer")
+
+      reloaded = Ash.get!(Customer, ctx.alice.id, tenant: ctx.tenant.id, authorize?: false)
+      assert reloaded.role == :customer
+    end
+
+    test "can't demote yourself", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, _} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/admin/customers/#{ctx.admin.id}")
+
+      html = render_click(lv, "demote_to_customer")
+
+      assert html =~ "demote yourself"
+
+      reloaded = Ash.get!(Customer, ctx.admin.id, tenant: ctx.tenant.id, authorize?: false)
+      assert reloaded.role == :admin
+    end
+
+  end
+
   describe "loyalty visibility" do
     test "shows progress card when tenant has a threshold set", ctx do
       ctx.tenant
