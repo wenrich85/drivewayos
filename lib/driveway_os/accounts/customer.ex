@@ -221,6 +221,18 @@ defmodule DrivewayOS.Accounts.Customer do
       constraints min: 0
     end
 
+    # GDPR-style anonymization timestamp. Customer hits "Delete
+    # my account" on /me; we set this + scrub identifying fields
+    # rather than DELETE the row outright (keeping the row
+    # preserves FK integrity for the tenant's appointment history,
+    # which they often need for accounting/audit). The scrubbed
+    # row's email is `deleted-<uuid>@deleted.invalid` so unique-
+    # email constraints don't conflict if the same person
+    # re-registers later.
+    attribute :deleted_at, :utc_datetime_usec do
+      public? true
+    end
+
     create_timestamp :inserted_at
     update_timestamp :updated_at
   end
@@ -303,6 +315,28 @@ defmodule DrivewayOS.Accounts.Customer do
     update :reset_loyalty do
       require_atomic? false
       change set_attribute(:loyalty_count, 0)
+    end
+
+    update :anonymize do
+      # Scrub identifying fields. Email gets a deterministic
+      # synthetic address per row (preserves uniqueness +
+      # signals to operators that the row is anonymized).
+      # hashed_password going nil locks both password + magic-
+      # link sign-in for this row — magic-link would also fail
+      # the email lookup since the new email is synthetic.
+      require_atomic? false
+
+      change fn changeset, _ctx ->
+        synthetic_email = "deleted-#{changeset.data.id}@deleted.invalid"
+
+        changeset
+        |> Ash.Changeset.force_change_attribute(:email, synthetic_email)
+        |> Ash.Changeset.force_change_attribute(:name, "Deleted customer")
+        |> Ash.Changeset.force_change_attribute(:phone, nil)
+        |> Ash.Changeset.force_change_attribute(:hashed_password, nil)
+        |> Ash.Changeset.force_change_attribute(:admin_notes, nil)
+        |> Ash.Changeset.force_change_attribute(:deleted_at, DateTime.utc_now())
+      end
     end
 
     create :register_guest do

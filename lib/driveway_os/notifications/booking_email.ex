@@ -307,6 +307,43 @@ defmodule DrivewayOS.Notifications.BookingEmail do
   defp frequency_label(other), do: to_string(other)
 
   @doc """
+  Customer-side notification: account deletion confirmed.
+  Fired BEFORE the anonymization runs (the synthetic email
+  wouldn't deliver) so the customer has a paper trail of when
+  the deletion happened, what got nuked, and what stayed
+  (their appointment history stays for the tenant's records,
+  scrubbed of identifying details on the customer side).
+  """
+  @spec account_deleted(Tenant.t(), Customer.t()) :: Swoosh.Email.t()
+  def account_deleted(%Tenant{} = tenant, %Customer{} = customer) do
+    new()
+    |> to({customer.name, to_string(customer.email)})
+    |> from(Branding.from_address(tenant))
+    |> subject("Your #{Branding.display_name(tenant)} account has been deleted")
+    |> text_body("""
+    Hi #{customer.name},
+
+    This confirms that your account at #{Branding.display_name(tenant)}
+    has been deleted as you requested.
+
+    What we removed:
+      * Your name, email, and phone number
+      * Your saved vehicles + addresses
+      * Any active recurring bookings (auto-cancelled)
+      * In-progress booking drafts
+
+    What we kept:
+      * Your past appointment records, scrubbed of identifying
+        details. The shop needs them for accounting + audit.
+
+    If you didn't ask for this deletion, contact the shop right
+    away — recovery is manual but possible for a short window.
+
+    -- #{Branding.display_name(tenant)}
+    """)
+  end
+
+  @doc """
   Customer-side notification: their recurring subscription was
   just cancelled (either by them via /me or by the admin from
   /admin/customers/:id). Closes the loop on subscription_confirmed

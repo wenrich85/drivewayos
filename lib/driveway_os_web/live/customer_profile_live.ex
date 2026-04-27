@@ -20,6 +20,7 @@ defmodule DrivewayOSWeb.CustomerProfileLive do
   on_mount DrivewayOSWeb.LoadTenantHook
   on_mount DrivewayOSWeb.LoadCustomerHook
 
+  alias DrivewayOS.Accounts.Deletion
   alias DrivewayOS.Fleet.{Address, Vehicle}
   alias DrivewayOS.Mailer
   alias DrivewayOS.Notifications.BookingEmail
@@ -238,6 +239,17 @@ defmodule DrivewayOSWeb.CustomerProfileLive do
     else
       _ -> {:noreply, socket}
     end
+  end
+
+  # --- Account deletion (GDPR) ---
+
+  def handle_event("delete_account", _, socket) do
+    Deletion.request(socket.assigns.current_tenant, socket.assigns.current_customer)
+
+    # Sign them out via the existing controller (clears the
+    # customer_token in session). The redirect lands them at the
+    # public landing.
+    {:noreply, redirect(socket, to: ~p"/auth/customer/sign-out")}
   end
 
   # --- Subscription transitions ---
@@ -712,6 +724,27 @@ defmodule DrivewayOSWeb.CustomerProfileLive do
                 </div>
               </li>
             </ul>
+          </div>
+        </section>
+
+        <section class="card bg-error/5 border border-error/30 shadow-sm">
+          <div class="card-body p-6">
+            <h2 class="card-title text-base text-error">Delete my account</h2>
+            <p class="text-sm text-base-content/70 mt-1">
+              Permanently scrub your name, email, phone, saved vehicles, addresses,
+              and any active recurring bookings. Your past appointment history stays
+              on the shop's books for accounting + audit, but is decoupled from your
+              identity. This can't be undone.
+            </p>
+            <div class="mt-3">
+              <button
+                phx-click="delete_account"
+                data-confirm="Permanently delete your account? This can't be undone."
+                class="btn btn-error btn-sm gap-1"
+              >
+                <span class="hero-trash w-4 h-4" aria-hidden="true"></span> Delete my account
+              </button>
+            </div>
           </div>
         </section>
       </div>

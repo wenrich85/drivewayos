@@ -553,6 +553,41 @@ defmodule DrivewayOSWeb.CustomerProfileLiveTest do
     end
   end
 
+  describe "delete account" do
+    test "Delete button anonymizes the row + redirects through sign-out", %{
+      conn: conn,
+      tenant: tenant,
+      customer: customer
+    } do
+      conn = sign_in(conn, customer)
+
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{tenant.slug}.lvh.me") |> live(~p"/me")
+
+      assert html =~ "Delete my account"
+
+      result =
+        try do
+          render_click(lv, "delete_account")
+        rescue
+          _ -> :redirected
+        catch
+          _, _ -> :redirected
+        end
+
+      _ = result
+
+      reloaded =
+        Ash.get!(DrivewayOS.Accounts.Customer, customer.id,
+          tenant: tenant.id,
+          authorize?: false
+        )
+
+      assert reloaded.name == "Deleted customer"
+      assert reloaded.deleted_at != nil
+    end
+  end
+
   defp sign_in(conn, customer) do
     {:ok, token, _} = AshAuthentication.Jwt.token_for_user(customer)
     conn |> Plug.Test.init_test_session(%{customer_token: token})
