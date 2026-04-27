@@ -278,18 +278,7 @@ defmodule DrivewayOS.Scheduling.Appointment do
           # Redemption appointments don't earn a punch — that
           # would let a customer cycle one free wash forever.
           unless appt.is_loyalty_redemption do
-            case Ash.get(DrivewayOS.Accounts.Customer, appt.customer_id,
-                   tenant: appt.tenant_id,
-                   authorize?: false
-                 ) do
-              {:ok, customer} ->
-                customer
-                |> Ash.Changeset.for_update(:increment_loyalty, %{})
-                |> Ash.update(authorize?: false, tenant: appt.tenant_id)
-
-              _ ->
-                :ok
-            end
+            DrivewayOS.Scheduling.LoyaltyHooks.bump_after_complete(appt)
           end
 
           {:ok, appt}

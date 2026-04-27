@@ -263,6 +263,34 @@ defmodule DrivewayOS.Notifications.BookingEmail do
   defp frequency_label(:monthly), do: "every month"
   defp frequency_label(other), do: to_string(other)
 
+  @doc """
+  Customer-side notification: their loyalty punch card just hit
+  the threshold and they've earned a free wash. Fired exactly
+  once per cycle from the Appointment.:complete after_action when
+  loyalty_count transitions from threshold-1 to threshold.
+  """
+  @spec loyalty_earned(Tenant.t(), Customer.t(), pos_integer()) :: Swoosh.Email.t()
+  def loyalty_earned(%Tenant{} = tenant, %Customer{} = customer, threshold)
+      when is_integer(threshold) do
+    new()
+    |> to({customer.name, to_string(customer.email)})
+    |> from(Branding.from_address(tenant))
+    |> subject("You've earned a free wash at #{Branding.display_name(tenant)}")
+    |> text_body("""
+    Hey #{customer.name},
+
+    Big day — that was your #{threshold}th wash with
+    #{Branding.display_name(tenant)}, which means your next one is on us.
+
+    Apply your free wash from the booking flow next time you're
+    due — we'll automatically deduct the price.
+
+    Thanks for sticking with us.
+
+    -- #{Branding.display_name(tenant)}
+    """)
+  end
+
   defp alert_body(tenant, admin, customer, appt, service) do
     """
     Hi #{admin.name},

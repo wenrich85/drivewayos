@@ -50,6 +50,14 @@ defmodule DrivewayOS.LoyaltyTest do
     %{tenant: tenant, customer: customer, service: service}
   end
 
+  defp drain_inbox do
+    receive do
+      {:email, _} -> drain_inbox()
+    after
+      0 -> :ok
+    end
+  end
+
   defp book_and_complete!(ctx) do
     {:ok, appt} =
       Appointment
@@ -144,6 +152,54 @@ defmodule DrivewayOS.LoyaltyTest do
         |> Ash.update(authorize?: false, tenant: ctx.tenant.id)
 
       assert after_reset.loyalty_count == 0
+    end
+
+    test "fires the 'you earned a free wash' email on the threshold transition", ctx do
+      ctx.tenant
+      |> Ash.Changeset.for_update(:update, %{loyalty_threshold: 3})
+      |> Ash.update!(authorize?: false)
+
+      # First two completions: silent.
+      _ = book_and_complete!(ctx)
+      _ = book_and_complete!(ctx)
+
+      # Drain any prior emails so we can assert just on the third.
+      :timer.sleep(20)
+      drain_inbox()
+
+      _ = book_and_complete!(ctx)
+
+      assert_received {:email, %Swoosh.Email{subject: subject, to: [{_, addr}]}}
+      assert subject =~ "free wash"
+      assert addr == to_string(ctx.customer.email)
+    end
+
+    test "doesn't fire the earned email on completions past the threshold", ctx do
+      ctx.tenant
+      |> Ash.Changeset.for_update(:update, %{loyalty_threshold: 2})
+      |> Ash.update!(authorize?: false)
+
+      # First completion: count 1, no email.
+      # Second: count 2 = threshold, email fires.
+      # Third: count 3 (past threshold), no NEW email.
+      _ = book_and_complete!(ctx)
+      _ = book_and_complete!(ctx)
+
+      drain_inbox()
+
+      _ = book_and_complete!(ctx)
+
+      received = drain_emails([])
+      free_wash_count = Enum.count(received, &String.contains?(&1.subject, "free wash"))
+      assert free_wash_count == 0
+    end
+
+    defp drain_emails(acc) do
+      receive do
+        {:email, %Swoosh.Email{} = e} -> drain_emails([e | acc])
+      after
+        0 -> acc
+      end
     end
 
     test "doesn't increment on cancel / start_wash transitions", ctx do
