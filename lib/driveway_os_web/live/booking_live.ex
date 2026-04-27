@@ -1029,6 +1029,26 @@ defmodule DrivewayOSWeb.BookingLive do
       <div class="card-body p-6 space-y-4">
         <h2 class="card-title text-lg">Pick a service</h2>
 
+        <%!-- Service descriptions inline so customers can compare
+             before opening the dropdown. Hidden when no service has
+             a description so the layout doesn't get a blank panel. --%>
+        <ul
+          :if={Enum.any?(@services, &(&1.description && &1.description != ""))}
+          class="space-y-2 text-sm"
+        >
+          <li :for={svc <- @services} class="border border-base-200 rounded-md px-3 py-2">
+            <div class="flex items-baseline justify-between gap-2 flex-wrap">
+              <span class="font-semibold">{svc.name}</span>
+              <span class="text-base-content/70">
+                {fmt_price(svc.base_price_cents)} · {svc.duration_minutes} min
+              </span>
+            </div>
+            <p :if={svc.description && svc.description != ""} class="text-base-content/70 mt-1">
+              {svc.description}
+            </p>
+          </li>
+        </ul>
+
         <form id="step-service-form" phx-submit="submit_service" class="space-y-4">
           <div>
             <label class="label" for="svc">
