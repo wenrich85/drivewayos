@@ -58,6 +58,18 @@ defmodule DrivewayOSWeb.Admin.CustomersLive do
     |> assign(:appt_counts, appt_counts)
   end
 
+  # True when the tenant has loyalty configured AND this customer
+  # has hit the threshold. Hidden when the tenant hasn't enabled
+  # loyalty so the badge column doesn't accidentally render for
+  # everyone with loyalty_count > 0 (default 0 means the badge
+  # never shows, but loyalty_threshold being nil is the load-bearing
+  # gate).
+  defp loyalty_earned?(%{loyalty_threshold: t}, %{loyalty_count: c})
+       when is_integer(t) and is_integer(c),
+       do: c >= t
+
+  defp loyalty_earned?(_, _), do: false
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -110,9 +122,18 @@ defmodule DrivewayOSWeb.Admin.CustomersLive do
                 <tbody>
                   <tr :for={c <- @customers} class="hover:bg-base-200/50 cursor-pointer">
                     <td class="font-semibold">
-                      <.link navigate={~p"/admin/customers/#{c.id}"} class="link link-hover">
-                        {c.name}
-                      </.link>
+                      <div class="flex items-center gap-2 flex-wrap">
+                        <.link navigate={~p"/admin/customers/#{c.id}"} class="link link-hover">
+                          {c.name}
+                        </.link>
+                        <span
+                          :if={loyalty_earned?(@current_tenant, c)}
+                          class="badge badge-success badge-sm gap-1"
+                          title="Has earned a free wash"
+                        >
+                          <span class="hero-gift w-3 h-3" aria-hidden="true"></span> Free wash
+                        </span>
+                      </div>
                     </td>
                     <td class="text-sm">{to_string(c.email)}</td>
                     <td>

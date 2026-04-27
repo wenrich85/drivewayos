@@ -87,4 +87,49 @@ defmodule DrivewayOSWeb.Admin.CustomersLiveTest do
 
     refute html =~ "Stranger Danger"
   end
+
+  describe "loyalty badge" do
+    test "renders 'Free wash' badge for customers at or above the threshold", ctx do
+      ctx.tenant
+      |> Ash.Changeset.for_update(:update, %{loyalty_threshold: 3})
+      |> Ash.update!(authorize?: false)
+
+      {:ok, regular} =
+        Customer
+        |> Ash.Changeset.for_create(
+          :register_with_password,
+          %{
+            email: "loyal-#{System.unique_integer([:positive])}@example.com",
+            password: "Password123!",
+            password_confirmation: "Password123!",
+            name: "Loyal Larry"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      Enum.each(1..3, fn _ ->
+        regular
+        |> Ash.reload!(authorize?: false)
+        |> Ash.Changeset.for_update(:increment_loyalty, %{})
+        |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+      end)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin/customers")
+
+      assert html =~ "Free wash"
+    end
+
+    test "no badge when tenant has no loyalty_threshold set", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin/customers")
+
+      refute html =~ "Free wash"
+    end
+  end
 end
