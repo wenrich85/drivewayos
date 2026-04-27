@@ -1,24 +1,28 @@
 defmodule DrivewayOSWeb.ErrorHTML do
   @moduledoc """
-  This module is invoked by your endpoint in case of errors on HTML requests.
+  Renders 404 / 500 error pages. We render branded HTML pages
+  rather than the Phoenix default plain-text response so customers
+  who hit a dead link see something that looks like the rest of
+  the product.
 
-  See config/config.exs.
+  Tenant context (`conn.assigns[:current_tenant]`) is available
+  when the LoadTenant plug ran before the error — typical for
+  request-pipeline errors. For very early failures (before
+  LoadTenant) we fall back to a generic DrivewayOS-branded page.
   """
   use DrivewayOSWeb, :html
 
-  # If you want to customize your error pages,
-  # uncomment the embed_templates/1 call below
-  # and add pages to the error directory:
-  #
-  #   * lib/driveway_os_web/controllers/error_html/404.html.heex
-  #   * lib/driveway_os_web/controllers/error_html/500.html.heex
-  #
-  # embed_templates "error_html/*"
+  embed_templates "error_html/*"
 
-  # The default is to render a plain text page based on
-  # the template name. For example, "404.html" becomes
-  # "Not Found".
-  def render(template, _assigns) do
-    Phoenix.Controller.status_message_from_template(template)
+  @doc """
+  Best-effort tenant display name from assigns. Returns nil when
+  the LoadTenant plug didn't run (early failure, /health, etc.) so
+  the templates can fall back to generic copy.
+  """
+  def tenant_display_name(assigns) do
+    case assigns[:current_tenant] do
+      %{display_name: name} when is_binary(name) and name != "" -> name
+      _ -> nil
+    end
   end
 end

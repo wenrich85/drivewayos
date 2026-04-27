@@ -37,6 +37,14 @@ defmodule DrivewayOSWeb.Router do
     post "/stripe", StripeWebhookController, :handle
   end
 
+  # Health check — load-balancer probe. Skips tenant + auth so
+  # deploys can curl it from the bare host without DNS plumbing.
+  scope "/", DrivewayOSWeb do
+    pipe_through :api
+
+    get "/health", HealthController, :index
+  end
+
   scope "/", DrivewayOSWeb do
     pipe_through :browser
 

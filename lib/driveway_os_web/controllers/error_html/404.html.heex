@@ -1,0 +1,32 @@
+<% display_name = tenant_display_name(assigns) %>
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Not found</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; background: #f4f4f5; color: #18181b; margin: 0; }
+      main { max-width: 32rem; margin: 6rem auto; padding: 2rem; background: white; border-radius: 0.75rem; box-shadow: 0 1px 3px rgba(0,0,0,.08); text-align: center; }
+      h1 { margin: 0 0 .5rem; font-size: 2rem; }
+      p { color: #52525b; line-height: 1.6; }
+      a.btn { display: inline-block; margin-top: 1rem; padding: 0.5rem 1rem; background: #18181b; color: white; text-decoration: none; border-radius: 0.5rem; }
+      .code { font-family: ui-monospace, monospace; color: #71717a; font-size: 0.75rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="code">404</p>
+      <h1>This page doesn't exist</h1>
+      <p>
+        <%= if display_name do %>
+          The link you followed at <strong>{display_name}</strong> doesn't lead anywhere.
+        <% else %>
+          The link you followed doesn't lead anywhere.
+        <% end %>
+      </p>
+      <a href="/" class="btn">Back to {display_name || "home"}</a>
+    </main>
+  </body>
+</html>

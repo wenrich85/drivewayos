@@ -1,5 +1,28 @@
-# See https://www.robotstxt.org/robotstxt.html for documentation on how to use the robots.txt file
+# DrivewayOS — multi-tenant booking platform.
 #
-# To ban all spiders from the entire site uncomment the next two lines:
-# User-agent: *
-# Disallow: /
+# Public marketing copy on the bare host gets indexed; tenant
+# subdomains stay out of search until each operator opts in
+# (V2 work — currently uniform). Auth + admin paths are
+# always disallowed.
+
+User-agent: *
+
+# Auth + private surfaces — never index.
+Disallow: /admin/
+Disallow: /platform/
+Disallow: /sign-in
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password/
+Disallow: /magic-link
+Disallow: /me
+Disallow: /book/success/
+Disallow: /appointments
+Disallow: /onboarding/
+Disallow: /auth/
+Disallow: /webhooks/
+
+# Health probe is uninteresting to index.
+Disallow: /health
+
+Allow: /
