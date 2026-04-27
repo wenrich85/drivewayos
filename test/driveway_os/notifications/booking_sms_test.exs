@@ -76,4 +76,24 @@ defmodule DrivewayOS.Notifications.BookingSmsTest do
                BookingSms.confirmation(tenant(support_phone: nil), customer(), appt(), service())
     end
   end
+
+  describe "reminder/4" do
+    test "body says 'Reminder' + 'tomorrow'" do
+      body = BookingSms.reminder_body(tenant(), customer(), appt(), service())
+
+      assert body =~ "Reminder"
+      assert body =~ "tomorrow"
+      assert body =~ "Basic Wash"
+    end
+
+    test "dispatches via the configured SmsClient" do
+      DrivewayOS.Notifications.SmsClientMock
+      |> expect(:send_sms, fn _from, _to, body ->
+        assert body =~ "Reminder"
+        {:ok, %{sid: "sm_rem", to: "+15125551234", body: body}}
+      end)
+
+      assert {:ok, _} = BookingSms.reminder(tenant(), customer(), appt(), service())
+    end
+  end
 end

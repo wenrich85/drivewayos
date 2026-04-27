@@ -27,6 +27,19 @@ defmodule DrivewayOS.Notifications.BookingSms do
     end
   end
 
+  @doc """
+  24h-before reminder SMS. Same gating as `confirmation/4`; called
+  by the ReminderScheduler alongside the email reminder when the
+  tenant has :sms_notifications.
+  """
+  @spec reminder(map(), map(), map(), map()) :: {:ok, map()} | {:error, atom() | term()}
+  def reminder(tenant, customer, appt, service) do
+    with {:ok, to} <- normalize_phone(customer.phone),
+         {:ok, from} <- tenant_from_number(tenant) do
+      SmsClient.send_sms(from, to, reminder_body(tenant, customer, appt, service))
+    end
+  end
+
   @doc "Body builder exposed for test assertions."
   @spec body(map(), map(), map(), map()) :: String.t()
   def body(tenant, customer, appt, service) do
@@ -35,6 +48,16 @@ defmodule DrivewayOS.Notifications.BookingSms do
     "Hi #{customer.name}, your #{service.name} with " <>
       "#{Branding.display_name(tenant)} is booked for #{when_str}. " <>
       "We'll text you on the day of. Reply STOP to opt out."
+  end
+
+  @doc "Reminder body builder."
+  @spec reminder_body(map(), map(), map(), map()) :: String.t()
+  def reminder_body(tenant, customer, appt, service) do
+    when_str = format_when(appt.scheduled_at)
+
+    "Reminder: #{customer.name}, your #{service.name} with " <>
+      "#{Branding.display_name(tenant)} is tomorrow at #{when_str}. " <>
+      "Reply STOP to opt out."
   end
 
   defp normalize_phone(nil), do: {:error, :no_phone}

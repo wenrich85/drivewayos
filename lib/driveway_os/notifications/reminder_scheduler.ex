@@ -16,7 +16,8 @@ defmodule DrivewayOS.Notifications.ReminderScheduler do
   require Logger
 
   alias DrivewayOS.Mailer
-  alias DrivewayOS.Notifications.BookingEmail
+  alias DrivewayOS.Notifications.{BookingEmail, BookingSms}
+  alias DrivewayOS.Plans
   alias DrivewayOS.Platform.Tenant
   alias DrivewayOS.Scheduling.{Appointment, ServiceType}
 
@@ -136,5 +137,11 @@ defmodule DrivewayOS.Notifications.ReminderScheduler do
     tenant
     |> BookingEmail.reminder(customer, appt, service)
     |> Mailer.deliver()
+
+    if Plans.tenant_can?(tenant, :sms_notifications) do
+      BookingSms.reminder(tenant, customer, appt, service)
+    end
+  rescue
+    _ -> :ok
   end
 end
