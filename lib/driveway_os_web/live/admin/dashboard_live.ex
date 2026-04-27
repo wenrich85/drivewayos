@@ -344,6 +344,7 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
             <.nav_link href="/admin/schedule" icon="hero-clock">Schedule</.nav_link>
             <.nav_link href="/admin/branding" icon="hero-paint-brush">Branding</.nav_link>
             <.nav_link href="/admin/domains" icon="hero-globe-alt">Domains</.nav_link>
+            <.nav_link href="/admin/activity" icon="hero-clipboard-document-list">Activity</.nav_link>
             <a
               href="/"
               target="_blank"
