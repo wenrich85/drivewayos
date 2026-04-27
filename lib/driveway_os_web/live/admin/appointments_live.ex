@@ -38,6 +38,7 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLive do
          socket
          |> assign(:page_title, "Appointments")
          |> assign(:status_filter, :all)
+         |> assign(:channel_filter, "all")
          |> assign(:search_q, "")
          |> load_data()}
     end
@@ -60,6 +61,13 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLive do
     {:noreply,
      socket
      |> assign(:search_q, q || "")
+     |> load_data()}
+  end
+
+  def handle_event("filter_channel", %{"channel" => channel}, socket) do
+    {:noreply,
+     socket
+     |> assign(:channel_filter, channel || "all")
      |> load_data()}
   end
 
@@ -112,15 +120,34 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLive do
 
     customer_map = Map.new(customers, &{&1.id, &1})
 
+    available_channels =
+      appointments
+      |> Enum.map(& &1.acquisition_channel)
+      |> Enum.reject(&(&1 in [nil, ""]))
+      |> Enum.uniq()
+      |> Enum.sort()
+
     filtered =
       appointments
       |> apply_status_filter(socket.assigns[:status_filter] || :all)
+      |> apply_channel_filter(socket.assigns[:channel_filter] || "all")
       |> apply_search(socket.assigns[:search_q] || "", customer_map)
 
     socket
     |> assign(:appointments, filtered)
     |> assign(:customer_map, customer_map)
     |> assign(:service_map, Map.new(services, &{&1.id, &1}))
+    |> assign(:available_channels, available_channels)
+  end
+
+  defp apply_channel_filter(appointments, "all"), do: appointments
+
+  defp apply_channel_filter(appointments, "_none") do
+    Enum.filter(appointments, &(&1.acquisition_channel in [nil, ""]))
+  end
+
+  defp apply_channel_filter(appointments, channel) when is_binary(channel) do
+    Enum.filter(appointments, &(&1.acquisition_channel == channel))
   end
 
   defp apply_status_filter(appointments, :all), do: appointments
@@ -152,6 +179,28 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLive do
   defp parse_status(_), do: :all
 
   defp fmt_when(%DateTime{} = dt), do: Calendar.strftime(dt, "%b %-d %-I:%M %p")
+
+  # Returns a truncated single-line preview of the customer's
+  # admin_notes when set, or nil. ~50 chars keeps the table tight
+  # without forcing the operator to open the row to know there's
+  # context. Full text on hover via `title`.
+  defp pinned_note(customer_map, customer_id) do
+    case (customer_map[customer_id] || %{}).admin_notes do
+      nil -> nil
+      "" -> nil
+      notes when is_binary(notes) ->
+        notes
+        |> String.split(~r/\s+/, trim: true)
+        |> Enum.join(" ")
+        |> truncate_preview(50)
+
+      _ ->
+        nil
+    end
+  end
+
+  defp truncate_preview(s, max) when byte_size(s) <= max, do: s
+  defp truncate_preview(s, max), do: String.slice(s, 0, max - 1) <> "…"
 
   defp status_badge(status) do
     case status do
@@ -234,6 +283,29 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLive do
               </form>
             </div>
 
+            <form
+              :if={@available_channels != []}
+              id="appointments-channel-filter-form"
+              phx-change="filter_channel"
+              class="flex items-center gap-2 flex-wrap"
+            >
+              <span class="text-xs uppercase tracking-wide text-base-content/60">Source:</span>
+              <select
+                name="channel"
+                class="select select-bordered select-xs"
+              >
+                <option value="all" selected={@channel_filter == "all"}>All sources</option>
+                <option
+                  :for={channel <- @available_channels}
+                  value={channel}
+                  selected={@channel_filter == channel}
+                >
+                  {channel}
+                </option>
+                <option value="_none" selected={@channel_filter == "_none"}>(not set)</option>
+              </select>
+            </form>
+
             <div :if={@appointments == []} class="text-center py-12 px-4">
               <span
                 class="hero-calendar w-12 h-12 mx-auto text-base-content/30"
@@ -259,6 +331,9 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLive do
                       Vehicle
                     </th>
                     <th class="text-xs font-semibold uppercase tracking-wide text-base-content/60">
+                      Source
+                    </th>
+                    <th class="text-xs font-semibold uppercase tracking-wide text-base-content/60">
                       Status
                     </th>
                     <th class="text-xs font-semibold uppercase tracking-wide text-base-content/60">
@@ -274,10 +349,23 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLive do
                         {fmt_when(a.scheduled_at)}
                       </.link>
                     </td>
-                    <td class="text-sm">{(@customer_map[a.customer_id] || %{name: "—"}).name}</td>
+                    <td class="text-sm">
+                      <div>{(@customer_map[a.customer_id] || %{name: "—"}).name}</div>
+                      <%= if pinned_note(@customer_map, a.customer_id) do %>
+                        <div
+                          class="text-xs text-base-content/60 italic mt-0.5 max-w-[14rem] truncate"
+                          title={(@customer_map[a.customer_id] || %{}).admin_notes}
+                        >
+                          📌 {pinned_note(@customer_map, a.customer_id)}
+                        </div>
+                      <% end %>
+                    </td>
                     <td class="text-sm">{(@service_map[a.service_type_id] || %{name: "—"}).name}</td>
                     <td class="text-xs text-base-content/70 max-w-[12rem] truncate">
                       {a.vehicle_description}
+                    </td>
+                    <td class="text-xs text-base-content/70">
+                      {a.acquisition_channel || "—"}
                     </td>
                     <td>
                       <span class={"badge badge-sm " <> status_badge(a.status)}>{a.status}</span>

@@ -165,4 +165,111 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLiveTest do
       assert html =~ "Red Tesla"
     end
   end
+
+  describe "acquisition channel column + filter" do
+    setup ctx do
+      {:ok, google_appt} =
+        Appointment
+        |> Ash.Changeset.for_create(
+          :book,
+          %{
+            customer_id: ctx.customer.id,
+            service_type_id: ctx.appt.service_type_id,
+            scheduled_at:
+              DateTime.utc_now() |> DateTime.add(2 * 86_400, :second) |> DateTime.truncate(:second),
+            duration_minutes: 45,
+            price_cents: 5_000,
+            vehicle_description: "Google Truck",
+            service_address: "1 Google Lane",
+            acquisition_channel: "Google"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      {:ok, friend_appt} =
+        Appointment
+        |> Ash.Changeset.for_create(
+          :book,
+          %{
+            customer_id: ctx.customer.id,
+            service_type_id: ctx.appt.service_type_id,
+            scheduled_at:
+              DateTime.utc_now() |> DateTime.add(3 * 86_400, :second) |> DateTime.truncate(:second),
+            duration_minutes: 45,
+            price_cents: 5_000,
+            vehicle_description: "Friend Truck",
+            service_address: "1 Friend Lane",
+            acquisition_channel: "Friend / family"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      Map.merge(ctx, %{google_appt: google_appt, friend_appt: friend_appt})
+    end
+
+    test "channel column shows the value or '—' when nil", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin/appointments")
+
+      assert html =~ "Google"
+      assert html =~ "Friend / family"
+    end
+
+    test "filtering by 'Google' hides Friend rows", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, _html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin/appointments")
+
+      html = render_change(lv, "filter_channel", %{"channel" => "Google"})
+
+      assert html =~ "Google Truck"
+      refute html =~ "Friend Truck"
+    end
+
+    test "filtering by '_none' shows only appointments with no channel", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, _html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin/appointments")
+
+      html = render_change(lv, "filter_channel", %{"channel" => "_none"})
+
+      # Original appt (ctx.appt has no channel) should be visible.
+      assert html =~ "Red Tesla"
+      refute html =~ "Google Truck"
+      refute html =~ "Friend Truck"
+    end
+  end
+
+  describe "pinned admin notes preview" do
+    test "shows truncated admin_notes preview next to customer name", ctx do
+      ctx.customer
+      |> Ash.Changeset.for_update(:update, %{
+        admin_notes: "Gate code 4321; prefers Saturday mornings; tip well"
+      })
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin/appointments")
+
+      assert html =~ "Gate code 4321"
+      assert html =~ "📌"
+    end
+
+    test "no preview when customer has no admin_notes", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin/appointments")
+
+      refute html =~ "📌"
+    end
+  end
 end
