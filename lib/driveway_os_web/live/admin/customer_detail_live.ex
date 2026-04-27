@@ -64,6 +64,7 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
          |> assign(:page_title, customer.name)
          |> assign(:customer, customer)
          |> assign(:appointments, appointments)
+         |> assign(:status_filter, :all)
          |> assign(:subscriptions, subscriptions)
          |> assign(:service_map, Map.new(services, &{&1.id, &1}))
          |> assign(:services, services)
@@ -78,6 +79,10 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
   end
 
   @impl true
+  def handle_event("filter_history_status", %{"status" => status}, socket) do
+    {:noreply, assign(socket, :status_filter, parse_status(status))}
+  end
+
   def handle_event("save_notes", %{"customer" => %{"admin_notes" => notes}}, socket) do
     tenant_id = socket.assigns.current_tenant.id
 
@@ -281,6 +286,17 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
   defp fmt_price(cents), do: "$" <> :erlang.float_to_binary(cents / 100, decimals: 2)
 
   defp service_name(map, id), do: get_in(map, [id, Access.key(:name)]) || "Service"
+
+  defp parse_status("all"), do: :all
+  defp parse_status("pending"), do: :pending
+  defp parse_status("confirmed"), do: :confirmed
+  defp parse_status("in_progress"), do: :in_progress
+  defp parse_status("completed"), do: :completed
+  defp parse_status("cancelled"), do: :cancelled
+  defp parse_status(_), do: :all
+
+  defp filter_appts(appts, :all), do: appts
+  defp filter_appts(appts, status), do: Enum.filter(appts, &(&1.status == status))
 
   defp status_badge(:pending), do: "badge-warning"
   defp status_badge(:confirmed), do: "badge-info"
@@ -574,7 +590,43 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
 
         <section class="card bg-base-100 shadow-sm border border-base-300">
           <div class="card-body p-6">
-            <h2 class="card-title text-lg">Appointment history</h2>
+            <div class="flex items-center justify-between flex-wrap gap-2">
+              <h2 class="card-title text-lg">Appointment history</h2>
+              <form
+                :if={@appointments != []}
+                id="customer-history-filter-form"
+                phx-change="filter_history_status"
+                class="flex flex-wrap gap-1"
+              >
+                <label
+                  :for={
+                    {label, value} <-
+                      [
+                        {"All", "all"},
+                        {"Pending", "pending"},
+                        {"Confirmed", "confirmed"},
+                        {"Completed", "completed"},
+                        {"Cancelled", "cancelled"}
+                      ]
+                  }
+                  class={
+                    "btn btn-xs " <>
+                      if Atom.to_string(@status_filter) == value,
+                        do: "btn-primary",
+                        else: "btn-ghost"
+                  }
+                >
+                  <input
+                    type="radio"
+                    name="status"
+                    value={value}
+                    checked={Atom.to_string(@status_filter) == value}
+                    class="hidden"
+                  />
+                  {label}
+                </label>
+              </form>
+            </div>
 
             <div :if={@appointments == []} class="text-center py-8 px-4">
               <span
@@ -584,9 +636,20 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
               <p class="mt-2 text-sm text-base-content/60">No bookings yet.</p>
             </div>
 
-            <ul :if={@appointments != []} class="divide-y divide-base-200">
+            <% filtered_appts = filter_appts(@appointments, @status_filter) %>
+
+            <div
+              :if={@appointments != [] and filtered_appts == []}
+              class="text-center py-8 px-4"
+            >
+              <p class="text-sm text-base-content/60">
+                No {Atom.to_string(@status_filter)} appointments.
+              </p>
+            </div>
+
+            <ul :if={filtered_appts != []} class="divide-y divide-base-200">
               <li
-                :for={a <- @appointments}
+                :for={a <- filtered_appts}
                 class="py-4 flex items-start justify-between gap-3 flex-wrap"
               >
                 <div class="flex-1 min-w-0">

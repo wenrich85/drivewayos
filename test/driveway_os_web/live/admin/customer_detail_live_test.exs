@@ -267,6 +267,61 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLiveTest do
     end
   end
 
+  describe "appointment history status filter" do
+    test "filtering to 'completed' hides the pending appointment", ctx do
+      # Add a second, completed appointment so we can prove filtering
+      # actually scopes the list.
+      {:ok, [service | _]} =
+        ServiceType |> Ash.Query.set_tenant(ctx.tenant.id) |> Ash.read(authorize?: false)
+
+      {:ok, completed_appt} =
+        Appointment
+        |> Ash.Changeset.for_create(
+          :book,
+          %{
+            customer_id: ctx.alice.id,
+            service_type_id: service.id,
+            scheduled_at:
+              DateTime.utc_now() |> DateTime.add(2 * 86_400, :second) |> DateTime.truncate(:second),
+            duration_minutes: service.duration_minutes,
+            price_cents: service.base_price_cents,
+            vehicle_description: "Blue Civic",
+            service_address: "999 Pine"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      completed_appt
+      |> Ash.Changeset.for_update(:confirm, %{})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+      |> Ash.Changeset.for_update(:start_wash, %{})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+      |> Ash.Changeset.for_update(:complete, %{})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, html} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/admin/customers/#{ctx.alice.id}")
+
+      # Default: both rows visible.
+      assert html =~ "Red Honda"
+      assert html =~ "Blue Civic"
+
+      # Filter to completed → pending row gone.
+      filtered =
+        lv
+        |> element("#customer-history-filter-form")
+        |> render_change(%{"status" => "completed"})
+
+      refute filtered =~ "Red Honda"
+      assert filtered =~ "Blue Civic"
+    end
+  end
+
   describe "subscriptions" do
     test "admin can create + manage a subscription for the customer", ctx do
       {:ok, [service | _]} =
