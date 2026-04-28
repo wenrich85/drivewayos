@@ -124,7 +124,7 @@ defmodule DrivewayOS.Notifications.WeeklyDigestScheduler do
       end)
 
       tenant
-      |> Ash.Changeset.for_update(:mark_digest_sent, %{})
+      |> Ash.Changeset.for_update(:mark_digest_sent, %{at: now})
       |> Ash.update!(authorize?: false)
 
       true

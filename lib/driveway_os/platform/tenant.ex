@@ -208,7 +208,12 @@ defmodule DrivewayOS.Platform.Tenant do
     end
 
     update :mark_digest_sent do
-      change set_attribute(:last_digest_sent_at, &DateTime.utc_now/0)
+      # `at` lets callers stamp with a specific time — mainly used by
+      # the scheduler so a single sweep stamps all tenants with the
+      # same instant, and by tests so the recently-sent guard works
+      # against deterministic clocks. Defaults to utc_now/0.
+      argument :at, :utc_datetime_usec, default: &DateTime.utc_now/0
+      change set_attribute(:last_digest_sent_at, arg(:at))
     end
 
     update :suspend do
