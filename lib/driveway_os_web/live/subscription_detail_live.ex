@@ -213,6 +213,9 @@ defmodule DrivewayOSWeb.SubscriptionDetailLive do
             <div>
               <div class="text-xs text-base-content/60 uppercase tracking-wide">Next run</div>
               <div class="font-medium">{fmt_when(@sub.next_run_at)}</div>
+              <div class="text-xs text-base-content/60 mt-0.5">
+                {fmt_price(@service.base_price_cents)} per run
+              </div>
             </div>
             <div :if={@sub.last_run_at} class="col-span-2">
               <div class="text-xs text-base-content/60 uppercase tracking-wide">Last run</div>

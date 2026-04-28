@@ -169,6 +169,9 @@ defmodule DrivewayOSWeb.SubscriptionDetailLiveTest do
       assert html =~ "biweekly"
       assert html =~ "Red Honda"
       assert html =~ "1 Cedar Ln"
+      # Surfaces the per-run charge so the customer can decide
+      # whether the recurring plan is still worth it.
+      assert html =~ "per run"
     end
 
     test "admin can also open it", ctx do
