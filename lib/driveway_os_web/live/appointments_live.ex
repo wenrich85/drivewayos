@@ -66,9 +66,23 @@ defmodule DrivewayOSWeb.AppointmentsLive do
         |> Map.new(&{&1.id, &1})
       end
 
+    {upcoming, past} = split_by_recency(appts)
+
     socket
     |> assign(:appointments, appts)
+    |> assign(:upcoming, upcoming)
+    |> assign(:past, past)
     |> assign(:services, services)
+  end
+
+  # Upcoming = active state. Past = terminal state. We sort the
+  # two sections in opposite directions because that's the order
+  # the customer thinks about them: next-up first for upcoming,
+  # most-recent first for past.
+  defp split_by_recency(appts) do
+    {past, upcoming} = Enum.split_with(appts, &(&1.status in [:completed, :cancelled]))
+
+    {Enum.sort_by(upcoming, & &1.scheduled_at, DateTime), past}
   end
 
   defp fmt_price(cents), do: "$" <> :erlang.float_to_binary(cents / 100, decimals: 2)
@@ -125,53 +139,25 @@ defmodule DrivewayOSWeb.AppointmentsLive do
           </div>
         </section>
 
-        <ul :if={@appointments != []} class="space-y-3">
-          <li :for={a <- @appointments}>
-            <.link
-              navigate={~p"/appointments/#{a.id}"}
-              class="block card bg-base-100 shadow-sm border border-base-300 hover:shadow-md transition-shadow cursor-pointer"
-            >
-              <div class="card-body p-5">
-                <div class="flex justify-between items-start gap-3 flex-wrap">
-                  <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-2 flex-wrap">
-                      <span class="font-semibold">
-                        {service_name(@services, a.service_type_id)}
-                      </span>
-                      <span class={"badge badge-sm " <> status_badge_class(a.status)}>
-                        {a.status}
-                      </span>
-                      <span :if={a.payment_status == :paid} class="badge badge-sm badge-success">
-                        Paid
-                      </span>
-                    </div>
-                    <div class="text-sm text-base-content/70 mt-1 flex items-center gap-1">
-                      <span class="hero-clock w-4 h-4 shrink-0" aria-hidden="true"></span>
-                      {fmt_when(a.scheduled_at)}
-                    </div>
-                    <div class="text-sm text-base-content/70 mt-1 flex items-start gap-1 truncate">
-                      <span
-                        class="hero-truck w-4 h-4 shrink-0 mt-0.5"
-                        aria-hidden="true"
-                      ></span>
-                      <span class="truncate">{a.vehicle_description}</span>
-                    </div>
-                    <div class="text-sm text-base-content/70 mt-1 flex items-start gap-1 truncate">
-                      <span
-                        class="hero-map-pin w-4 h-4 shrink-0 mt-0.5"
-                        aria-hidden="true"
-                      ></span>
-                      <span class="truncate">{a.service_address}</span>
-                    </div>
-                  </div>
-                  <div class="text-right shrink-0">
-                    <div class="text-lg font-semibold">{fmt_price(a.price_cents)}</div>
-                  </div>
-                </div>
-              </div>
-            </.link>
-          </li>
-        </ul>
+        <%!-- Upcoming first (next wash is what the customer most
+             often comes here for), past second (with inline rebook). --%>
+        <section :if={@upcoming != []}>
+          <h2 class="text-xs font-semibold uppercase tracking-wide text-base-content/60 mb-2">
+            Upcoming
+          </h2>
+          <ul class="space-y-3">
+            <li :for={a <- @upcoming}>{appointment_card(assigns, a, false)}</li>
+          </ul>
+        </section>
+
+        <section :if={@past != []}>
+          <h2 class="text-xs font-semibold uppercase tracking-wide text-base-content/60 mb-2">
+            Past
+          </h2>
+          <ul class="space-y-3">
+            <li :for={a <- @past}>{appointment_card(assigns, a, true)}</li>
+          </ul>
+        </section>
       </div>
     </main>
     """
@@ -182,5 +168,60 @@ defmodule DrivewayOSWeb.AppointmentsLive do
       %{name: name} -> name
       _ -> "Service"
     end
+  end
+
+  # Single appointment card. `past?` controls whether the inline
+  # "Book again" button renders — that's the one differentiator
+  # between the two list sections, so a flag is cleaner than two
+  # near-identical card components.
+  defp appointment_card(assigns, appt, past?) do
+    assigns = Map.merge(assigns, %{a: appt, past?: past?})
+
+    ~H"""
+    <div class="block card bg-base-100 shadow-sm border border-base-300 hover:shadow-md transition-shadow">
+      <div class="card-body p-5">
+        <div class="flex justify-between items-start gap-3 flex-wrap">
+          <.link navigate={~p"/appointments/#{@a.id}"} class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-semibold link-hover">
+                {service_name(@services, @a.service_type_id)}
+              </span>
+              <span class={"badge badge-sm " <> status_badge_class(@a.status)}>
+                {@a.status}
+              </span>
+              <span :if={@a.payment_status == :paid} class="badge badge-sm badge-success">
+                Paid
+              </span>
+            </div>
+            <div class="text-sm text-base-content/70 mt-1 flex items-center gap-1">
+              <span class="hero-clock w-4 h-4 shrink-0" aria-hidden="true"></span>
+              {fmt_when(@a.scheduled_at)}
+            </div>
+            <div class="text-sm text-base-content/70 mt-1 flex items-start gap-1 truncate">
+              <span class="hero-truck w-4 h-4 shrink-0 mt-0.5" aria-hidden="true"></span>
+              <span class="truncate">{@a.vehicle_description}</span>
+            </div>
+            <div class="text-sm text-base-content/70 mt-1 flex items-start gap-1 truncate">
+              <span class="hero-map-pin w-4 h-4 shrink-0 mt-0.5" aria-hidden="true"></span>
+              <span class="truncate">{@a.service_address}</span>
+            </div>
+          </.link>
+
+          <div class="text-right shrink-0 flex flex-col items-end gap-2">
+            <div class="text-lg font-semibold">{fmt_price(@a.price_cents)}</div>
+            <.link
+              :if={@past? and not @current_customer.guest?}
+              navigate={~p"/book?from=#{@a.id}"}
+              class="btn btn-primary btn-xs gap-1"
+              title="Book the same service + vehicle + address again"
+            >
+              <span class="hero-arrow-path w-3 h-3" aria-hidden="true"></span>
+              Book again
+            </.link>
+          </div>
+        </div>
+      </div>
+    </div>
+    """
   end
 end

@@ -107,6 +107,106 @@ defmodule DrivewayOSWeb.AppointmentsLiveTest do
     assert html =~ "No appointments" or html =~ "haven't booked"
   end
 
+  describe "upcoming + past split" do
+    test "completed appointments land under 'Past' with inline 'Book again'", ctx do
+      {:ok, upcoming} = book!(ctx.tenant, ctx.customer, ctx.service)
+
+      # A second booking that's been walked through the full
+      # status state machine to :completed lands in the Past
+      # section.
+      {:ok, completed} = book_at!(ctx.tenant, ctx.customer, ctx.service, 2 * 86_400)
+
+      completed
+      |> Ash.Changeset.for_update(:confirm, %{})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+      |> Ash.Changeset.for_update(:start_wash, %{})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+      |> Ash.Changeset.for_update(:complete, %{})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/appointments")
+
+      assert html =~ "Upcoming"
+      assert html =~ "Past"
+      # Past row gets the inline rebook anchor with ?from=<id>.
+      assert html =~ ~s(href="/book?from=#{completed.id}")
+      assert html =~ "Book again"
+
+      # The pending booking shouldn't have a rebook button.
+      refute html =~ ~s(href="/book?from=#{upcoming.id}")
+    end
+
+    test "all-upcoming list hides the Past section", ctx do
+      {:ok, _} = book!(ctx.tenant, ctx.customer, ctx.service)
+
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/appointments")
+
+      assert html =~ "Upcoming"
+      # No Past header when there's nothing terminal-state.
+      refute html =~ ~s(<h2 class="text-xs font-semibold uppercase tracking-wide text-base-content/60 mb-2">\n            Past\n          </h2>)
+    end
+
+    test "guest customers don't see the inline 'Book again' button", ctx do
+      {:ok, guest} =
+        Customer
+        |> Ash.Changeset.for_create(
+          :register_guest,
+          %{
+            email: "guest-#{System.unique_integer([:positive])}@example.com",
+            name: "Guest"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      {:ok, completed} = book!(ctx.tenant, guest, ctx.service)
+
+      completed
+      |> Ash.Changeset.for_update(:confirm, %{})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+      |> Ash.Changeset.for_update(:start_wash, %{})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+      |> Ash.Changeset.for_update(:complete, %{})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      conn = sign_in(ctx.conn, guest)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/appointments")
+
+      # Guest accounts are ephemeral — no "Book again" rebook hop
+      # because the rebook flow needs a real account.
+      refute html =~ "Book again"
+    end
+  end
+
+  defp book_at!(tenant, customer, service, seconds_from_now) do
+    Appointment
+    |> Ash.Changeset.for_create(
+      :book,
+      %{
+        customer_id: customer.id,
+        service_type_id: service.id,
+        scheduled_at:
+          DateTime.utc_now()
+          |> DateTime.add(seconds_from_now, :second)
+          |> DateTime.truncate(:second),
+        duration_minutes: service.duration_minutes,
+        price_cents: service.base_price_cents,
+        vehicle_description: "Past vehicle",
+        service_address: "1 Past Lane"
+      },
+      tenant: tenant.id
+    )
+    |> Ash.create(authorize?: false)
+  end
+
   defp book!(tenant, customer, service) do
     Appointment
     |> Ash.Changeset.for_create(
