@@ -170,9 +170,14 @@ defmodule DrivewayOSWeb.Admin.TodayPrintLive do
             <dt class="text-base-content/60">Customer</dt>
             <dd class="col-span-3">
               {(@customer_map[a.customer_id] || %{name: "—"}).name}
-              <span :if={(@customer_map[a.customer_id] || %{}).phone} class="ml-2 font-mono">
-                {(@customer_map[a.customer_id] || %{}).phone}
-              </span>
+              <% phone = (@customer_map[a.customer_id] || %{phone: nil}).phone %>
+              <a
+                :if={phone}
+                href={"tel:" <> phone}
+                class="ml-2 font-mono link link-hover"
+              >
+                {phone}
+              </a>
             </dd>
 
             <dt class="text-base-content/60">Vehicle</dt>

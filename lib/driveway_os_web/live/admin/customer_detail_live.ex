@@ -347,9 +347,14 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
               <span class="hero-envelope w-4 h-4" aria-hidden="true"></span>
               {to_string(@customer.email)}
             </span>
-            <span :if={@customer.phone} class="inline-flex items-center gap-1">
+            <a
+              :if={@customer.phone}
+              href={"tel:" <> @customer.phone}
+              class="inline-flex items-center gap-1 link link-hover"
+              title={"Call " <> @customer.phone}
+            >
               <span class="hero-phone w-4 h-4" aria-hidden="true"></span> {@customer.phone}
-            </span>
+            </a>
             <span :if={@customer.role == :admin} class="badge badge-primary badge-sm">Admin</span>
           </p>
         </header>
