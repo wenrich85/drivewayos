@@ -101,6 +101,19 @@ defmodule DrivewayOS.Scheduling.Appointment do
       constraints max_length: 1000
     end
 
+    # Multi-car households: customer wants the tech to do 2+ cars in
+    # one visit. The primary `vehicle_description` carries the first
+    # car (kept for backwards compatibility with every list view that
+    # already renders it). Additional cars land here as free-text
+    # descriptions; price_cents is auto-set at booking time to
+    # service.base_price × (1 + length(additional_vehicles)). Default
+    # [] so the existing single-car path keeps working unchanged.
+    attribute :additional_vehicles, {:array, :string} do
+      public? true
+      default []
+      constraints items: [min_length: 1, max_length: 200]
+    end
+
     attribute :cancellation_reason, :string do
       public? true
       constraints max_length: 300
@@ -217,8 +230,32 @@ defmodule DrivewayOS.Scheduling.Appointment do
         :vehicle_id,
         :address_id,
         :acquisition_channel,
-        :is_loyalty_redemption
+        :is_loyalty_redemption,
+        :additional_vehicles
       ]
+
+      # If additional_vehicles is non-empty, recompute price_cents
+      # to base × (1 + count). Operators can still override after
+      # the fact via the admin :update path. We don't multiply
+      # duration_minutes — washing the second car overlaps prep on
+      # the first, and most operators want to keep the published
+      # window honest rather than tripling it.
+      change fn changeset, _ ->
+        case Ash.Changeset.get_attribute(changeset, :additional_vehicles) do
+          extras when is_list(extras) and extras != [] ->
+            base = Ash.Changeset.get_attribute(changeset, :price_cents) || 0
+            multiplier = 1 + length(extras)
+
+            Ash.Changeset.force_change_attribute(
+              changeset,
+              :price_cents,
+              base * multiplier
+            )
+
+          _ ->
+            changeset
+        end
+      end
 
       validate compare(:scheduled_at, greater_than: &DateTime.utc_now/0),
         message: "must be in the future"

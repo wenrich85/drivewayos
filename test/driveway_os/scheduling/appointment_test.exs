@@ -64,6 +64,52 @@ defmodule DrivewayOS.Scheduling.AppointmentTest do
       assert appt.price_cents == ctx.service_a.base_price_cents
     end
 
+    test "additional_vehicles auto-multiply price_cents at book time", ctx do
+      {:ok, appt} =
+        Appointment
+        |> Ash.Changeset.for_create(
+          :book,
+          %{
+            customer_id: ctx.customer_a.id,
+            service_type_id: ctx.service_a.id,
+            scheduled_at: future(),
+            vehicle_description: "Primary BMW 530",
+            additional_vehicles: ["Secondary Honda Pilot", "Tertiary Mini Cooper"],
+            service_address: "1 Cedar",
+            price_cents: ctx.service_a.base_price_cents,
+            duration_minutes: ctx.service_a.duration_minutes
+          },
+          tenant: ctx.tenant_a.id
+        )
+        |> Ash.create(authorize?: false)
+
+      assert appt.additional_vehicles == ["Secondary Honda Pilot", "Tertiary Mini Cooper"]
+      # 1 primary + 2 additional = 3× base price.
+      assert appt.price_cents == ctx.service_a.base_price_cents * 3
+    end
+
+    test "no additional_vehicles → price_cents unchanged", ctx do
+      {:ok, appt} =
+        Appointment
+        |> Ash.Changeset.for_create(
+          :book,
+          %{
+            customer_id: ctx.customer_a.id,
+            service_type_id: ctx.service_a.id,
+            scheduled_at: future(),
+            vehicle_description: "Solo Civic",
+            service_address: "2 Cedar",
+            price_cents: ctx.service_a.base_price_cents,
+            duration_minutes: ctx.service_a.duration_minutes
+          },
+          tenant: ctx.tenant_a.id
+        )
+        |> Ash.create(authorize?: false)
+
+      assert appt.additional_vehicles == []
+      assert appt.price_cents == ctx.service_a.base_price_cents
+    end
+
     test "scheduled_at must be in the future", ctx do
       assert {:error, _} =
                Appointment

@@ -1291,6 +1291,117 @@ defmodule DrivewayOSWeb.BookingLiveTest do
     end
   end
 
+  describe "multi-vehicle bookings" do
+    test "customer adds a second vehicle on the vehicle step + total triples", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/book")
+
+      service_id = extract_service_id(html, "basic")
+
+      lv
+      |> form("#step-service-form", %{"booking" => %{"service_type_id" => service_id}})
+      |> render_submit()
+
+      # Add an additional vehicle BEFORE submitting the primary
+      # vehicle form. Order doesn't matter — wizard_data carries it
+      # through the wizard regardless.
+      lv
+      |> form("#add-additional-vehicle-form", %{
+        "additional" => %{"description" => "Red 2018 Honda Pilot"}
+      })
+      |> render_submit()
+
+      lv
+      |> form("#add-additional-vehicle-form", %{
+        "additional" => %{"description" => "White 2020 Tesla Y"}
+      })
+      |> render_submit()
+
+      lv
+      |> form("#step-vehicle-text-form", %{
+        "booking" => %{"vehicle_description" => "Blue 2022 Subaru Outback"}
+      })
+      |> render_submit()
+
+      html =
+        lv
+        |> form("#step-address-text-form", %{
+          "booking" => %{"service_address" => "123 Cedar"}
+        })
+        |> render_submit()
+
+      # Schedule step shows the rolled-up total.
+      assert html =~ "3 vehicles"
+      assert html =~ "$150.00"
+
+      future = DateTime.utc_now() |> DateTime.add(2 * 86_400, :second)
+
+      lv
+      |> form("#booking-form", %{
+        "booking" => %{
+          "scheduled_at" => DateTime.to_iso8601(future) |> String.slice(0, 16)
+        }
+      })
+      |> render_submit()
+
+      {:ok, [appt]} =
+        Appointment |> Ash.Query.set_tenant(ctx.tenant.id) |> Ash.read(authorize?: false)
+
+      assert appt.vehicle_description == "Blue 2022 Subaru Outback"
+      assert appt.additional_vehicles == ["Red 2018 Honda Pilot", "White 2020 Tesla Y"]
+      assert appt.price_cents == 5_000 * 3
+    end
+
+    test "removing an additional vehicle drops it from the list", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/book")
+
+      service_id = extract_service_id(html, "basic")
+
+      lv
+      |> form("#step-service-form", %{"booking" => %{"service_type_id" => service_id}})
+      |> render_submit()
+
+      lv
+      |> form("#add-additional-vehicle-form", %{
+        "additional" => %{"description" => "Extra car"}
+      })
+      |> render_submit()
+
+      html =
+        lv
+        |> render_click("remove_additional_vehicle", %{"index" => "0"})
+
+      refute html =~ "Extra car"
+    end
+
+    test "rejects empty additional-vehicle description", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/book")
+
+      service_id = extract_service_id(html, "basic")
+
+      lv
+      |> form("#step-service-form", %{"booking" => %{"service_type_id" => service_id}})
+      |> render_submit()
+
+      html =
+        lv
+        |> form("#add-additional-vehicle-form", %{
+          "additional" => %{"description" => "   "}
+        })
+        |> render_submit()
+
+      assert html =~ "Describe the extra vehicle"
+    end
+  end
+
   describe "admin walk-in booking (?on_behalf_of=)" do
     setup ctx do
       ctx.customer

@@ -481,8 +481,15 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
                 <dd class="col-span-2">{@booker.phone}</dd>
               <% end %>
 
-              <dt class="text-base-content/60">Vehicle</dt>
-              <dd class="col-span-2">{@appt.vehicle_description}</dd>
+              <dt class="text-base-content/60">
+                {if @appt.additional_vehicles != [], do: "Vehicles", else: "Vehicle"}
+              </dt>
+              <dd class="col-span-2">
+                <div>{@appt.vehicle_description}</div>
+                <div :for={v <- @appt.additional_vehicles} class="text-base-content/80">
+                  + {v}
+                </div>
+              </dd>
 
               <dt class="text-base-content/60">Address</dt>
               <dd class="col-span-2">{@appt.service_address}</dd>

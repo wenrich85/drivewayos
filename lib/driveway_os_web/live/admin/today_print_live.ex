@@ -180,8 +180,15 @@ defmodule DrivewayOSWeb.Admin.TodayPrintLive do
               </a>
             </dd>
 
-            <dt class="text-base-content/60">Vehicle</dt>
-            <dd class="col-span-3">{a.vehicle_description}</dd>
+            <dt class="text-base-content/60">
+              {if a.additional_vehicles != [], do: "Vehicles", else: "Vehicle"}
+            </dt>
+            <dd class="col-span-3">
+              <div>{a.vehicle_description}</div>
+              <div :for={v <- a.additional_vehicles} class="text-base-content/80">
+                + {v}
+              </div>
+            </dd>
 
             <dt class="text-base-content/60">Address</dt>
             <dd class="col-span-3 font-medium">{a.service_address}</dd>

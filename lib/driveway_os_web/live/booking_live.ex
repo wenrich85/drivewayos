@@ -329,6 +329,42 @@ defmodule DrivewayOSWeb.BookingLive do
     end
   end
 
+  # Multi-car households: add a free-text "second vehicle" inline
+  # without touching saved-vehicle state. Capped at 4 extras so the
+  # UI doesn't degrade and a typo doesn't run away.
+  def handle_event("add_additional_vehicle", %{"additional" => %{"description" => desc}}, socket) do
+    case String.trim(desc || "") do
+      "" ->
+        {:noreply, assign(socket, :errors, %{additional_vehicle: "Describe the extra vehicle"})}
+
+      trimmed ->
+        existing = socket.assigns.wizard_data["additional_vehicles"] || []
+
+        if length(existing) >= 4 do
+          {:noreply, assign(socket, :errors, %{additional_vehicle: "Maximum 4 extra vehicles"})}
+        else
+          socket
+          |> put_data(:additional_vehicles, existing ++ [trimmed])
+          |> assign(:errors, %{})
+          |> noreply()
+        end
+    end
+  end
+
+  def handle_event("remove_additional_vehicle", %{"index" => index}, socket) do
+    case Integer.parse(to_string(index)) do
+      {i, ""} when i >= 0 ->
+        existing = socket.assigns.wizard_data["additional_vehicles"] || []
+
+        socket
+        |> put_data(:additional_vehicles, List.delete_at(existing, i))
+        |> noreply()
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
   # --- Step 3: address ---
 
   def handle_event("set_address_mode", %{"mode" => mode}, socket) do
@@ -505,6 +541,7 @@ defmodule DrivewayOSWeb.BookingLive do
       "vehicle_description" => "",
       "address_id" => nil,
       "service_address" => "",
+      "additional_vehicles" => [],
       "notes" => "",
       "acquisition_channel" => "",
       "is_loyalty_redemption" => false
@@ -767,6 +804,7 @@ defmodule DrivewayOSWeb.BookingLive do
           price_cents: price,
           vehicle_id: data["vehicle_id"],
           vehicle_description: data["vehicle_description"] |> to_string() |> String.trim(),
+          additional_vehicles: data["additional_vehicles"] || [],
           address_id: data["address_id"],
           service_address: data["service_address"] |> to_string() |> String.trim(),
           notes: data["notes"],
@@ -1248,6 +1286,62 @@ defmodule DrivewayOSWeb.BookingLive do
           <% true -> %>
             {render_vehicle_freetext(assigns)}
         <% end %>
+
+        <%!-- Multi-vehicle: tack on additional cars for the same
+             visit. Existing additions render as removable chips;
+             a small inline form adds one more. Pricing on the
+             schedule step is base × (1 + count). --%>
+        <% additional = @wizard_data["additional_vehicles"] || [] %>
+        <div :if={additional != []} class="border-t border-base-200 pt-3 space-y-2">
+          <p class="text-xs font-semibold uppercase tracking-wide text-base-content/60">
+            Also doing today
+          </p>
+          <ul class="flex flex-wrap gap-2">
+            <li
+              :for={{desc, idx} <- Enum.with_index(additional)}
+              class="badge badge-lg gap-2 bg-base-200 border-base-300"
+            >
+              {desc}
+              <button
+                type="button"
+                phx-click="remove_additional_vehicle"
+                phx-value-index={idx}
+                class="text-base-content/60 hover:text-error"
+                aria-label={"Remove #{desc}"}
+              >
+                <span class="hero-x-mark w-3 h-3" aria-hidden="true"></span>
+              </button>
+            </li>
+          </ul>
+        </div>
+
+        <form
+          id="add-additional-vehicle-form"
+          phx-submit="add_additional_vehicle"
+          class="border-t border-base-200 pt-3 flex items-end gap-2 flex-wrap"
+        >
+          <div class="flex-1 min-w-[200px]">
+            <label class="label" for="add-additional-vehicle-input">
+              <span class="label-text font-medium text-sm">
+                Add another vehicle?
+              </span>
+              <span class="label-text-alt text-base-content/50">Optional</span>
+            </label>
+            <input
+              id="add-additional-vehicle-input"
+              type="text"
+              name="additional[description]"
+              placeholder="Red 2018 Honda Pilot"
+              class="input input-bordered input-sm w-full"
+            />
+            <p :if={@errors[:additional_vehicle]} class="text-xs text-error mt-1">
+              {@errors[:additional_vehicle]}
+            </p>
+          </div>
+          <button type="submit" class="btn btn-ghost btn-sm gap-1">
+            <span class="hero-plus w-4 h-4" aria-hidden="true"></span> Add
+          </button>
+        </form>
       </div>
     </section>
     """
@@ -1372,20 +1466,34 @@ defmodule DrivewayOSWeb.BookingLive do
       <div class="card-body p-6 space-y-4">
         <h2 class="card-title text-lg">When + final review</h2>
 
+        <% additional = @wizard_data["additional_vehicles"] || [] %>
+        <% vehicle_count = 1 + length(additional) %>
+        <% total_cents = if @selected_service, do: @selected_service.base_price_cents * vehicle_count, else: 0 %>
+
         <%!-- Inline review of selections from prior steps --%>
         <dl class="grid grid-cols-3 gap-x-3 gap-y-2 text-sm">
           <dt class="text-base-content/60">Service</dt>
           <dd class="col-span-2">
             <span :if={@selected_service}>
-              {@selected_service.name} — {fmt_price(@selected_service.base_price_cents)}
+              {@selected_service.name} — {fmt_price(@selected_service.base_price_cents)}{if vehicle_count > 1, do: " each"}
             </span>
           </dd>
 
-          <dt class="text-base-content/60">Vehicle</dt>
-          <dd class="col-span-2">{@wizard_data["vehicle_description"]}</dd>
+          <dt class="text-base-content/60">
+            {if additional != [], do: "Vehicles", else: "Vehicle"}
+          </dt>
+          <dd class="col-span-2">
+            <div>{@wizard_data["vehicle_description"]}</div>
+            <div :for={v <- additional} class="text-base-content/80">+ {v}</div>
+          </dd>
 
           <dt class="text-base-content/60">Address</dt>
           <dd class="col-span-2">{@wizard_data["service_address"]}</dd>
+
+          <dt :if={vehicle_count > 1} class="text-base-content/60 font-semibold">Total</dt>
+          <dd :if={vehicle_count > 1} class="col-span-2 font-semibold">
+            {fmt_price(total_cents)} ({vehicle_count} vehicles)
+          </dd>
         </dl>
 
         <form id="booking-form" phx-submit="submit" class="space-y-4 pt-2 border-t border-base-200">
