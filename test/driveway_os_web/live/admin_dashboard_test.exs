@@ -314,6 +314,51 @@ defmodule DrivewayOSWeb.AdminDashboardTest do
 
       refute html =~ "Why customers cancel"
     end
+
+    test "buckets 'Admin: <label>' reasons distinctly from customer ones", ctx do
+      now = DateTime.utc_now()
+
+      reasons = [
+        "Customer: Bad weather",
+        "Admin: Bad weather — Hail forecast",
+        "Admin: Equipment issue"
+      ]
+
+      Enum.with_index(reasons, fn reason, i ->
+        {:ok, appt} =
+          Appointment
+          |> Ash.Changeset.for_create(
+            :book,
+            %{
+              customer_id: ctx.customer.id,
+              service_type_id: ctx.service.id,
+              scheduled_at:
+                DateTime.add(now, (i + 1) * 86_400, :second) |> DateTime.truncate(:second),
+              duration_minutes: ctx.service.duration_minutes,
+              price_cents: ctx.service.base_price_cents,
+              vehicle_description: "Truck #{i}",
+              service_address: "#{i} Lane"
+            },
+            tenant: ctx.tenant.id
+          )
+          |> Ash.create(authorize?: false)
+
+        appt
+        |> Ash.Changeset.for_update(:cancel, %{cancellation_reason: reason})
+        |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+      end)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
+
+      # Customer-side weather + admin-side weather are separate
+      # buckets; admin reasons get the "(admin)" suffix.
+      assert html =~ "Bad weather"
+      assert html =~ "Bad weather (admin)"
+      assert html =~ "Equipment issue (admin)"
+    end
   end
 
   describe "acquisition channel breakdown" do

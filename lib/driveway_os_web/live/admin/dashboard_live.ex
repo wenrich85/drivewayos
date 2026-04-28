@@ -261,6 +261,19 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
         |> String.split(" — ", parts: 2)
         |> List.first()
 
+      # "Admin: Bad weather — gust >25mph" gets bucketed as
+      # "Bad weather (admin)" so the breakdown surfaces the same
+      # weather class for both sides without merging them — operators
+      # care about the admin-vs-customer split.
+      String.starts_with?(text, "Admin: ") ->
+        label =
+          text
+          |> String.replace_prefix("Admin: ", "")
+          |> String.split(" — ", parts: 2)
+          |> List.first()
+
+        "#{label} (admin)"
+
       String.starts_with?(text, "Cancelled by admin") ->
         "Admin-cancelled"
 

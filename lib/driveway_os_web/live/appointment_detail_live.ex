@@ -72,14 +72,17 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
     transition(socket, :confirm, %{})
   end
 
-  # Customer-side cancel arrives with a structured reason from the
-  # inline form (one of the @cancel_reasons + an optional "other"
-  # free-text); admin-side comes through with no params.
+  # Both customer and admin cancels go through the inline form.
+  # The reason set + the "Admin:" / "Customer:" prefix are decided
+  # in `format_cancel_reason/2` based on the current_customer's role.
   def handle_event("cancel", %{"cancel" => params}, socket) do
-    reason = format_cancel_reason(params)
+    reason = format_cancel_reason(params, socket.assigns.current_customer)
     transition(socket, :cancel, %{cancellation_reason: reason})
   end
 
+  # Fallback for fast-path cancels (dashboard inline button) that
+  # don't render the form. Lands as "Cancelled by admin" /
+  # "Cancelled by customer" the same way it has historically.
   def handle_event("cancel", _, socket) do
     transition(socket, :cancel, %{cancellation_reason: cancel_reason(socket)})
   end
@@ -188,7 +191,7 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
     end
   end
 
-  @cancel_reasons [
+  @customer_cancel_reasons [
     {"schedule_conflict", "Schedule conflict"},
     {"service_not_needed", "Service no longer needed"},
     {"weather", "Bad weather"},
@@ -196,8 +199,34 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
     {"other", "Other"}
   ]
 
-  defp format_cancel_reason(%{"reason" => key, "details" => details}) do
-    label = lookup_cancel_label(key)
+  # Admin reasons skew toward operational realities (weather is
+  # shared with the customer side, but tech-out-sick / equipment
+  # issue / customer no-show only make sense from the operator's
+  # perspective).
+  @admin_cancel_reasons [
+    {"weather", "Bad weather"},
+    {"equipment", "Equipment issue"},
+    {"tech_unavailable", "Tech unavailable"},
+    {"no_show", "Customer no-show"},
+    {"customer_rescheduled", "Customer rescheduled"},
+    {"other", "Other"}
+  ]
+
+  @doc false
+  def cancel_reason_options(%Customer{role: :admin}), do: @admin_cancel_reasons
+  def cancel_reason_options(_), do: @customer_cancel_reasons
+
+  defp format_cancel_reason(%{"reason" => key, "details" => details}, %Customer{role: :admin}) do
+    label = lookup_cancel_label(key, @admin_cancel_reasons)
+
+    case String.trim(details || "") do
+      "" -> "Admin: #{label}"
+      d -> "Admin: #{label} — #{d}"
+    end
+  end
+
+  defp format_cancel_reason(%{"reason" => key, "details" => details}, _) do
+    label = lookup_cancel_label(key, @customer_cancel_reasons)
 
     case String.trim(details || "") do
       "" -> "Customer: #{label}"
@@ -205,10 +234,11 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
     end
   end
 
-  defp format_cancel_reason(_), do: "Cancelled by customer"
+  defp format_cancel_reason(_, %Customer{role: :admin}), do: "Cancelled by admin"
+  defp format_cancel_reason(_, _), do: "Cancelled by customer"
 
-  defp lookup_cancel_label(key) do
-    Enum.find_value(@cancel_reasons, "Other", fn {k, l} -> if k == key, do: l end)
+  defp lookup_cancel_label(key, options) do
+    Enum.find_value(options, "Other", fn {k, l} -> if k == key, do: l end)
   end
 
   defp transition(socket, action, args) do
@@ -458,22 +488,14 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
                 <span class="hero-arrow-uturn-left w-4 h-4" aria-hidden="true"></span> Refund
               </button>
 
-              <%!-- Admin cancel: bare confirm dialog. Customer cancel:
-                   inline form with reason picker (handled below). --%>
+              <%!-- Admin and customer both get an inline form with a
+                   reason picker. The reason set differs by role
+                   (handled in the form below) so the analytics card
+                   on /admin can bucket admin-side cancellations
+                   distinctly from customer-side ones. --%>
               <button
                 :if={
-                  admin?(@current_customer) and @appt.status in [:pending, :confirmed]
-                }
-                phx-click="cancel"
-                data-confirm="Cancel this appointment?"
-                class="btn btn-ghost btn-sm text-error gap-1"
-              >
-                <span class="hero-x-mark w-4 h-4" aria-hidden="true"></span> Cancel
-              </button>
-
-              <button
-                :if={
-                  not admin?(@current_customer) and @appt.status in [:pending, :confirmed] and
+                  @appt.status in [:pending, :confirmed] and
                     not @cancel_form_open?
                 }
                 phx-click="show_cancel_form"
@@ -515,16 +537,7 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
 
               <div class="space-y-2">
                 <label
-                  :for={
-                    {value, label} <-
-                      [
-                        {"schedule_conflict", "Schedule conflict"},
-                        {"service_not_needed", "Service no longer needed"},
-                        {"weather", "Bad weather"},
-                        {"changed_provider", "Going with another provider"},
-                        {"other", "Other"}
-                      ]
-                  }
+                  :for={{value, label} <- cancel_reason_options(@current_customer)}
                   class="flex items-center gap-2 text-sm cursor-pointer"
                 >
                   <input

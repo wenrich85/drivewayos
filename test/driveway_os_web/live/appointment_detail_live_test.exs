@@ -304,7 +304,7 @@ defmodule DrivewayOSWeb.AppointmentDetailLiveTest do
       assert reloaded.cancellation_reason =~ "thunderstorms"
     end
 
-    test "admin cancel still uses the bare confirm + 'Cancelled by admin' reason", ctx do
+    test "admin walks through the inline form and captures a structured reason", ctx do
       conn = sign_in(ctx.conn, ctx.admin)
 
       {:ok, lv, _} =
@@ -312,11 +312,24 @@ defmodule DrivewayOSWeb.AppointmentDetailLiveTest do
         |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
         |> live(~p"/appointments/#{ctx.appt.id}")
 
-      lv |> element("button[phx-click='cancel']") |> render_click()
+      # Cancel button now opens the form (same UX as customers); admin
+      # picks an operator-relevant reason.
+      html = render_click(lv, "show_cancel_form")
+      assert html =~ "Why are you cancelling?"
+      assert html =~ "Equipment issue"
+      assert html =~ "Tech unavailable"
+
+      lv
+      |> form("#cancel-appointment-form", %{
+        "cancel" => %{"reason" => "weather", "details" => "Forecast says hail"}
+      })
+      |> render_submit()
 
       reloaded = Ash.get!(Appointment, ctx.appt.id, tenant: ctx.tenant.id, authorize?: false)
       assert reloaded.status == :cancelled
-      assert reloaded.cancellation_reason == "Cancelled by admin"
+      # "Admin: " prefix lets the analytics card on /admin bucket
+      # admin-side cancels distinctly from customer-side ones.
+      assert reloaded.cancellation_reason == "Admin: Bad weather — Forecast says hail"
     end
   end
 
