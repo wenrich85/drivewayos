@@ -154,6 +154,44 @@ defmodule DrivewayOSWeb.Admin.TodayPrintLiveTest do
       assert html =~ "Friend / family"
     end
 
+    test "shows appointment-level operator_notes on the print sheet", ctx do
+      tz = ctx.tenant.timezone
+      noon_today = local_today_at(tz, ~T[12:00:00])
+
+      {:ok, appt} =
+        Appointment
+        |> Ash.Changeset.for_create(
+          :book,
+          %{
+            customer_id: ctx.customer.id,
+            service_type_id: ctx.service.id,
+            scheduled_at: noon_today,
+            duration_minutes: ctx.service.duration_minutes,
+            price_cents: ctx.service.base_price_cents,
+            vehicle_description: "Op Vehicle",
+            service_address: "1 Op Lane"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      appt
+      |> Ash.Changeset.for_update(:confirm, %{})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+      |> Ash.Changeset.for_update(:set_operator_notes, %{
+        operator_notes: "Steep driveway — bring ramps"
+      })
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin/today/print")
+
+      assert html =~ "Tech"
+      assert html =~ "Steep driveway — bring ramps"
+    end
+
     test "shows the customer's pinned admin_notes on the print sheet", ctx do
       tz = ctx.tenant.timezone
       noon_today = local_today_at(tz, ~T[12:00:00])

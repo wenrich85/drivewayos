@@ -197,6 +197,11 @@ defmodule DrivewayOSWeb.Admin.TodayPrintLive do
               <dd class="col-span-3 font-semibold">{pinned}</dd>
             <% end %>
 
+            <%= if a.operator_notes && a.operator_notes != "" do %>
+              <dt class="text-base-content/60">Tech</dt>
+              <dd class="col-span-3 font-semibold">{a.operator_notes}</dd>
+            <% end %>
+
             <%= if a.notes && a.notes != "" do %>
               <dt class="text-base-content/60">Notes</dt>
               <dd class="col-span-3 italic">{a.notes}</dd>

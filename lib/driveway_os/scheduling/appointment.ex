@@ -91,6 +91,16 @@ defmodule DrivewayOS.Scheduling.Appointment do
       constraints max_length: 1000
     end
 
+    # Operator-only notes for this specific appointment. Distinct
+    # from `Customer.admin_notes` (pinned across all the customer's
+    # bookings) and from `:notes` (the customer-supplied booking
+    # comment). Use case: "this driveway is steep, bring ramps",
+    # "customer asked to skip the wheels this time."
+    attribute :operator_notes, :string do
+      public? true
+      constraints max_length: 1000
+    end
+
     attribute :cancellation_reason, :string do
       public? true
       constraints max_length: 300
@@ -246,6 +256,13 @@ defmodule DrivewayOS.Scheduling.Appointment do
       primary? true
 
       accept [:scheduled_at, :duration_minutes, :notes]
+    end
+
+    # Dedicated action so an admin tweaking operator_notes can't
+    # accidentally re-write the customer's `notes` or shift
+    # scheduled_at via a generic :update.
+    update :set_operator_notes do
+      accept [:operator_notes]
     end
 
     update :confirm do

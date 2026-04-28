@@ -333,6 +333,55 @@ defmodule DrivewayOSWeb.AppointmentDetailLiveTest do
     end
   end
 
+  describe "operator notes" do
+    test "admin can edit appointment-level operator_notes", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, _} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/appointments/#{ctx.appt.id}")
+
+      lv
+      |> form("#operator-notes-form", %{
+        "appointment" => %{"operator_notes" => "Steep driveway — bring ramps"}
+      })
+      |> render_submit()
+
+      reloaded = Ash.get!(Appointment, ctx.appt.id, tenant: ctx.tenant.id, authorize?: false)
+      assert reloaded.operator_notes == "Steep driveway — bring ramps"
+    end
+
+    test "non-admin doesn't see the operator-notes editor", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, _lv, html} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/appointments/#{ctx.appt.id}")
+
+      refute html =~ "operator-notes-form"
+      refute html =~ "Operator notes"
+    end
+
+    test "admin sees existing operator_notes pre-populated", ctx do
+      ctx.appt
+      |> Ash.Changeset.for_update(:set_operator_notes, %{
+        operator_notes: "Skip wheels this time per customer"
+      })
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/appointments/#{ctx.appt.id}")
+
+      assert html =~ "Skip wheels this time per customer"
+    end
+  end
+
   describe "service description" do
     test "shows the service description under the title when set", ctx do
       service =

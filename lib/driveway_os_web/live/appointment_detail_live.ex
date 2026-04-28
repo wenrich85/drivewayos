@@ -111,6 +111,31 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
     end
   end
 
+  def handle_event(
+        "save_operator_notes",
+        %{"appointment" => %{"operator_notes" => notes}},
+        socket
+      ) do
+    if socket.assigns.current_customer.role == :admin do
+      tenant_id = socket.assigns.current_tenant.id
+
+      case socket.assigns.appt
+           |> Ash.Changeset.for_update(:set_operator_notes, %{operator_notes: notes})
+           |> Ash.update(authorize?: false, tenant: tenant_id) do
+        {:ok, updated} ->
+          {:noreply,
+           socket
+           |> assign(:appt, updated)
+           |> assign(:flash_msg, "Operator notes saved.")}
+
+        _ ->
+          {:noreply, assign(socket, :flash_msg, "Couldn't save the notes.")}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
   def handle_event("resend_email", _, socket) do
     if socket.assigns.current_customer.role == :admin do
       do_resend_email(socket)
@@ -425,6 +450,41 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
                 <div class="text-sm mt-1">{@booker.admin_notes}</div>
               </div>
             </div>
+          </div>
+        </section>
+
+        <%!-- Operator-only notes scoped to THIS appointment.
+             Distinct from `Customer.admin_notes` (carries across
+             every booking) and from `appt.notes` (the customer's
+             own comment from booking). One-off tech instructions:
+             "steep driveway, bring ramps." --%>
+        <section
+          :if={admin?(@current_customer)}
+          class="card bg-base-100 shadow-sm border border-base-300"
+        >
+          <div class="card-body p-6 space-y-3">
+            <div>
+              <h2 class="card-title text-base">Operator notes</h2>
+              <p class="text-xs text-base-content/60">
+                Tech-only context for this specific appointment. Not visible to the customer.
+              </p>
+            </div>
+
+            <form
+              id="operator-notes-form"
+              phx-submit="save_operator_notes"
+              class="space-y-2"
+            >
+              <textarea
+                name="appointment[operator_notes]"
+                rows="3"
+                placeholder="One-off instructions: steep driveway, bring ramps; skip the wheels; etc."
+                class="textarea textarea-bordered w-full text-sm"
+              >{@appt.operator_notes || ""}</textarea>
+              <button type="submit" class="btn btn-primary btn-sm gap-1">
+                <span class="hero-check w-4 h-4" aria-hidden="true"></span> Save notes
+              </button>
+            </form>
           </div>
         </section>
 
