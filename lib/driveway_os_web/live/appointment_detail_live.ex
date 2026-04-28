@@ -369,6 +369,29 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
           </div>
         </section>
 
+        <%!-- Admin-only pinned notes from Customer.admin_notes —
+             gate codes, vehicle quirks, prefs. Hidden when empty so
+             clean records don't render an empty card. --%>
+        <section
+          :if={admin?(@current_customer) and @booker.admin_notes && @booker.admin_notes != ""}
+          class="card bg-warning/10 border border-warning/30 shadow-sm"
+        >
+          <div class="card-body p-4">
+            <div class="flex items-start gap-3">
+              <span
+                class="hero-bookmark w-5 h-5 text-warning shrink-0 mt-0.5"
+                aria-hidden="true"
+              ></span>
+              <div class="min-w-0">
+                <div class="text-xs font-semibold uppercase tracking-wide text-warning">
+                  Pinned about {@booker.name}
+                </div>
+                <div class="text-sm mt-1">{@booker.admin_notes}</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section class="card bg-base-100 shadow-sm border border-base-300">
           <div class="card-body p-6">
             <h2 class="card-title text-base">Actions</h2>

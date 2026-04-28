@@ -319,4 +319,49 @@ defmodule DrivewayOSWeb.AppointmentDetailLiveTest do
       assert reloaded.cancellation_reason == "Cancelled by admin"
     end
   end
+
+  describe "pinned admin_notes" do
+    test "admin sees the booker's admin_notes when set", ctx do
+      ctx.customer
+      |> Ash.Changeset.for_update(:update, %{admin_notes: "Gate code 4321; dog on porch"})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/appointments/#{ctx.appt.id}")
+
+      assert html =~ "Pinned about"
+      assert html =~ "Gate code 4321"
+    end
+
+    test "non-admin booker doesn't see the pinned section", ctx do
+      ctx.customer
+      |> Ash.Changeset.for_update(:update, %{admin_notes: "Operator-only context"})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, _lv, html} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/appointments/#{ctx.appt.id}")
+
+      refute html =~ "Pinned about"
+      refute html =~ "Operator-only context"
+    end
+
+    test "admin doesn't see an empty pinned card when notes are blank", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/appointments/#{ctx.appt.id}")
+
+      refute html =~ "Pinned about"
+    end
+  end
 end
