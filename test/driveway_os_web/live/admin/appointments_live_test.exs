@@ -273,6 +273,67 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLiveTest do
     end
   end
 
+  describe "vehicle count + total" do
+    test "shows the booking's total price in the Total column", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin/appointments")
+
+      assert html =~ "Total"
+      assert html =~ "$50.00"
+    end
+
+    test "multi-vehicle booking shows a +N badge next to the vehicle", ctx do
+      {:ok, [service | _]} =
+        ServiceType |> Ash.Query.set_tenant(ctx.tenant.id) |> Ash.read(authorize?: false)
+
+      {:ok, _multi} =
+        Appointment
+        |> Ash.Changeset.for_create(
+          :book,
+          %{
+            customer_id: ctx.customer.id,
+            service_type_id: service.id,
+            scheduled_at:
+              DateTime.utc_now() |> DateTime.add(2 * 86_400, :second) |> DateTime.truncate(:second),
+            duration_minutes: service.duration_minutes,
+            price_cents: service.base_price_cents,
+            vehicle_description: "Primary BMW",
+            additional_vehicles: [
+              %{"description" => "Honda Pilot"},
+              %{"description" => "Mini Cooper"}
+            ],
+            service_address: "1 Cedar"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin/appointments")
+
+      assert html =~ "Primary BMW"
+      assert html =~ "+2"
+      # 3 cars × $50 → row shows $150 in the Total column.
+      assert html =~ "$150.00"
+    end
+
+    test "single-vehicle bookings have no +N badge", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin/appointments")
+
+      # The setup row is single-vehicle. The +N badge has the
+      # specific 'badge-primary' class so we can refute the exact
+      # marker without matching unrelated +1/+2 strings elsewhere.
+      refute html =~ ~s(badge badge-xs badge-primary shrink-0)
+    end
+  end
+
   describe "customer name link" do
     test "customer name links to /admin/customers/:id", ctx do
       conn = sign_in(ctx.conn, ctx.admin)

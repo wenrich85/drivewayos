@@ -180,6 +180,8 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLive do
 
   defp fmt_when(%DateTime{} = dt), do: Calendar.strftime(dt, "%b %-d %-I:%M %p")
 
+  defp fmt_price(cents), do: "$" <> :erlang.float_to_binary(cents / 100, decimals: 2)
+
   # Returns a truncated single-line preview of the customer's
   # admin_notes when set, or nil. ~50 chars keeps the table tight
   # without forcing the operator to open the row to know there's
@@ -351,6 +353,9 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLive do
                     <th class="text-xs font-semibold uppercase tracking-wide text-base-content/60">
                       Payment
                     </th>
+                    <th class="text-xs font-semibold uppercase tracking-wide text-base-content/60 text-right">
+                      Total
+                    </th>
                     <th></th>
                   </tr>
                 </thead>
@@ -380,8 +385,17 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLive do
                       <% end %>
                     </td>
                     <td class="text-sm">{(@service_map[a.service_type_id] || %{name: "—"}).name}</td>
-                    <td class="text-xs text-base-content/70 max-w-[12rem] truncate">
-                      {a.vehicle_description}
+                    <td class="text-xs text-base-content/70 max-w-[12rem]">
+                      <div class="flex items-center gap-1.5">
+                        <span class="truncate">{a.vehicle_description}</span>
+                        <span
+                          :if={a.additional_vehicles != []}
+                          class="badge badge-xs badge-primary shrink-0"
+                          title={"#{1 + length(a.additional_vehicles)} vehicles on this booking"}
+                        >
+                          +{length(a.additional_vehicles)}
+                        </span>
+                      </div>
                     </td>
                     <td class="text-xs text-base-content/70">
                       {a.acquisition_channel || "—"}
@@ -395,6 +409,9 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLive do
                       <span :if={a.payment_status == :failed} class="badge badge-error badge-sm">Failed</span>
                       <span :if={a.payment_status == :unpaid} class="badge badge-ghost badge-sm">Unpaid</span>
                       <span :if={a.payment_status == :refunded} class="badge badge-ghost badge-sm">Refunded</span>
+                    </td>
+                    <td class="text-right text-sm font-medium tabular-nums">
+                      {fmt_price(a.price_cents)}
                     </td>
                     <td class="text-right space-x-1">
                       <button
