@@ -272,4 +272,15 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLiveTest do
       refute html =~ "📌"
     end
   end
+
+  describe "customer name link" do
+    test "customer name links to /admin/customers/:id", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin/appointments")
+
+      assert html =~ ~s(href="/admin/customers/#{ctx.customer.id}")
+    end
+  end
 end

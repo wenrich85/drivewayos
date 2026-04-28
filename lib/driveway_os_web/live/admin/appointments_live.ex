@@ -350,7 +350,14 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLive do
                       </.link>
                     </td>
                     <td class="text-sm">
-                      <div>{(@customer_map[a.customer_id] || %{name: "—"}).name}</div>
+                      <div>
+                        <.link
+                          navigate={~p"/admin/customers/#{a.customer_id}"}
+                          class="link link-hover"
+                        >
+                          {(@customer_map[a.customer_id] || %{name: "—"}).name}
+                        </.link>
+                      </div>
                       <%= if pinned_note(@customer_map, a.customer_id) do %>
                         <div
                           class="text-xs text-base-content/60 italic mt-0.5 max-w-[14rem] truncate"
