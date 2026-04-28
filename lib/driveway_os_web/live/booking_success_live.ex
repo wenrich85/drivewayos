@@ -104,12 +104,15 @@ defmodule DrivewayOSWeb.BookingSuccessLive do
 
     with {:ok, appt} <- Ash.get(Appointment, id, tenant: tenant_id, authorize?: false),
          {:ok, booker} <- Ash.get(Customer, appt.customer_id, tenant: tenant_id, authorize?: false),
-         true <- can_view?(booker, me) do
+         true <- can_view?(booker, me),
+         {:ok, service} <-
+           Ash.get(ServiceType, appt.service_type_id, tenant: tenant_id, authorize?: false) do
       {:ok,
        socket
        |> assign(:page_title, "Booking confirmed")
        |> assign(:appointment, appt)
        |> assign(:booker, booker)
+       |> assign(:service, service)
        |> assign(:subscribe_state, :idle)}
     else
       _ -> {:ok, push_navigate(socket, to: ~p"/")}
@@ -169,6 +172,17 @@ defmodule DrivewayOSWeb.BookingSuccessLive do
             <h2 class="card-title text-base">Appointment summary</h2>
 
             <dl class="grid grid-cols-3 gap-3 text-sm">
+              <dt class="text-base-content/60 col-span-1">Service</dt>
+              <dd class="col-span-2">
+                <div class="font-semibold">{@service.name}</div>
+                <div
+                  :if={@service.description && @service.description != ""}
+                  class="text-xs text-base-content/60 mt-0.5"
+                >
+                  {@service.description}
+                </div>
+              </dd>
+
               <dt class="text-base-content/60 col-span-1">When</dt>
               <dd class="font-medium col-span-2">{fmt_when(@appointment.scheduled_at)}</dd>
 

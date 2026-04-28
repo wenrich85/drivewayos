@@ -106,6 +106,8 @@ defmodule DrivewayOSWeb.BookingSuccessLiveTest do
       assert html =~ "Test Truck"
       # Signed-in customers see the My-appointments link.
       assert html =~ "My appointments"
+      # Receipt names what the customer actually booked.
+      assert html =~ "Basic Wash"
     end
 
     test "redirects when the appointment belongs to a different customer", %{
