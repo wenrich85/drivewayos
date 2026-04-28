@@ -225,8 +225,20 @@ defmodule DrivewayOSWeb.Admin.AppointmentsLive do
           >
             <span class="hero-arrow-left w-4 h-4" aria-hidden="true"></span> Dashboard
           </a>
-          <h1 class="text-3xl font-bold tracking-tight mt-2">Appointments</h1>
-          <p class="text-sm text-base-content/70 mt-1">All bookings, newest first.</p>
+          <div class="mt-2 flex items-end justify-between gap-3 flex-wrap">
+            <div>
+              <h1 class="text-3xl font-bold tracking-tight">Appointments</h1>
+              <p class="text-sm text-base-content/70 mt-1">All bookings, newest first.</p>
+            </div>
+            <a
+              href={~p"/admin/appointments.csv"}
+              class="btn btn-ghost btn-sm gap-1"
+              title="Download every appointment as CSV"
+            >
+              <span class="hero-arrow-down-tray w-4 h-4" aria-hidden="true"></span>
+              Export CSV
+            </a>
+          </div>
         </header>
 
         <section class="card bg-base-100 shadow-sm border border-base-300">
