@@ -298,6 +298,47 @@ defmodule DrivewayOS.Notifications.BookingEmail do
   end
 
   @doc """
+  Admin-side alert: a customer just rescheduled their own
+  appointment. Caller passes the OLD scheduled_at separately
+  because the appointment row already carries the new time by
+  send-time.
+  """
+  @spec customer_reschedule_alert(
+          Tenant.t(),
+          Customer.t(),
+          Customer.t(),
+          Appointment.t(),
+          ServiceType.t(),
+          DateTime.t()
+        ) :: Swoosh.Email.t()
+  def customer_reschedule_alert(
+        %Tenant{} = tenant,
+        %Customer{} = admin,
+        %Customer{} = customer,
+        %Appointment{} = appt,
+        %ServiceType{} = service,
+        %DateTime{} = old_scheduled_at
+      ) do
+    new()
+    |> to({admin.name, to_string(admin.email)})
+    |> from(Branding.from_address(tenant))
+    |> subject("Reschedule: #{customer.name} — #{service.name}")
+    |> text_body("""
+    Hi #{admin.name},
+
+    #{customer.name} just rescheduled their #{service.name} booking on
+    #{Branding.display_name(tenant)}.
+
+      Was:      #{format_when(old_scheduled_at)}
+      Now:      #{format_when(appt.scheduled_at)}
+      Vehicle:  #{appt.vehicle_description}
+      Where:    #{appt.service_address}
+
+    -- #{Branding.display_name(tenant)}
+    """)
+  end
+
+  @doc """
   Customer-side notification: a recurring subscription was just
   created. Sent from the self-serve flow on /book/success and the
   admin-created flow on /admin/customers/:id.

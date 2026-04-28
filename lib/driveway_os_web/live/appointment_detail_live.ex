@@ -114,7 +114,7 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
   end
 
   def handle_event("show_reschedule_form", _, socket) do
-    if socket.assigns.current_customer.role == :admin do
+    if can_reschedule?(socket) do
       {:noreply,
        socket
        |> assign(:reschedule_form_open?, true)
@@ -122,6 +122,16 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
     else
       {:noreply, socket}
     end
+  end
+
+  # Both the booking's owner and a tenant admin can reschedule.
+  # Anyone else (the third-party non-admin path that auth already
+  # blocks at mount) returns false defensively.
+  defp can_reschedule?(socket) do
+    me = socket.assigns.current_customer
+    booker = socket.assigns.booker
+
+    me.role == :admin or me.id == booker.id
   end
 
   def handle_event("hide_reschedule_form", _, socket) do
@@ -136,10 +146,12 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
         %{"reschedule" => %{"new_scheduled_at" => raw}},
         socket
       ) do
-    if socket.assigns.current_customer.role != :admin do
+    if not can_reschedule?(socket) do
       {:noreply, socket}
     else
       tenant = socket.assigns.current_tenant
+      booker = socket.assigns.booker
+      actor = socket.assigns.current_customer
       old_scheduled_at = socket.assigns.appt.scheduled_at
 
       case parse_local_datetime(raw) do
@@ -148,14 +160,26 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
                |> Ash.Changeset.for_update(:reschedule, %{new_scheduled_at: new_at})
                |> Ash.update(authorize?: false, tenant: tenant.id) do
             {:ok, updated} ->
-              notify_rescheduled(tenant, socket.assigns.booker, updated, old_scheduled_at)
+              # Customer always gets a confirmation of the move.
+              # If the booker drove the reschedule themselves, also
+              # alert the admins so they know the schedule shifted.
+              notify_rescheduled(tenant, booker, updated, old_scheduled_at)
+
+              if actor.id == booker.id and actor.role != :admin do
+                notify_admins_of_customer_reschedule(
+                  tenant,
+                  booker,
+                  updated,
+                  old_scheduled_at
+                )
+              end
 
               {:noreply,
                socket
                |> assign(:appt, updated)
                |> assign(:reschedule_form_open?, false)
                |> assign(:reschedule_error, nil)
-               |> assign(:flash_msg, "Rescheduled. Customer notified.")}
+               |> assign(:flash_msg, reschedule_flash(actor, booker))}
 
             {:error, %Ash.Error.Invalid{errors: errors}} ->
               msg = errors |> Enum.map(&Map.get(&1, :message, "is invalid")) |> Enum.join("; ")
@@ -169,6 +193,38 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
           {:noreply, assign(socket, :reschedule_error, "Pick a valid future date and time.")}
       end
     end
+  end
+
+  defp reschedule_flash(actor, booker) do
+    if actor.id == booker.id and actor.role != :admin do
+      "Rescheduled. We sent you a confirmation."
+    else
+      "Rescheduled. Customer notified."
+    end
+  end
+
+  defp notify_admins_of_customer_reschedule(tenant, booker, appt, old_scheduled_at) do
+    case Ash.get(ServiceType, appt.service_type_id, tenant: tenant.id, authorize?: false) do
+      {:ok, service} ->
+        for admin <- DrivewayOS.Accounts.tenant_admins(tenant.id) do
+          tenant
+          |> BookingEmail.customer_reschedule_alert(
+            admin,
+            booker,
+            appt,
+            service,
+            old_scheduled_at
+          )
+          |> Mailer.deliver()
+        end
+
+      _ ->
+        :ok
+    end
+
+    :ok
+  rescue
+    _ -> :ok
   end
 
   defp parse_local_datetime(raw) do
@@ -638,12 +694,15 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
                 <span class="hero-arrow-uturn-left w-4 h-4" aria-hidden="true"></span> Refund
               </button>
 
-              <%!-- Admin reschedule: opens an inline date-picker form
-                   below. Status (pending/confirmed) is preserved
-                   across the move; the customer is emailed about it. --%>
+              <%!-- Reschedule: visible to both the booker and any
+                   tenant admin, on pending/confirmed appointments.
+                   Inline form below. Status is preserved across the
+                   move; the OTHER party is emailed (admin → customer
+                   confirmation; customer → admin alert). --%>
               <button
                 :if={
-                  admin?(@current_customer) and @appt.status in [:pending, :confirmed] and
+                  (admin?(@current_customer) or @current_customer.id == @booker.id) and
+                    @appt.status in [:pending, :confirmed] and
                     not @reschedule_form_open?
                 }
                 phx-click="show_reschedule_form"

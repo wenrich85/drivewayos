@@ -369,17 +369,6 @@ defmodule DrivewayOSWeb.AppointmentDetailLiveTest do
       end)
     end
 
-    test "non-admin doesn't see the reschedule button", ctx do
-      conn = sign_in(ctx.conn, ctx.customer)
-
-      {:ok, _lv, html} =
-        conn
-        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
-        |> live(~p"/appointments/#{ctx.appt.id}")
-
-      refute html =~ ~s(phx-click="show_reschedule_form")
-    end
-
     test "rescheduling to a past date returns an error", ctx do
       conn = sign_in(ctx.conn, ctx.admin)
 
@@ -420,6 +409,77 @@ defmodule DrivewayOSWeb.AppointmentDetailLiveTest do
 
       # Reschedule button only renders for pending/confirmed.
       refute html =~ ~s(phx-click="show_reschedule_form")
+    end
+  end
+
+  describe "customer self-reschedule" do
+    test "booker can reschedule their own pending appointment", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, html} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/appointments/#{ctx.appt.id}")
+
+      # Reschedule button is now visible to the booker (not just admin).
+      assert html =~ ~s(phx-click="show_reschedule_form")
+
+      render_click(lv, "show_reschedule_form")
+
+      future = DateTime.utc_now() |> DateTime.add(5 * 86_400, :second)
+      input = future |> DateTime.to_iso8601() |> String.slice(0, 16)
+
+      lv
+      |> form("#reschedule-appointment-form", %{
+        "reschedule" => %{"new_scheduled_at" => input}
+      })
+      |> render_submit()
+
+      reloaded = Ash.get!(Appointment, ctx.appt.id, tenant: ctx.tenant.id, authorize?: false)
+      assert DateTime.diff(reloaded.scheduled_at, ctx.appt.scheduled_at, :second) > 0
+
+      # Two emails fly: customer confirmation + admin alert. Drain
+      # the test mailbox and confirm both subjects landed.
+      emails = drain_emails()
+      subjects = Enum.map(emails, & &1.subject)
+
+      assert Enum.any?(subjects, &(&1 =~ "Your booking has been rescheduled"))
+      assert Enum.any?(subjects, &(&1 =~ "Reschedule: " <> ctx.customer.name))
+    end
+
+    defp drain_emails(acc \\ []) do
+      receive do
+        {:email, %Swoosh.Email{} = e} -> drain_emails([e | acc])
+      after
+        50 -> Enum.reverse(acc)
+      end
+    end
+
+    test "non-booker non-admin can't see the reschedule button", ctx do
+      {:ok, stranger} =
+        Customer
+        |> Ash.Changeset.for_create(
+          :register_with_password,
+          %{
+            email: "stranger-#{System.unique_integer([:positive])}@example.com",
+            password: "Password123!",
+            password_confirmation: "Password123!",
+            name: "Stranger"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      conn = sign_in(ctx.conn, stranger)
+
+      # Stranger can't even view this appointment — auth gate
+      # bounces to /appointments. Confirm that's still the case
+      # (defense in depth — the button-visibility widen mustn't
+      # leak through to users who shouldn't see the appointment).
+      assert {:error, {:live_redirect, %{to: "/appointments"}}} =
+               conn
+               |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+               |> live(~p"/appointments/#{ctx.appt.id}")
     end
   end
 
