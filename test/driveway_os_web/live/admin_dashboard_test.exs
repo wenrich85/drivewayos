@@ -451,6 +451,44 @@ defmodule DrivewayOSWeb.AdminDashboardTest do
       assert html =~ "Today"
     end
 
+    test "Today widget renders a tap-to-call link when customer has phone set", ctx do
+      tz = ctx.tenant.timezone
+      noon_today = local_today_at(tz, ~T[12:00:00])
+
+      ctx.customer
+      |> Ash.Changeset.for_update(:update, %{phone: "+15125550199"})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      {:ok, today_appt} =
+        Appointment
+        |> Ash.Changeset.for_create(
+          :book,
+          %{
+            customer_id: ctx.customer.id,
+            service_type_id: ctx.service.id,
+            scheduled_at: noon_today,
+            duration_minutes: ctx.service.duration_minutes,
+            price_cents: ctx.service.base_price_cents,
+            vehicle_description: "Phone Truck",
+            service_address: "Phone Ave"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      today_appt
+      |> Ash.Changeset.for_update(:confirm, %{})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
+
+      assert html =~ ~s(href="tel:+15125550199")
+      assert html =~ "+15125550199"
+    end
+
     test "Today widget shows the empty state when nothing is scheduled today", ctx do
       tz = ctx.tenant.timezone
       tomorrow_noon = local_today_at(tz, ~T[12:00:00]) |> DateTime.add(86_400, :second)

@@ -415,6 +415,14 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
 
   defp customer_name(map, id), do: get_in(map, [id, Access.key(:name)]) || "Customer"
 
+  defp customer_phone(map, id) do
+    case get_in(map, [id, Access.key(:phone)]) do
+      nil -> nil
+      "" -> nil
+      phone -> phone
+    end
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -582,6 +590,16 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
                   <div class="text-sm text-base-content/70 mt-1 flex items-center gap-1 flex-wrap">
                     <span class="hero-user w-4 h-4" aria-hidden="true"></span>
                     {customer_name(@customer_map, a.customer_id)}
+                    <% phone = customer_phone(@customer_map, a.customer_id) %>
+                    <a
+                      :if={phone}
+                      href={"tel:" <> phone}
+                      class="link link-hover font-mono text-xs text-base-content/60 ml-1 inline-flex items-center gap-0.5"
+                      title={"Call " <> phone}
+                    >
+                      <span class="hero-phone w-3 h-3" aria-hidden="true"></span>
+                      {phone}
+                    </a>
                     <span class="text-base-content/40 mx-1">·</span>
                     {a.vehicle_description}
                   </div>
