@@ -418,6 +418,103 @@ defmodule DrivewayOSWeb.BookingLiveTest do
 
       assert Enum.any?(vehicles, &(&1.make == "Toyota" and &1.model == "Tacoma"))
     end
+
+    test "skip-save address: appointment carries snapshot, no Address row created", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/book")
+
+      service_id = extract_service_id(html, "basic")
+
+      lv
+      |> form("#step-service-form", %{"booking" => %{"service_type_id" => service_id}})
+      |> render_submit()
+
+      # Use the saved vehicle (already in setup) so we land on the
+      # address step.
+      lv |> render_click("set_vehicle_mode", %{"mode" => "pick"})
+
+      [v | _] =
+        DrivewayOS.Fleet.Vehicle
+        |> Ash.Query.set_tenant(ctx.tenant.id)
+        |> Ash.read!(authorize?: false)
+
+      lv
+      |> form("#step-vehicle-pick-form", %{"booking" => %{"vehicle_id" => v.id}})
+      |> render_submit()
+
+      lv |> render_click("set_address_mode", %{"mode" => "new"})
+
+      {:ok, before} =
+        DrivewayOS.Fleet.Address
+        |> Ash.Query.set_tenant(ctx.tenant.id)
+        |> Ash.read(authorize?: false)
+
+      lv
+      |> form("#step-address-new-form", %{
+        "address" => %{
+          "street_line1" => "999 Vacation Rental Way",
+          "city" => "Austin",
+          "state" => "TX",
+          "zip" => "78701",
+          "skip_save" => "true"
+        }
+      })
+      |> render_submit()
+
+      {:ok, after_} =
+        DrivewayOS.Fleet.Address
+        |> Ash.Query.set_tenant(ctx.tenant.id)
+        |> Ash.read(authorize?: false)
+
+      assert length(after_) == length(before)
+      refute Enum.any?(after_, &(&1.street_line1 =~ "Vacation Rental"))
+    end
+
+    test "skip-save vehicle: appointment carries snapshot, no Vehicle row created", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/book")
+
+      service_id = extract_service_id(html, "basic")
+
+      lv
+      |> form("#step-service-form", %{"booking" => %{"service_type_id" => service_id}})
+      |> render_submit()
+
+      lv |> render_click("set_vehicle_mode", %{"mode" => "new"})
+
+      # Snapshot the existing vehicle count so the assertion is
+      # robust to the saved-vehicles fixture in this describe's
+      # setup (Pro+ block already creates one).
+      {:ok, before} =
+        DrivewayOS.Fleet.Vehicle
+        |> Ash.Query.set_tenant(ctx.tenant.id)
+        |> Ash.read(authorize?: false)
+
+      lv
+      |> form("#step-vehicle-new-form", %{
+        "vehicle" => %{
+          "year" => "2024",
+          "make" => "Rental",
+          "model" => "Sedan",
+          "color" => "White",
+          "skip_save" => "true"
+        }
+      })
+      |> render_submit()
+
+      {:ok, after_} =
+        DrivewayOS.Fleet.Vehicle
+        |> Ash.Query.set_tenant(ctx.tenant.id)
+        |> Ash.read(authorize?: false)
+
+      # No new Vehicle row was persisted.
+      assert length(after_) == length(before)
+      refute Enum.any?(after_, &(&1.make == "Rental"))
+    end
   end
 
   describe "guest checkout (Pro+ tenant, unauthenticated visitor)" do

@@ -290,23 +290,37 @@ defmodule DrivewayOSWeb.BookingLive do
       nickname: params["nickname"]
     }
 
-    case Vehicle
-         |> Ash.Changeset.for_create(:add, attrs, tenant: tenant.id)
-         |> Ash.create(authorize?: false) do
-      {:ok, v} ->
-        socket
-        |> assign(:saved_vehicles, [v | socket.assigns.saved_vehicles])
-        |> put_data(:vehicle_id, v.id)
-        |> put_data(:vehicle_description, Vehicle.display_label(v))
-        |> assign(:errors, %{})
-        |> advance_to(:address)
-        |> noreply()
+    if params["skip_save"] == "true" do
+      # One-off vehicle: borrowed friend's car, rental, etc. We
+      # don't persist a Vehicle row; the appointment carries the
+      # snapshot description only.
+      label = Vehicle.display_label(attrs)
 
-      {:error, %Ash.Error.Invalid{} = e} ->
-        {:noreply, assign(socket, :errors, ash_errors_to_map(e))}
+      socket
+      |> put_data(:vehicle_id, nil)
+      |> put_data(:vehicle_description, label)
+      |> assign(:errors, %{})
+      |> advance_to(:address)
+      |> noreply()
+    else
+      case Vehicle
+           |> Ash.Changeset.for_create(:add, attrs, tenant: tenant.id)
+           |> Ash.create(authorize?: false) do
+        {:ok, v} ->
+          socket
+          |> assign(:saved_vehicles, [v | socket.assigns.saved_vehicles])
+          |> put_data(:vehicle_id, v.id)
+          |> put_data(:vehicle_description, Vehicle.display_label(v))
+          |> assign(:errors, %{})
+          |> advance_to(:address)
+          |> noreply()
 
-      _ ->
-        {:noreply, assign(socket, :errors, %{base: "Couldn't save vehicle."})}
+        {:error, %Ash.Error.Invalid{} = e} ->
+          {:noreply, assign(socket, :errors, ash_errors_to_map(e))}
+
+        _ ->
+          {:noreply, assign(socket, :errors, %{base: "Couldn't save vehicle."})}
+      end
     end
   end
 
@@ -405,23 +419,36 @@ defmodule DrivewayOSWeb.BookingLive do
       instructions: params["instructions"]
     }
 
-    case Address
-         |> Ash.Changeset.for_create(:add, attrs, tenant: tenant.id)
-         |> Ash.create(authorize?: false) do
-      {:ok, a} ->
-        socket
-        |> assign(:saved_addresses, [a | socket.assigns.saved_addresses])
-        |> put_data(:address_id, a.id)
-        |> put_data(:service_address, Address.display_label(a))
-        |> assign(:errors, %{})
-        |> advance_to(after_address_step(socket))
-        |> noreply()
+    if params["skip_save"] == "true" do
+      # One-off address: house-sitting, vacation rental, etc.
+      # Snapshot the label without persisting an Address row.
+      label = Address.display_label(attrs)
 
-      {:error, %Ash.Error.Invalid{} = e} ->
-        {:noreply, assign(socket, :errors, ash_errors_to_map(e))}
+      socket
+      |> put_data(:address_id, nil)
+      |> put_data(:service_address, label)
+      |> assign(:errors, %{})
+      |> advance_to(after_address_step(socket))
+      |> noreply()
+    else
+      case Address
+           |> Ash.Changeset.for_create(:add, attrs, tenant: tenant.id)
+           |> Ash.create(authorize?: false) do
+        {:ok, a} ->
+          socket
+          |> assign(:saved_addresses, [a | socket.assigns.saved_addresses])
+          |> put_data(:address_id, a.id)
+          |> put_data(:service_address, Address.display_label(a))
+          |> assign(:errors, %{})
+          |> advance_to(after_address_step(socket))
+          |> noreply()
 
-      _ ->
-        {:noreply, assign(socket, :errors, %{base: "Couldn't save address."})}
+        {:error, %Ash.Error.Invalid{} = e} ->
+          {:noreply, assign(socket, :errors, ash_errors_to_map(e))}
+
+        _ ->
+          {:noreply, assign(socket, :errors, %{base: "Couldn't save address."})}
+      end
     end
   end
 
@@ -1746,6 +1773,25 @@ defmodule DrivewayOSWeb.BookingLive do
 
       <p :if={@errors[:base]} class="text-error text-xs">{@errors[:base]}</p>
 
+      <%!-- Default behavior is "save for next time" — Pro+ tenants
+           lean on the saved-vehicles list to make repeat bookings
+           one tap. Customers borrowing a friend's car / driving a
+           rental can opt out for this booking only. --%>
+      <label class="flex items-start gap-2 text-sm cursor-pointer">
+        <input
+          type="checkbox"
+          name="vehicle[skip_save]"
+          value="true"
+          class="checkbox checkbox-sm mt-0.5"
+        />
+        <span class="text-base-content/80">
+          Don't save this for next time
+          <span class="block text-xs text-base-content/50">
+            One-off vehicle (rental, friend's car). We'll only use it for this booking.
+          </span>
+        </span>
+      </label>
+
       <div class="flex justify-between">
         <button type="button" phx-click="back" class="btn btn-ghost gap-1">
           <span class="hero-arrow-left w-4 h-4" aria-hidden="true"></span> Back
@@ -1922,6 +1968,24 @@ defmodule DrivewayOSWeb.BookingLive do
       </div>
 
       <p :if={@errors[:base]} class="text-error text-xs">{@errors[:base]}</p>
+
+      <%!-- Same pattern as the new-vehicle form: default is "save"
+           so the saved-addresses list grows by repeat use; opt out
+           for one-off jobs (vacation rental, house-sit, etc.). --%>
+      <label class="flex items-start gap-2 text-sm cursor-pointer">
+        <input
+          type="checkbox"
+          name="address[skip_save]"
+          value="true"
+          class="checkbox checkbox-sm mt-0.5"
+        />
+        <span class="text-base-content/80">
+          Don't save this for next time
+          <span class="block text-xs text-base-content/50">
+            One-off address (vacation rental, house-sit). We'll only use it for this booking.
+          </span>
+        </span>
+      </label>
 
       <div class="flex justify-between">
         <button type="button" phx-click="back" class="btn btn-ghost gap-1">
