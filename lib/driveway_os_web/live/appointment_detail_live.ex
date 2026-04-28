@@ -305,6 +305,12 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
           </a>
           <div>
             <h1 class="text-3xl font-bold tracking-tight">{@service.name}</h1>
+            <p
+              :if={@service.description && @service.description != ""}
+              class="text-sm text-base-content/70 mt-1"
+            >
+              {@service.description}
+            </p>
             <div class="mt-2 flex items-center gap-2 flex-wrap">
               <span class={"badge badge-sm " <> status_badge(@appt.status)}>{@appt.status}</span>
               <span :if={@appt.payment_status == :paid} class="badge badge-sm badge-success">Paid</span>

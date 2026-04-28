@@ -320,6 +320,31 @@ defmodule DrivewayOSWeb.AppointmentDetailLiveTest do
     end
   end
 
+  describe "service description" do
+    test "shows the service description under the title when set", ctx do
+      service =
+        Ash.get!(ServiceType, ctx.appt.service_type_id,
+          tenant: ctx.tenant.id,
+          authorize?: false
+        )
+
+      service
+      |> Ash.Changeset.for_update(:update, %{
+        description: "Two-bucket exterior wash with foam cannon"
+      })
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, _lv, html} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/appointments/#{ctx.appt.id}")
+
+      assert html =~ "Two-bucket exterior wash"
+    end
+  end
+
   describe "pinned admin_notes" do
     test "admin sees the booker's admin_notes when set", ctx do
       ctx.customer
