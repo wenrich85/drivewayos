@@ -265,6 +265,36 @@ defmodule DrivewayOS.Scheduling.Appointment do
       accept [:operator_notes]
     end
 
+    # Move an existing booking to a new time. Status is preserved
+    # (pending stays pending, confirmed stays confirmed) — the
+    # alternative is a cancel + rebook which loses history and may
+    # double-charge through Stripe. Rejected for terminal states.
+    update :reschedule do
+      argument :new_scheduled_at, :utc_datetime, allow_nil?: false
+      require_atomic? false
+
+      validate fn changeset, _ ->
+        case changeset.data.status do
+          s when s in [:pending, :confirmed] -> :ok
+          other -> {:error, field: :status, message: "can't reschedule a #{other} appointment"}
+        end
+      end
+
+      validate fn changeset, _ ->
+        new_at = Ash.Changeset.get_argument(changeset, :new_scheduled_at)
+
+        case DateTime.compare(new_at, DateTime.utc_now()) do
+          :gt -> :ok
+          _ -> {:error, field: :new_scheduled_at, message: "must be in the future"}
+        end
+      end
+
+      change fn changeset, _ ->
+        new_at = Ash.Changeset.get_argument(changeset, :new_scheduled_at)
+        Ash.Changeset.force_change_attribute(changeset, :scheduled_at, new_at)
+      end
+    end
+
     update :confirm do
       change set_attribute(:status, :confirmed)
     end

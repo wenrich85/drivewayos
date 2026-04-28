@@ -190,6 +190,42 @@ defmodule DrivewayOS.Notifications.BookingEmail do
   defp format_time(%DateTime{} = dt), do: Calendar.strftime(dt, "%-I:%M %p UTC")
 
   @doc """
+  Customer-side notification: appointment was rescheduled. Caller
+  passes the OLD scheduled_at separately because by the time we
+  send this, the appointment row already carries the new time.
+  """
+  @spec rescheduled(Tenant.t(), Customer.t(), Appointment.t(), ServiceType.t(), DateTime.t()) ::
+          Swoosh.Email.t()
+  def rescheduled(
+        %Tenant{} = tenant,
+        %Customer{} = customer,
+        %Appointment{} = appt,
+        %ServiceType{} = service,
+        %DateTime{} = old_scheduled_at
+      ) do
+    new()
+    |> to({customer.name, to_string(customer.email)})
+    |> from(Branding.from_address(tenant))
+    |> subject("Your booking has been rescheduled")
+    |> text_body("""
+    Hey #{customer.name},
+
+    Your #{service.name} booking with #{Branding.display_name(tenant)}
+    has been moved.
+
+      Was:      #{format_when(old_scheduled_at)}
+      Now:      #{format_when(appt.scheduled_at)}
+      Vehicle:  #{appt.vehicle_description}
+      Where:    #{appt.service_address}
+
+    If this new time doesn't work, reply to this email and we'll
+    figure something out.
+
+    -- #{Branding.display_name(tenant)}
+    """)
+  end
+
+  @doc """
   Customer-side notification: appointment was cancelled. Sent for
   cancellations from either side (admin or customer); the
   cancellation_reason on the appointment captures who.

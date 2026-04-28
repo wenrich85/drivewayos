@@ -333,6 +333,96 @@ defmodule DrivewayOSWeb.AppointmentDetailLiveTest do
     end
   end
 
+  describe "reschedule" do
+    test "admin moves an appointment to a new time + customer is emailed", ctx do
+      import Swoosh.TestAssertions
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, _} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/appointments/#{ctx.appt.id}")
+
+      html = render_click(lv, "show_reschedule_form")
+      assert html =~ "Move this appointment to a new time"
+
+      # Three days from now, formatted for the datetime-local input
+      # the form expects.
+      future = DateTime.utc_now() |> DateTime.add(3 * 86_400, :second)
+      input = future |> DateTime.to_iso8601() |> String.slice(0, 16)
+
+      lv
+      |> form("#reschedule-appointment-form", %{
+        "reschedule" => %{"new_scheduled_at" => input}
+      })
+      |> render_submit()
+
+      reloaded = Ash.get!(Appointment, ctx.appt.id, tenant: ctx.tenant.id, authorize?: false)
+      # Status preserved — same row, just moved in time.
+      assert reloaded.status == ctx.appt.status
+      assert DateTime.diff(reloaded.scheduled_at, ctx.appt.scheduled_at, :second) > 0
+
+      assert_email_sent(fn email ->
+        assert email.subject =~ "rescheduled"
+        assert email.to == [{ctx.customer.name, to_string(ctx.customer.email)}]
+      end)
+    end
+
+    test "non-admin doesn't see the reschedule button", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, _lv, html} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/appointments/#{ctx.appt.id}")
+
+      refute html =~ ~s(phx-click="show_reschedule_form")
+    end
+
+    test "rescheduling to a past date returns an error", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, _} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/appointments/#{ctx.appt.id}")
+
+      render_click(lv, "show_reschedule_form")
+
+      past = DateTime.utc_now() |> DateTime.add(-86_400, :second)
+      input = past |> DateTime.to_iso8601() |> String.slice(0, 16)
+
+      html =
+        lv
+        |> form("#reschedule-appointment-form", %{
+          "reschedule" => %{"new_scheduled_at" => input}
+        })
+        |> render_submit()
+
+      assert html =~ "must be in the future"
+
+      reloaded = Ash.get!(Appointment, ctx.appt.id, tenant: ctx.tenant.id, authorize?: false)
+      assert reloaded.scheduled_at == ctx.appt.scheduled_at
+    end
+
+    test "can't reschedule a cancelled appointment", ctx do
+      ctx.appt
+      |> Ash.Changeset.for_update(:cancel, %{cancellation_reason: "Cancelled by admin"})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/appointments/#{ctx.appt.id}")
+
+      # Reschedule button only renders for pending/confirmed.
+      refute html =~ ~s(phx-click="show_reschedule_form")
+    end
+  end
+
   describe "operator notes" do
     test "admin can edit appointment-level operator_notes", ctx do
       conn = sign_in(ctx.conn, ctx.admin)

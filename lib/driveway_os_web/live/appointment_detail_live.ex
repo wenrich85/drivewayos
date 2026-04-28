@@ -57,7 +57,9 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
        |> assign(:service, service)
        |> assign(:booker, booker)
        |> assign(:flash_msg, nil)
-       |> assign(:cancel_form_open?, false)}
+       |> assign(:cancel_form_open?, false)
+       |> assign(:reschedule_form_open?, false)
+       |> assign(:reschedule_error, nil)}
     else
       _ -> {:ok, push_navigate(socket, to: ~p"/appointments")}
     end
@@ -109,6 +111,87 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
     else
       {:noreply, socket}
     end
+  end
+
+  def handle_event("show_reschedule_form", _, socket) do
+    if socket.assigns.current_customer.role == :admin do
+      {:noreply,
+       socket
+       |> assign(:reschedule_form_open?, true)
+       |> assign(:reschedule_error, nil)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("hide_reschedule_form", _, socket) do
+    {:noreply,
+     socket
+     |> assign(:reschedule_form_open?, false)
+     |> assign(:reschedule_error, nil)}
+  end
+
+  def handle_event(
+        "reschedule",
+        %{"reschedule" => %{"new_scheduled_at" => raw}},
+        socket
+      ) do
+    if socket.assigns.current_customer.role != :admin do
+      {:noreply, socket}
+    else
+      tenant = socket.assigns.current_tenant
+      old_scheduled_at = socket.assigns.appt.scheduled_at
+
+      case parse_local_datetime(raw) do
+        {:ok, new_at} ->
+          case socket.assigns.appt
+               |> Ash.Changeset.for_update(:reschedule, %{new_scheduled_at: new_at})
+               |> Ash.update(authorize?: false, tenant: tenant.id) do
+            {:ok, updated} ->
+              notify_rescheduled(tenant, socket.assigns.booker, updated, old_scheduled_at)
+
+              {:noreply,
+               socket
+               |> assign(:appt, updated)
+               |> assign(:reschedule_form_open?, false)
+               |> assign(:reschedule_error, nil)
+               |> assign(:flash_msg, "Rescheduled. Customer notified.")}
+
+            {:error, %Ash.Error.Invalid{errors: errors}} ->
+              msg = errors |> Enum.map(&Map.get(&1, :message, "is invalid")) |> Enum.join("; ")
+              {:noreply, assign(socket, :reschedule_error, msg)}
+
+            _ ->
+              {:noreply, assign(socket, :reschedule_error, "Couldn't reschedule.")}
+          end
+
+        :error ->
+          {:noreply, assign(socket, :reschedule_error, "Pick a valid future date and time.")}
+      end
+    end
+  end
+
+  defp parse_local_datetime(raw) do
+    case DateTime.from_iso8601(raw <> ":00Z") do
+      {:ok, dt, _} -> {:ok, DateTime.truncate(dt, :second)}
+      _ -> :error
+    end
+  end
+
+  defp notify_rescheduled(tenant, booker, appt, old_scheduled_at) do
+    case Ash.get(ServiceType, appt.service_type_id, tenant: tenant.id, authorize?: false) do
+      {:ok, service} ->
+        tenant
+        |> BookingEmail.rescheduled(booker, appt, service, old_scheduled_at)
+        |> Mailer.deliver()
+
+      _ ->
+        :ok
+    end
+
+    :ok
+  rescue
+    _ -> :ok
   end
 
   def handle_event(
@@ -548,6 +631,20 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
                 <span class="hero-arrow-uturn-left w-4 h-4" aria-hidden="true"></span> Refund
               </button>
 
+              <%!-- Admin reschedule: opens an inline date-picker form
+                   below. Status (pending/confirmed) is preserved
+                   across the move; the customer is emailed about it. --%>
+              <button
+                :if={
+                  admin?(@current_customer) and @appt.status in [:pending, :confirmed] and
+                    not @reschedule_form_open?
+                }
+                phx-click="show_reschedule_form"
+                class="btn btn-ghost btn-sm gap-1"
+              >
+                <span class="hero-arrow-path w-4 h-4" aria-hidden="true"></span> Reschedule
+              </button>
+
               <%!-- Admin and customer both get an inline form with a
                    reason picker. The reason set differs by role
                    (handled in the form below) so the analytics card
@@ -624,6 +721,45 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
                 </button>
                 <button type="submit" class="btn btn-error btn-sm">
                   Cancel booking
+                </button>
+              </div>
+            </form>
+
+            <form
+              :if={@reschedule_form_open? and @appt.status in [:pending, :confirmed]}
+              id="reschedule-appointment-form"
+              phx-submit="reschedule"
+              class="mt-4 border-t border-base-200 pt-4 space-y-3"
+            >
+              <p class="text-sm font-medium">Move this appointment to a new time</p>
+
+              <div :if={@reschedule_error} role="alert" class="alert alert-error text-sm">
+                {@reschedule_error}
+              </div>
+
+              <div>
+                <label class="label" for="reschedule-when">
+                  <span class="label-text font-medium">New date and time</span>
+                </label>
+                <input
+                  id="reschedule-when"
+                  type="datetime-local"
+                  name="reschedule[new_scheduled_at]"
+                  class="input input-bordered w-full"
+                  required
+                />
+              </div>
+
+              <p class="text-xs text-base-content/60">
+                The customer will be emailed about the change. Status stays the same — pending bookings stay pending, confirmed stay confirmed.
+              </p>
+
+              <div class="flex justify-end gap-2">
+                <button type="button" phx-click="hide_reschedule_form" class="btn btn-ghost btn-sm">
+                  Back
+                </button>
+                <button type="submit" class="btn btn-primary btn-sm">
+                  Save new time
                 </button>
               </div>
             </form>
