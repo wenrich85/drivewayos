@@ -68,7 +68,7 @@ RUN mix release
 FROM ${RUNNER_IMAGE}
 
 RUN apt-get update -y && \
-    apt-get install -y libstdc++6 openssl libncurses6 locales ca-certificates && \
+    apt-get install -y libstdc++6 openssl libncurses6 locales ca-certificates wget && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set locale (Phoenix/Elixir default to UTF-8)
@@ -85,6 +85,15 @@ ENV PHX_SERVER=true
 COPY --from=builder --chown=nobody:root /app/_build/${MIX_ENV}/rel/driveway_os ./
 
 USER nobody
+
+# Healthcheck hits the /health endpoint that HealthController
+# already serves. Interval 30s + 3 retries gives the load balancer
+# ~90s to mark a container healthy — long enough for migrations to
+# run on first boot but short enough that a wedged container is
+# replaced quickly. start-period of 60s gives the BEAM time to come
+# up before the first probe counts against retries.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD wget --quiet --tries=1 --spider "http://localhost:${PORT:-4000}/health" || exit 1
 
 # Run migrations on container start, then boot the server. The
 # `bin/server` script comes from rel/overlays/bin/server.

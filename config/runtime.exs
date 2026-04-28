@@ -51,8 +51,18 @@ if config_env() == :prod do
 
   maybe_ipv6 = if System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: []
 
+  # DigitalOcean / RDS / most managed Postgres tiers require SSL.
+  # Off by default so local prod-like Docker runs against a plain
+  # localhost Postgres still work; flip via DB_SSL=true.
+  ssl_opts =
+    if System.get_env("DB_SSL") in ~w(true 1) do
+      [verify: :verify_none]
+    else
+      false
+    end
+
   config :driveway_os, DrivewayOS.Repo,
-    # ssl: true,
+    ssl: ssl_opts,
     url: database_url,
     pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
     # For machines with several cores, consider starting multiple pools of `pool_size`
@@ -71,20 +81,43 @@ if config_env() == :prod do
       You can generate one by calling: mix phx.gen.secret
       """
 
-  host = System.get_env("PHX_HOST") || "example.com"
+  # PHX_HOST is the public-facing hostname. It's load-bearing — every
+  # email link, calendar invite, and `url(@socket, ...)` call resolves
+  # through it. Defaulting to "example.com" silently ships broken
+  # links in production, so we raise instead.
+  host =
+    System.get_env("PHX_HOST") ||
+      raise """
+      environment variable PHX_HOST is missing.
+      For example: drivewayos.com
+      """
 
   config :driveway_os, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
-  config :driveway_os, DrivewayOSWeb.Endpoint,
+  endpoint_opts = [
     url: [host: host, port: 443, scheme: "https"],
     http: [
       # Enable IPv6 and bind on all interfaces.
-      # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.
-      # See the documentation on https://hexdocs.pm/bandit/Bandit.html#t:options/0
-      # for details about using IPv6 vs IPv4 and loopback vs public addresses.
+      # Set it to {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.
       ip: {0, 0, 0, 0, 0, 0, 0, 0}
     ],
     secret_key_base: secret_key_base
+  ]
+
+  # Opt-in HTTPS redirect + HSTS. We keep this off by default so a
+  # bare `mix release` run inside a non-TLS-fronted environment
+  # (e.g. a local prod-like rebuild, a staging setup behind plain
+  # HTTP) doesn't infinite-redirect itself. Set FORCE_SSL=true at
+  # the actual prod tier (DigitalOcean app or behind any TLS
+  # terminator).
+  endpoint_opts =
+    if System.get_env("FORCE_SSL") in ~w(true 1) do
+      Keyword.put(endpoint_opts, :force_ssl, hsts: true)
+    else
+      endpoint_opts
+    end
+
+  config :driveway_os, DrivewayOSWeb.Endpoint, endpoint_opts
 
   # ## SSL Support
   #
