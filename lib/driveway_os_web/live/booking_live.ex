@@ -61,7 +61,19 @@ defmodule DrivewayOSWeb.BookingLive do
 
       true ->
         tenant = socket.assigns.current_tenant
-        customer = socket.assigns.current_customer
+        signed_in = socket.assigns.current_customer
+
+        # Admins can pass `?on_behalf_of=<customer_id>` to drive the
+        # wizard for a phone walk-in. The override only applies when
+        # the signed-in customer is an admin AND the target row exists
+        # in this tenant — anything else falls back to a normal
+        # self-booking flow.
+        {customer, acting_admin} =
+          case maybe_resolve_on_behalf(signed_in, tenant.id, params["on_behalf_of"]) do
+            nil -> {signed_in, nil}
+            target -> {target, signed_in}
+          end
+
         services = load_services(tenant.id)
         slots = DrivewayOS.Scheduling.upcoming_slots(tenant.id, 14)
 
@@ -101,6 +113,8 @@ defmodule DrivewayOSWeb.BookingLive do
           |> assign(:address_mode, initial_mode(saved_addresses))
           |> assign(:account_mode, :guest)
           |> assign(:loyalty_can_redeem?, loyalty_can_redeem?(tenant, customer))
+          |> assign(:current_customer, customer)
+          |> assign(:acting_admin, acting_admin)
           |> assign(:errors, %{})
 
         socket =
@@ -117,6 +131,21 @@ defmodule DrivewayOSWeb.BookingLive do
         {:ok, socket}
     end
   end
+
+  # Returns the target Customer when the signed-in row is an admin
+  # AND the requested customer exists in this tenant. Anything else
+  # returns nil so the caller falls back to normal self-booking.
+  defp maybe_resolve_on_behalf(_, _, nil), do: nil
+  defp maybe_resolve_on_behalf(_, _, ""), do: nil
+
+  defp maybe_resolve_on_behalf(%{role: :admin}, tenant_id, id) when is_binary(id) do
+    case Ash.get(DrivewayOS.Accounts.Customer, id, tenant: tenant_id, authorize?: false) do
+      {:ok, target} -> target
+      _ -> nil
+    end
+  end
+
+  defp maybe_resolve_on_behalf(_, _, _), do: nil
 
   # --- Step 1: service ---
 
@@ -766,6 +795,20 @@ defmodule DrivewayOSWeb.BookingLive do
     # notification.
     notify_admins_of_new_booking(tenant, customer, appt, service)
 
+    cond do
+      socket.assigns[:acting_admin] ->
+        # Admin walk-in path: customer pays in person / on file. Skip
+        # Stripe checkout, send the customer their confirmation, and
+        # land the admin back on the customer detail page.
+        send_confirmation_email(tenant, customer, appt, service)
+        {:noreply, push_navigate(socket, to: ~p"/admin/customers/#{customer.id}")}
+
+      true ->
+        do_post_booking(socket, tenant, customer, service, appt)
+    end
+  end
+
+  defp do_post_booking(socket, tenant, customer, service, appt) do
     if tenant.stripe_account_id do
       params = checkout_params(tenant, customer, service, appt)
 
@@ -982,12 +1025,30 @@ defmodule DrivewayOSWeb.BookingLive do
               Start over
             </button>
           </div>
-          <p :if={@current_customer} class="text-sm text-base-content/70 mt-1">
+          <p :if={@current_customer && is_nil(@acting_admin)} class="text-sm text-base-content/70 mt-1">
             Welcome back, {@current_customer.name}.
           </p>
           <p :if={is_nil(@current_customer)} class="text-sm text-base-content/70 mt-1">
             No account needed — we'll email your confirmation.
           </p>
+          <%!-- Admin walk-in banner — visually distinct from the
+               normal welcome line so the operator can't accidentally
+               book under their own account. --%>
+          <div
+            :if={@acting_admin}
+            role="alert"
+            class="mt-3 alert alert-warning text-sm"
+          >
+            <span class="hero-user-circle w-5 h-5 shrink-0" aria-hidden="true"></span>
+            <div>
+              <div class="font-semibold">
+                Booking on behalf of {@current_customer.name}
+              </div>
+              <div class="text-xs opacity-80">
+                {to_string(@current_customer.email)} · payment will not be collected here.
+              </div>
+            </div>
+          </div>
         </header>
 
         <%!-- Progress indicator. The :account step only appears in

@@ -319,7 +319,15 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
           </a>
           <div class="mt-2 flex justify-between items-start gap-3 flex-wrap">
             <h1 class="text-3xl font-bold tracking-tight">{@customer.name}</h1>
-            <div class="flex gap-2">
+            <div class="flex gap-2 flex-wrap">
+              <.link
+                navigate={~p"/book?on_behalf_of=#{@customer.id}"}
+                class="btn btn-primary btn-sm gap-1"
+                title={"Book a wash for #{@customer.name}"}
+              >
+                <span class="hero-plus w-4 h-4" aria-hidden="true"></span>
+                Book a wash
+              </.link>
               <button
                 :if={@customer.role != :admin}
                 phx-click="promote_to_admin"

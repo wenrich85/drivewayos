@@ -104,6 +104,9 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLiveTest do
 
       assert html =~ ctx.alice.name
       assert html =~ "Red Honda"
+      # Walk-in booking entry point.
+      assert html =~ ~s(href="/book?on_behalf_of=#{ctx.alice.id}")
+      assert html =~ "Book a wash"
     end
 
     test "404s on a customer from another tenant", ctx do

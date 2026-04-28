@@ -1290,4 +1290,101 @@ defmodule DrivewayOSWeb.BookingLiveTest do
       assert drafts == []
     end
   end
+
+  describe "admin walk-in booking (?on_behalf_of=)" do
+    setup ctx do
+      ctx.customer
+      |> Ash.Changeset.for_update(:update, %{role: :admin})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      {:ok, walk_in} =
+        Customer
+        |> Ash.Changeset.for_create(
+          :register_guest,
+          %{
+            email: "walkin-#{System.unique_integer([:positive])}@example.com",
+            name: "Walk In",
+            phone: "+15125550133"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      Map.put(ctx, :walk_in, walk_in)
+    end
+
+    test "admin booking on behalf creates the appointment under the walk-in customer", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, lv, html} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/book?on_behalf_of=#{ctx.walk_in.id}")
+
+      # Banner makes it obvious to the admin who they're booking for.
+      assert html =~ "on behalf of"
+      assert html =~ ctx.walk_in.name
+
+      service_id = extract_service_id(html, "basic")
+
+      lv
+      |> form("#step-service-form", %{"booking" => %{"service_type_id" => service_id}})
+      |> render_submit()
+
+      lv
+      |> form("#step-vehicle-text-form", %{
+        "booking" => %{"vehicle_description" => "Walk-in Vehicle"}
+      })
+      |> render_submit()
+
+      lv
+      |> form("#step-address-text-form", %{
+        "booking" => %{"service_address" => "123 Walk-in Ln"}
+      })
+      |> render_submit()
+
+      future = DateTime.utc_now() |> DateTime.add(2 * 86_400, :second)
+
+      result =
+        lv
+        |> form("#booking-form", %{
+          "booking" => %{
+            "scheduled_at" => DateTime.to_iso8601(future) |> String.slice(0, 16)
+          }
+        })
+        |> render_submit()
+
+      # Admin lands back on the customer detail page, not the
+      # customer-facing /book/success/.
+      assert {:error, {:live_redirect, %{to: to}}} = result
+      assert to == "/admin/customers/#{ctx.walk_in.id}"
+
+      {:ok, [appt]} =
+        Appointment |> Ash.Query.set_tenant(ctx.tenant.id) |> Ash.read(authorize?: false)
+
+      assert appt.customer_id == ctx.walk_in.id
+      assert appt.customer_id != ctx.customer.id
+      assert appt.vehicle_description == "Walk-in Vehicle"
+    end
+
+    test "non-admin passing on_behalf_of has it ignored", ctx do
+      # Re-fetch from DB (the describe setup promoted Alice to :admin
+      # but left ctx.customer's in-memory struct stale), then demote.
+      ctx.customer
+      |> Ash.reload!(authorize?: false, tenant: ctx.tenant.id)
+      |> Ash.Changeset.for_update(:update, %{role: :customer})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant.id)
+
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, _lv, html} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/book?on_behalf_of=#{ctx.walk_in.id}")
+
+      # No on-behalf banner — they're booking for themselves like any
+      # other customer.
+      refute html =~ "on behalf of"
+    end
+  end
 end
