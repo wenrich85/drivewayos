@@ -25,6 +25,8 @@ defmodule DrivewayOSWeb.SignupLive do
        socket
        |> assign(:page_title, "Start your shop")
        |> assign(:errors, %{})
+       |> assign(:slug_status, :empty)
+       |> assign(:slug_auto?, true)
        |> assign(:form, %{
          "slug" => "",
          "display_name" => "",
@@ -33,6 +35,46 @@ defmodule DrivewayOSWeb.SignupLive do
          "admin_password" => "",
          "admin_phone" => ""
        })}
+    end
+  end
+
+  # phx-change driver. Fires on every form keystroke.
+  # Two pieces of live feedback:
+  #   1. Slug availability — debounced via the input's phx-debounce
+  #   2. Auto-suggested slug from display_name when the slug field
+  #      hasn't been touched manually yet (slug_auto? = true)
+  @impl true
+  def handle_event("validate", %{"signup" => params, "_target" => target}, socket) do
+    slug_field_touched? = target == ["signup", "slug"]
+
+    # When the user types in the slug field directly, lock auto-suggest.
+    # Otherwise, derive from display_name as long as auto is still on.
+    {slug, slug_auto?} =
+      cond do
+        slug_field_touched? ->
+          {params["slug"], false}
+
+        socket.assigns.slug_auto? ->
+          {Platform.slugify(params["display_name"]), true}
+
+        true ->
+          {params["slug"], socket.assigns.slug_auto?}
+      end
+
+    params = Map.put(params, "slug", slug)
+    slug_status = check_slug_status(slug)
+
+    {:noreply,
+     socket
+     |> assign(:form, params)
+     |> assign(:slug_auto?, slug_auto?)
+     |> assign(:slug_status, slug_status)}
+  end
+
+  defp check_slug_status(slug) do
+    case String.trim(slug || "") do
+      "" -> :empty
+      _ -> Platform.slug_available?(slug)
     end
   end
 
@@ -87,30 +129,12 @@ defmodule DrivewayOSWeb.SignupLive do
             {@errors[:base]}
           </div>
 
-          <form id="signup-form" phx-submit="submit" class="space-y-4">
-            <div>
-              <label class="label" for="signup-slug">
-                <span class="label-text">URL slug</span>
-              </label>
-              <div class="join w-full">
-                <input
-                  id="signup-slug"
-                  type="text"
-                  name="signup[slug]"
-                  value={@form["slug"]}
-                  placeholder="acme-wash"
-                  class="input input-bordered join-item w-full"
-                  required
-                />
-                <span class="join-item btn btn-ghost no-animation cursor-default">
-                  .drivewayos.com
-                </span>
-              </div>
-              <p :if={@errors[:slug]} class="text-error text-sm mt-1">
-                {@errors[:slug]}
-              </p>
-            </div>
-
+          <form
+            id="signup-form"
+            phx-submit="submit"
+            phx-change="validate"
+            class="space-y-4"
+          >
             <div>
               <label class="label" for="signup-display-name">
                 <span class="label-text">Business name</span>
@@ -123,9 +147,74 @@ defmodule DrivewayOSWeb.SignupLive do
                 placeholder="Acme Mobile Wash"
                 class="input input-bordered w-full"
                 required
+                phx-debounce="200"
               />
               <p :if={@errors[:display_name]} class="text-error text-sm mt-1">
                 {@errors[:display_name]}
+              </p>
+            </div>
+
+            <div>
+              <label class="label" for="signup-slug">
+                <span class="label-text">Your URL</span>
+                <span :if={@slug_auto?} class="label-text-alt text-base-content/50">
+                  auto-filled — edit to override
+                </span>
+              </label>
+              <div class="join w-full">
+                <input
+                  id="signup-slug"
+                  type="text"
+                  name="signup[slug]"
+                  value={@form["slug"]}
+                  placeholder="acme-wash"
+                  class={
+                    "input input-bordered join-item w-full " <>
+                      slug_input_class(@slug_status)
+                  }
+                  required
+                  phx-debounce="300"
+                />
+                <span class="join-item btn btn-ghost no-animation cursor-default text-base-content/70">
+                  .{slug_host()}
+                </span>
+              </div>
+
+              <%!-- Live availability feedback. Empty state hides the
+                   row so the form doesn't render an unfilled chip. --%>
+              <div :if={@slug_status != :empty} class="mt-1.5">
+                <%= case @slug_status do %>
+                  <% :ok -> %>
+                    <p class="text-success text-sm flex items-center gap-1">
+                      <span class="hero-check-circle w-4 h-4" aria-hidden="true"></span>
+                      <span>
+                        <span class="font-medium">{@form["slug"]}.{slug_host()}</span>
+                        is available
+                      </span>
+                    </p>
+                  <% {:error, :too_short} -> %>
+                    <p class="text-base-content/60 text-sm">
+                      A few more letters — minimum 3.
+                    </p>
+                  <% {:error, :bad_format} -> %>
+                    <p class="text-error text-sm flex items-center gap-1">
+                      <span class="hero-x-circle w-4 h-4" aria-hidden="true"></span>
+                      Letters, numbers, and dashes only. Can't start or end with a dash.
+                    </p>
+                  <% {:error, :reserved} -> %>
+                    <p class="text-error text-sm flex items-center gap-1">
+                      <span class="hero-x-circle w-4 h-4" aria-hidden="true"></span>
+                      That word is reserved for the platform — pick something else.
+                    </p>
+                  <% {:error, :taken} -> %>
+                    <p class="text-error text-sm flex items-center gap-1">
+                      <span class="hero-x-circle w-4 h-4" aria-hidden="true"></span>
+                      Another shop already has that URL.
+                    </p>
+                <% end %>
+              </div>
+              <p :if={@errors[:slug]} class="text-error text-sm mt-1">
+                {@errors[:slug]}
               </p>
             </div>
 
@@ -186,18 +275,43 @@ defmodule DrivewayOSWeb.SignupLive do
                 name="signup[admin_password]"
                 class="input input-bordered w-full"
                 required
+                phx-debounce="200"
               />
-              <p class="text-xs text-base-content/60 mt-1">
-                10+ chars, at least one upper, one lower, one digit.
+
+              <%!-- Live strength checklist. Renders as soon as the
+                   user starts typing; each line flips from muted to
+                   success-green as the rule is satisfied. --%>
+              <ul
+                :if={(@form["admin_password"] || "") != ""}
+                class="grid grid-cols-2 gap-x-2 gap-y-0.5 text-xs mt-1.5"
+              >
+                <li :for={{label, ok?} <- password_rules(@form["admin_password"])}
+                    class={if ok?, do: "text-success", else: "text-base-content/60"}
+                >
+                  <span class={if ok?, do: "hero-check w-3 h-3 inline align-text-top", else: "hero-minus w-3 h-3 inline align-text-top"}
+                        aria-hidden="true">
+                  </span>
+                  {label}
+                </li>
+              </ul>
+              <p :if={(@form["admin_password"] || "") == ""} class="text-xs text-base-content/60 mt-1">
+                10+ chars, with one upper, one lower, one digit.
               </p>
               <p :if={@errors[:password]} class="text-error text-sm mt-1">
                 {@errors[:password]}
               </p>
             </div>
 
-            <button type="submit" class="btn btn-primary w-full">
+            <button
+              type="submit"
+              disabled={@slug_status != :ok}
+              class="btn btn-primary w-full"
+            >
               Create my shop
             </button>
+            <p class="text-xs text-base-content/50 text-center">
+              You'll land on your admin dashboard with a quick setup checklist.
+            </p>
           </form>
         </div>
       </div>
@@ -244,5 +358,32 @@ defmodule DrivewayOSWeb.SignupLive do
       message = Map.get(err, :message) || inspect(err)
       Map.put(acc, field, message)
     end)
+  end
+
+  # Display host for the URL preview — matches the platform-host
+  # config so dev shows ".lvh.me" and prod shows ".drivewayos.com".
+  defp slug_host do
+    Application.get_env(:driveway_os, :platform_host, "drivewayos.com")
+  end
+
+  # Tints the slug input border green/red so the operator gets
+  # signal even before reading the message below.
+  defp slug_input_class(:ok), do: "input-success"
+  defp slug_input_class({:error, :too_short}), do: ""
+  defp slug_input_class({:error, _}), do: "input-error"
+  defp slug_input_class(_), do: ""
+
+  # The password resource enforces these rules on submit; we mirror
+  # them here purely for live feedback. Order is the order the list
+  # renders.
+  defp password_rules(nil), do: password_rules("")
+
+  defp password_rules(password) when is_binary(password) do
+    [
+      {"10+ characters", String.length(password) >= 10},
+      {"One uppercase", String.match?(password, ~r/[A-Z]/)},
+      {"One lowercase", String.match?(password, ~r/[a-z]/)},
+      {"One digit", String.match?(password, ~r/[0-9]/)}
+    ]
   end
 end

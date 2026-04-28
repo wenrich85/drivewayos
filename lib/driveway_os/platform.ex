@@ -248,6 +248,72 @@ defmodule DrivewayOS.Platform do
   def reserved_slugs, do: @reserved_slugs
 
   @doc """
+  Live signup-form helper. Returns `:ok` when the slug is shaped
+  correctly, isn't on the reserved list, and isn't already taken
+  by another tenant. Returns a tagged `{:error, reason}` so the
+  signup LV can render a specific message rather than a generic
+  "invalid".
+
+  Reasons:
+    * `:too_short`   — fewer than 3 chars
+    * `:bad_format`  — doesn't match the kebab regex
+    * `:reserved`    — on the platform's reserved list
+    * `:taken`       — another tenant already has this slug
+
+  This intentionally duplicates checks the `provision_tenant`
+  transaction enforces on submit, so the customer sees the same
+  decision at type-time and submit-time.
+  """
+  @spec slug_available?(String.t() | nil) :: :ok | {:error, atom()}
+  def slug_available?(nil), do: {:error, :too_short}
+  def slug_available?(""), do: {:error, :too_short}
+
+  def slug_available?(slug) when is_binary(slug) do
+    normalized = slug |> String.trim() |> String.downcase()
+
+    cond do
+      String.length(normalized) < 3 ->
+        {:error, :too_short}
+
+      not Regex.match?(~r/^[a-z0-9][a-z0-9-]*[a-z0-9]$/, normalized) ->
+        {:error, :bad_format}
+
+      normalized in @reserved_slugs ->
+        {:error, :reserved}
+
+      slug_taken?(normalized) ->
+        {:error, :taken}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp slug_taken?(slug) do
+    case get_tenant_by_slug(slug) do
+      {:ok, _} -> true
+      _ -> false
+    end
+  end
+
+  @doc """
+  Build a kebab-case slug from a free-text display name. Used by
+  the signup LV to auto-suggest a slug as the operator types their
+  business name. Strips non-alphanumerics, collapses runs, trims
+  to 30 chars (matches the Tenant resource's max_length).
+  """
+  @spec slugify(String.t() | nil) :: String.t()
+  def slugify(nil), do: ""
+
+  def slugify(text) when is_binary(text) do
+    text
+    |> String.downcase()
+    |> String.replace(~r/[^a-z0-9]+/, "-")
+    |> String.trim("-")
+    |> String.slice(0, 30)
+  end
+
+  @doc """
   Atomically provision a new tenant + first admin Customer + default
   service catalog.
 

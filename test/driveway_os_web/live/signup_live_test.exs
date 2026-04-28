@@ -135,6 +135,105 @@ defmodule DrivewayOSWeb.SignupLiveTest do
     end
   end
 
+  describe "live feedback" do
+    test "auto-suggests a slug from the business name", %{conn: conn} do
+      {:ok, lv, _} = conn |> Map.put(:host, "lvh.me") |> live(~p"/signup")
+
+      html =
+        lv
+        |> form("#signup-form", %{
+          "signup" => %{
+            "display_name" => "Acme Mobile Wash",
+            "slug" => "",
+            "admin_email" => "",
+            "admin_name" => "",
+            "admin_password" => "",
+            "admin_phone" => ""
+          }
+        })
+        |> render_change(%{"_target" => ["signup", "display_name"]})
+
+      # The slug input now carries the slugified business name and
+      # the auto-fill hint is visible.
+      assert html =~ ~s(value="acme-mobile-wash")
+      assert html =~ "auto-filled"
+      assert html =~ "is available"
+    end
+
+    test "stops auto-suggesting once the user edits the slug directly", %{conn: conn} do
+      {:ok, lv, _} = conn |> Map.put(:host, "lvh.me") |> live(~p"/signup")
+
+      # First: fill display name, slug auto-fills.
+      lv
+      |> form("#signup-form", %{
+        "signup" => %{"display_name" => "Acme Wash", "slug" => "", "admin_password" => ""}
+      })
+      |> render_change(%{"_target" => ["signup", "display_name"]})
+
+      # Now: user types in the slug field directly, overriding.
+      html =
+        lv
+        |> form("#signup-form", %{
+          "signup" => %{"display_name" => "Acme Wash", "slug" => "my-shop", "admin_password" => ""}
+        })
+        |> render_change(%{"_target" => ["signup", "slug"]})
+
+      # Subsequent display_name typing must NOT clobber the manual slug.
+      html2 =
+        lv
+        |> form("#signup-form", %{
+          "signup" => %{
+            "display_name" => "Different Name Now",
+            "slug" => "my-shop",
+            "admin_password" => ""
+          }
+        })
+        |> render_change(%{"_target" => ["signup", "display_name"]})
+
+      assert html =~ ~s(value="my-shop")
+      assert html2 =~ ~s(value="my-shop")
+      refute html2 =~ "auto-filled"
+    end
+
+    test "flags taken slug live", %{conn: conn} do
+      {:ok, taken} = create_tenant!()
+
+      {:ok, lv, _} = conn |> Map.put(:host, "lvh.me") |> live(~p"/signup")
+
+      html =
+        lv
+        |> form("#signup-form", %{
+          "signup" => %{"display_name" => "Taken", "slug" => to_string(taken.slug)}
+        })
+        |> render_change(%{"_target" => ["signup", "slug"]})
+
+      assert html =~ "Another shop already has that URL"
+    end
+
+    test "submit button disabled until slug is :ok", %{conn: conn} do
+      {:ok, _lv, html} = conn |> Map.put(:host, "lvh.me") |> live(~p"/signup")
+
+      # Initial render: slug empty → button disabled.
+      assert html =~ ~s(disabled)
+      assert html =~ "Create my shop"
+    end
+
+    test "password strength bullets light up as rules are satisfied", %{conn: conn} do
+      {:ok, lv, _} = conn |> Map.put(:host, "lvh.me") |> live(~p"/signup")
+
+      # Weak password: only lowercase satisfied.
+      html =
+        lv
+        |> form("#signup-form", %{
+          "signup" => %{"display_name" => "P", "admin_password" => "abc"}
+        })
+        |> render_change(%{"_target" => ["signup", "admin_password"]})
+
+      assert html =~ "10+ characters"
+      assert html =~ "One uppercase"
+    end
+  end
+
   defp create_tenant! do
     Tenant
     |> Ash.Changeset.for_create(:create, %{
