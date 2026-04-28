@@ -80,6 +80,42 @@ defmodule DrivewayOS.Notifications.BookingEmailTest do
       assert email.text_body =~ appt.service_address
     end
 
+    test "multi-vehicle booking renders the additional cars on the receipt", ctx do
+      alias DrivewayOS.Scheduling.Appointment
+      alias DrivewayOS.Scheduling.ServiceType
+
+      {:ok, [service | _]} =
+        ServiceType |> Ash.Query.set_tenant(ctx.tenant.id) |> Ash.read(authorize?: false)
+
+      {:ok, appt} =
+        Appointment
+        |> Ash.Changeset.for_create(
+          :book,
+          %{
+            customer_id: ctx.admin.id,
+            service_type_id: service.id,
+            scheduled_at:
+              DateTime.utc_now() |> DateTime.add(2 * 86_400, :second) |> DateTime.truncate(:second),
+            duration_minutes: service.duration_minutes,
+            price_cents: service.base_price_cents,
+            vehicle_description: "Primary BMW 530",
+            additional_vehicles: ["Secondary Honda Pilot", "Tertiary Mini Cooper"],
+            service_address: "1 Cedar"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      email = BookingEmail.confirmation(ctx.tenant, ctx.admin, appt, service)
+
+      # Switches from "Vehicle:" to "Vehicles:" label and shows
+      # every car the tech is supposed to do.
+      assert email.text_body =~ "Vehicles:"
+      assert email.text_body =~ "Primary BMW 530"
+      assert email.text_body =~ "+ Secondary Honda Pilot"
+      assert email.text_body =~ "+ Tertiary Mini Cooper"
+    end
+
     test "tenant-A email never contains tenant-B branding (alert)", ctx do
       {:ok, %{tenant: tenant_b}} =
         Platform.provision_tenant(%{

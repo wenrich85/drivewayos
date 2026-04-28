@@ -41,7 +41,7 @@ defmodule DrivewayOS.Notifications.BookingEmail do
 
       Service:  #{service.name}
       When:     #{format_when(appt.scheduled_at)}
-      Vehicle:  #{appt.vehicle_description}
+      #{format_vehicles(appt)}
       Where:    #{appt.service_address}
       Total:    #{format_price(appt.price_cents)}
 
@@ -100,7 +100,7 @@ defmodule DrivewayOS.Notifications.BookingEmail do
 
       Service:  #{service.name}
       When:     #{format_when(appt.scheduled_at)}
-      Vehicle:  #{appt.vehicle_description}
+      #{format_vehicles(appt)}
       Where:    #{appt.service_address}
 
     Reply to this email if anything's changed before then.
@@ -140,7 +140,7 @@ defmodule DrivewayOS.Notifications.BookingEmail do
 
       Service:  #{service.name}
       When:     #{format_when(appt.scheduled_at)}
-      Vehicle:  #{appt.vehicle_description}
+      #{format_vehicles(appt)}
       Where:    #{appt.service_address}
       Total:    #{format_price(appt.price_cents)}
 
@@ -177,7 +177,7 @@ defmodule DrivewayOS.Notifications.BookingEmail do
 
       Service:  #{service.name}
       When:     #{format_when(appt.scheduled_at)}
-      Vehicle:  #{appt.vehicle_description}
+      #{format_vehicles(appt)}
       Where:    #{appt.service_address}
 
     If anything's changed, reply to this email or cancel from your
@@ -215,7 +215,7 @@ defmodule DrivewayOS.Notifications.BookingEmail do
 
       Was:      #{format_when(old_scheduled_at)}
       Now:      #{format_when(appt.scheduled_at)}
-      Vehicle:  #{appt.vehicle_description}
+      #{format_vehicles(appt)}
       Where:    #{appt.service_address}
 
     If this new time doesn't work, reply to this email and we'll
@@ -249,7 +249,7 @@ defmodule DrivewayOS.Notifications.BookingEmail do
     has been cancelled.
 
       When was: #{format_when(appt.scheduled_at)}
-      Vehicle:  #{appt.vehicle_description}
+      #{format_vehicles(appt)}
       Where:    #{appt.service_address}
       Reason:   #{appt.cancellation_reason || "—"}
 
@@ -289,7 +289,7 @@ defmodule DrivewayOS.Notifications.BookingEmail do
     #{Branding.display_name(tenant)}.
 
       When was: #{format_when(appt.scheduled_at)}
-      Vehicle:  #{appt.vehicle_description}
+      #{format_vehicles(appt)}
       Where:    #{appt.service_address}
       Reason:   #{appt.cancellation_reason || "—"}
 
@@ -331,7 +331,7 @@ defmodule DrivewayOS.Notifications.BookingEmail do
 
       Was:      #{format_when(old_scheduled_at)}
       Now:      #{format_when(appt.scheduled_at)}
-      Vehicle:  #{appt.vehicle_description}
+      #{format_vehicles(appt)}
       Where:    #{appt.service_address}
 
     -- #{Branding.display_name(tenant)}
@@ -565,7 +565,7 @@ defmodule DrivewayOS.Notifications.BookingEmail do
       Customer: #{customer.name} (#{to_string(customer.email)})
       Service:  #{service.name}
       When:     #{format_when(appt.scheduled_at)}
-      Vehicle:  #{appt.vehicle_description}
+      #{format_vehicles(appt)}
       Where:    #{appt.service_address}
       Total:    #{format_price(appt.price_cents)}
       Status:   #{appt.status}
@@ -581,4 +581,22 @@ defmodule DrivewayOS.Notifications.BookingEmail do
   end
 
   defp format_price(cents), do: "$" <> :erlang.float_to_binary(cents / 100, decimals: 2)
+
+  # Renders the appointment's vehicle(s) for the plain-text body.
+  # Single-vehicle bookings get the historical "Vehicle:  <desc>"
+  # one-liner so existing operator muscle-memory + scrapers don't
+  # break. Multi-vehicle bookings switch to a "Vehicles:" header
+  # plus indented "+ <extra>" lines under the primary.
+  defp format_vehicles(%{vehicle_description: desc, additional_vehicles: []}) do
+    "Vehicle:  #{desc}"
+  end
+
+  defp format_vehicles(%{vehicle_description: desc, additional_vehicles: extras})
+       when is_list(extras) do
+    extra_lines = Enum.map_join(extras, "\n", fn v -> "            + #{v}" end)
+
+    "Vehicles: #{desc}\n#{extra_lines}"
+  end
+
+  defp format_vehicles(%{vehicle_description: desc}), do: "Vehicle:  #{desc}"
 end
