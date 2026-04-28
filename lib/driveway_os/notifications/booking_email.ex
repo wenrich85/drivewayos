@@ -593,7 +593,10 @@ defmodule DrivewayOS.Notifications.BookingEmail do
 
   defp format_vehicles(%{vehicle_description: desc, additional_vehicles: extras})
        when is_list(extras) do
-    extra_lines = Enum.map_join(extras, "\n", fn v -> "            + #{v}" end)
+    extra_lines =
+      Enum.map_join(extras, "\n", fn v ->
+        "            + #{v["description"]}"
+      end)
 
     "Vehicles: #{desc}\n#{extra_lines}"
   end

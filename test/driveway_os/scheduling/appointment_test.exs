@@ -74,7 +74,10 @@ defmodule DrivewayOS.Scheduling.AppointmentTest do
             service_type_id: ctx.service_a.id,
             scheduled_at: future(),
             vehicle_description: "Primary BMW 530",
-            additional_vehicles: ["Secondary Honda Pilot", "Tertiary Mini Cooper"],
+            additional_vehicles: [
+              %{"description" => "Secondary Honda Pilot"},
+              %{"description" => "Tertiary Mini Cooper"}
+            ],
             service_address: "1 Cedar",
             price_cents: ctx.service_a.base_price_cents,
             duration_minutes: ctx.service_a.duration_minutes
@@ -83,7 +86,13 @@ defmodule DrivewayOS.Scheduling.AppointmentTest do
         )
         |> Ash.create(authorize?: false)
 
-      assert appt.additional_vehicles == ["Secondary Honda Pilot", "Tertiary Mini Cooper"]
+      # The book action normalizes string entries into typed maps
+      # and fills in price_cents from the primary's price.
+      assert appt.additional_vehicles == [
+               %{"description" => "Secondary Honda Pilot", "price_cents" => ctx.service_a.base_price_cents},
+               %{"description" => "Tertiary Mini Cooper", "price_cents" => ctx.service_a.base_price_cents}
+             ]
+
       # 1 primary + 2 additional = 3× base price.
       assert appt.price_cents == ctx.service_a.base_price_cents * 3
     end

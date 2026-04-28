@@ -80,7 +80,8 @@ defmodule DrivewayOSWeb.AdminAppointmentsExportController do
   defp row(a, customer_map, service_map) do
     customer = Map.get(customer_map, a.customer_id, %{name: "—", email: "", phone: ""})
     service = Map.get(service_map, a.service_type_id, %{name: "—"})
-    vehicles = [a.vehicle_description | a.additional_vehicles || []] |> Enum.join("; ")
+    extra_descs = Enum.map(a.additional_vehicles || [], & &1["description"])
+    vehicles = [a.vehicle_description | extra_descs] |> Enum.join("; ")
 
     [
       DateTime.to_iso8601(a.scheduled_at),

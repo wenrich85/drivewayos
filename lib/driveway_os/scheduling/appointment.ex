@@ -104,14 +104,14 @@ defmodule DrivewayOS.Scheduling.Appointment do
     # Multi-car households: customer wants the tech to do 2+ cars in
     # one visit. The primary `vehicle_description` carries the first
     # car (kept for backwards compatibility with every list view that
-    # already renders it). Additional cars land here as free-text
-    # descriptions; price_cents is auto-set at booking time to
-    # service.base_price × (1 + length(additional_vehicles)). Default
-    # [] so the existing single-car path keeps working unchanged.
-    attribute :additional_vehicles, {:array, :string} do
+    # already renders it). Additional cars land here as a list of
+    # %{"description" => string, "price_cents" => integer} maps. The
+    # customer-facing wizard always fills in service.base_price for
+    # each entry; admin can override per-vehicle on the detail page
+    # (multi-car discount, premium-service surcharge).
+    attribute :additional_vehicles, {:array, :map} do
       public? true
       default []
-      constraints items: [min_length: 1, max_length: 200]
     end
 
     attribute :cancellation_reason, :string do
@@ -234,23 +234,27 @@ defmodule DrivewayOS.Scheduling.Appointment do
         :additional_vehicles
       ]
 
-      # If additional_vehicles is non-empty, recompute price_cents
-      # to base × (1 + count). Operators can still override after
-      # the fact via the admin :update path. We don't multiply
-      # duration_minutes — washing the second car overlaps prep on
-      # the first, and most operators want to keep the published
-      # window honest rather than tripling it.
+      # If additional_vehicles is non-empty, normalize each entry
+      # into %{"description" => string, "price_cents" => integer}
+      # form (entries with a missing price get the primary's
+      # price_cents as default), then recompute the total. This
+      # keeps the customer wizard simple — it can pass either bare
+      # strings OR maps without prices and we fill the rest in.
+      # Operators can still override after the fact via the admin
+      # :update_vehicle_prices path. Duration isn't multiplied —
+      # washing the second car overlaps prep on the first, and most
+      # operators want to keep the published window honest rather
+      # than tripling it.
       change fn changeset, _ ->
         case Ash.Changeset.get_attribute(changeset, :additional_vehicles) do
           extras when is_list(extras) and extras != [] ->
             base = Ash.Changeset.get_attribute(changeset, :price_cents) || 0
-            multiplier = 1 + length(extras)
+            normalized = normalize_vehicle_entries(extras, base)
+            total = base + Enum.reduce(normalized, 0, &(&1["price_cents"] + &2))
 
-            Ash.Changeset.force_change_attribute(
-              changeset,
-              :price_cents,
-              base * multiplier
-            )
+            changeset
+            |> Ash.Changeset.force_change_attribute(:additional_vehicles, normalized)
+            |> Ash.Changeset.force_change_attribute(:price_cents, total)
 
           _ ->
             changeset
@@ -300,6 +304,28 @@ defmodule DrivewayOS.Scheduling.Appointment do
     # scheduled_at via a generic :update.
     update :set_operator_notes do
       accept [:operator_notes]
+    end
+
+    # Admin override for per-vehicle pricing. Takes the new primary
+    # `price_cents` plus the full additional_vehicles list (each
+    # with its own price) and recomputes the booking's total in one
+    # atomic step. Existing customer-side wizard never calls this
+    # action; the customer flow only sets descriptions.
+    update :update_vehicle_prices do
+      argument :primary_price_cents, :integer, allow_nil?: false
+      argument :additional_vehicles, {:array, :map}, default: []
+      require_atomic? false
+
+      change fn changeset, _ ->
+        primary = Ash.Changeset.get_argument(changeset, :primary_price_cents) || 0
+        extras = Ash.Changeset.get_argument(changeset, :additional_vehicles) || []
+        normalized = normalize_vehicle_entries(extras, primary)
+        total = primary + Enum.reduce(normalized, 0, &(&1["price_cents"] + &2))
+
+        changeset
+        |> Ash.Changeset.force_change_attribute(:additional_vehicles, normalized)
+        |> Ash.Changeset.force_change_attribute(:price_cents, total)
+      end
     end
 
     # Move an existing booking to a new time. Status is preserved
@@ -456,6 +482,47 @@ defmodule DrivewayOS.Scheduling.Appointment do
     case Ash.get(resource, id, tenant: tenant, authorize?: false) do
       {:ok, _} -> :ok
       _ -> {:error, field: field, message: "must belong to the current tenant"}
+    end
+  end
+
+  # Coerce one of the three shapes the wizard / admin / API may
+  # send into the canonical map shape:
+  #   "Honda Pilot"                                  → %{description, price_cents: default}
+  #   %{"description" => "Honda"}                    → %{description, price_cents: default}
+  #   %{"description" => "Honda", "price_cents" => 7500} → identity
+  # Atom keys are normalized to string keys so the storage layer
+  # has a single shape regardless of caller.
+  @doc false
+  def normalize_vehicle_entries(entries, default_price_cents) when is_list(entries) do
+    Enum.map(entries, &normalize_vehicle_entry(&1, default_price_cents))
+  end
+
+  defp normalize_vehicle_entry(desc, default) when is_binary(desc) do
+    %{"description" => String.trim(desc), "price_cents" => default}
+  end
+
+  defp normalize_vehicle_entry(%{} = entry, default) do
+    desc =
+      entry
+      |> Map.get("description", Map.get(entry, :description, ""))
+      |> to_string()
+      |> String.trim()
+
+    price =
+      case Map.get(entry, "price_cents", Map.get(entry, :price_cents)) do
+        nil -> default
+        n when is_integer(n) -> n
+        n when is_binary(n) -> parse_price_or(n, default)
+        _ -> default
+      end
+
+    %{"description" => desc, "price_cents" => price}
+  end
+
+  defp parse_price_or(s, fallback) do
+    case Integer.parse(s) do
+      {n, ""} -> n
+      _ -> fallback
     end
   end
 end

@@ -1350,7 +1350,10 @@ defmodule DrivewayOSWeb.BookingLiveTest do
         Appointment |> Ash.Query.set_tenant(ctx.tenant.id) |> Ash.read(authorize?: false)
 
       assert appt.vehicle_description == "Blue 2022 Subaru Outback"
-      assert appt.additional_vehicles == ["Red 2018 Honda Pilot", "White 2020 Tesla Y"]
+      assert appt.additional_vehicles == [
+               %{"description" => "Red 2018 Honda Pilot", "price_cents" => 5_000},
+               %{"description" => "White 2020 Tesla Y", "price_cents" => 5_000}
+             ]
       assert appt.price_cents == 5_000 * 3
     end
 

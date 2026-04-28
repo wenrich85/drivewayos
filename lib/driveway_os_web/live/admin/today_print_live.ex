@@ -186,7 +186,7 @@ defmodule DrivewayOSWeb.Admin.TodayPrintLive do
             <dd class="col-span-3">
               <div>{a.vehicle_description}</div>
               <div :for={v <- a.additional_vehicles} class="text-base-content/80">
-                + {v}
+                + {v["description"]}
               </div>
             </dd>
 

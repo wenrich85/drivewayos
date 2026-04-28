@@ -483,6 +483,95 @@ defmodule DrivewayOSWeb.AppointmentDetailLiveTest do
     end
   end
 
+  describe "per-vehicle pricing override" do
+    setup ctx do
+      # Replace the single-vehicle setup appointment with a
+      # multi-vehicle one for these tests.
+      {:ok, multi} =
+        Appointment
+        |> Ash.Changeset.for_create(
+          :book,
+          %{
+            customer_id: ctx.customer.id,
+            service_type_id: ctx.appt.service_type_id,
+            scheduled_at:
+              DateTime.utc_now() |> DateTime.add(2 * 86_400, :second) |> DateTime.truncate(:second),
+            duration_minutes: 45,
+            price_cents: 5_000,
+            vehicle_description: "Primary BMW",
+            additional_vehicles: [
+              %{"description" => "Honda Pilot"},
+              %{"description" => "Mini Cooper"}
+            ],
+            service_address: "1 Cedar"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      Map.put(ctx, :multi_appt, multi)
+    end
+
+    test "admin can override individual vehicle prices + total recomputes", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, html} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/appointments/#{ctx.multi_appt.id}")
+
+      # Default: 3 × $50.00 = $150.00.
+      assert html =~ "Per-vehicle pricing"
+      assert html =~ "$150.00"
+
+      # Multi-car discount: keep primary at $50, drop the two
+      # extras to $40 and $35.
+      lv
+      |> form("#vehicle-pricing-form", %{
+        "pricing" => %{
+          "primary_price_cents" => "50.00",
+          "extras" => %{
+            "0" => %{"description" => "Honda Pilot", "price_cents" => "40.00"},
+            "1" => %{"description" => "Mini Cooper", "price_cents" => "35.00"}
+          }
+        }
+      })
+      |> render_submit()
+
+      reloaded =
+        Ash.get!(Appointment, ctx.multi_appt.id, tenant: ctx.tenant.id, authorize?: false)
+
+      assert reloaded.price_cents == 12_500
+      assert [primary_extra, second_extra] = reloaded.additional_vehicles
+      assert primary_extra["price_cents"] == 4_000
+      assert second_extra["price_cents"] == 3_500
+    end
+
+    test "non-admin doesn't see the pricing editor", ctx do
+      conn = sign_in(ctx.conn, ctx.customer)
+
+      {:ok, _lv, html} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/appointments/#{ctx.multi_appt.id}")
+
+      refute html =~ "Per-vehicle pricing"
+      refute html =~ "vehicle-pricing-form"
+    end
+
+    test "single-vehicle bookings hide the pricing editor", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      # ctx.appt from the outer setup has no additional vehicles.
+      {:ok, _lv, html} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/appointments/#{ctx.appt.id}")
+
+      refute html =~ "Per-vehicle pricing"
+    end
+  end
+
   describe "operator notes" do
     test "admin can edit appointment-level operator_notes", ctx do
       conn = sign_in(ctx.conn, ctx.admin)

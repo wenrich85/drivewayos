@@ -250,6 +250,63 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
     _ -> :ok
   end
 
+  # Admin per-vehicle pricing override. Form posts:
+  #   pricing[primary_price_cents]: dollars-as-string
+  #   pricing[extras][0][description], pricing[extras][0][price_cents], …
+  # We turn that into the canonical `:array of :map` shape and call
+  # the dedicated :update_vehicle_prices action which recomputes the
+  # appointment's rolled-up `price_cents`.
+  def handle_event("save_vehicle_pricing", %{"pricing" => params}, socket) do
+    if socket.assigns.current_customer.role != :admin do
+      {:noreply, socket}
+    else
+      tenant_id = socket.assigns.current_tenant.id
+      primary = parse_dollars(params["primary_price_cents"])
+      extras = build_extras(params["extras"])
+
+      case socket.assigns.appt
+           |> Ash.Changeset.for_update(:update_vehicle_prices, %{
+             primary_price_cents: primary,
+             additional_vehicles: extras
+           })
+           |> Ash.update(authorize?: false, tenant: tenant_id) do
+        {:ok, updated} ->
+          {:noreply,
+           socket
+           |> assign(:appt, updated)
+           |> assign(:flash_msg, "Pricing saved.")}
+
+        _ ->
+          {:noreply, assign(socket, :flash_msg, "Couldn't save pricing.")}
+      end
+    end
+  end
+
+  defp parse_dollars(nil), do: 0
+  defp parse_dollars(""), do: 0
+
+  defp parse_dollars(raw) when is_binary(raw) do
+    case Float.parse(String.trim(raw)) do
+      {dollars, _} -> round(dollars * 100)
+      :error -> 0
+    end
+  end
+
+  defp parse_dollars(_), do: 0
+
+  defp build_extras(nil), do: []
+
+  defp build_extras(map) when is_map(map) do
+    map
+    |> Enum.sort_by(fn {k, _} -> Integer.parse(k) end)
+    |> Enum.map(fn {_idx, %{"description" => desc} = entry} ->
+      %{
+        "description" => to_string(desc) |> String.trim(),
+        "price_cents" => parse_dollars(entry["price_cents"])
+      }
+    end)
+  end
+
   def handle_event(
         "save_operator_notes",
         %{"appointment" => %{"operator_notes" => notes}},
@@ -475,6 +532,15 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
 
   defp fmt_price(cents), do: "$" <> :erlang.float_to_binary(cents / 100, decimals: 2)
 
+  # On a multi-vehicle booking the appointment's `price_cents` is
+  # the rolled-up total. The primary's per-vehicle price is the
+  # remainder after subtracting the additional entries' prices.
+  defp primary_vehicle_price(%{additional_vehicles: []} = appt), do: appt.price_cents
+
+  defp primary_vehicle_price(%{additional_vehicles: extras, price_cents: total}) do
+    total - Enum.reduce(extras, 0, fn e, acc -> acc + (e["price_cents"] || 0) end)
+  end
+
   defp status_badge(:pending), do: "badge-warning"
   defp status_badge(:confirmed), do: "badge-info"
   defp status_badge(:in_progress), do: "badge-primary"
@@ -541,9 +607,23 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
                 {if @appt.additional_vehicles != [], do: "Vehicles", else: "Vehicle"}
               </dt>
               <dd class="col-span-2">
-                <div>{@appt.vehicle_description}</div>
-                <div :for={v <- @appt.additional_vehicles} class="text-base-content/80">
-                  + {v}
+                <div :if={@appt.additional_vehicles == []}>{@appt.vehicle_description}</div>
+                <div :if={@appt.additional_vehicles != []} class="space-y-0.5">
+                  <div class="flex justify-between gap-3">
+                    <span>{@appt.vehicle_description}</span>
+                    <span :if={admin?(@current_customer)} class="text-base-content/60 tabular-nums">
+                      {fmt_price(primary_vehicle_price(@appt))}
+                    </span>
+                  </div>
+                  <div
+                    :for={v <- @appt.additional_vehicles}
+                    class="flex justify-between gap-3 text-base-content/80"
+                  >
+                    <span>+ {v["description"]}</span>
+                    <span :if={admin?(@current_customer)} class="text-base-content/60 tabular-nums">
+                      {fmt_price(v["price_cents"] || 0)}
+                    </span>
+                  </div>
                 </div>
               </dd>
 
@@ -596,6 +676,76 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
                 <div class="text-sm mt-1">{@booker.admin_notes}</div>
               </div>
             </div>
+          </div>
+        </section>
+
+        <%!-- Admin per-vehicle pricing override. Customer side
+             always pays the same per car (set by the wizard); the
+             operator can override here for multi-car discounts or
+             premium-service surcharges. The booking's total price
+             is recomputed on save as `primary + sum(extras)`. --%>
+        <section
+          :if={admin?(@current_customer) and @appt.additional_vehicles != []}
+          class="card bg-base-100 shadow-sm border border-base-300"
+        >
+          <div class="card-body p-6 space-y-3">
+            <div>
+              <h2 class="card-title text-base">Per-vehicle pricing</h2>
+              <p class="text-xs text-base-content/60">
+                Adjust price per car for multi-car discounts or premium surcharges. Total recomputes on save.
+              </p>
+            </div>
+
+            <form
+              id="vehicle-pricing-form"
+              phx-submit="save_vehicle_pricing"
+              class="space-y-2"
+            >
+              <div class="flex items-center gap-3">
+                <span class="flex-1 text-sm">{@appt.vehicle_description}</span>
+                <div class="flex items-center gap-1">
+                  <span class="text-base-content/60 text-sm">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    name="pricing[primary_price_cents]"
+                    value={:erlang.float_to_binary(primary_vehicle_price(@appt) / 100, decimals: 2)}
+                    class="input input-bordered input-sm w-24 tabular-nums"
+                  />
+                </div>
+              </div>
+
+              <div
+                :for={{v, idx} <- Enum.with_index(@appt.additional_vehicles)}
+                class="flex items-center gap-3"
+              >
+                <input
+                  type="hidden"
+                  name={"pricing[extras][#{idx}][description]"}
+                  value={v["description"]}
+                />
+                <span class="flex-1 text-sm text-base-content/80">+ {v["description"]}</span>
+                <div class="flex items-center gap-1">
+                  <span class="text-base-content/60 text-sm">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    name={"pricing[extras][#{idx}][price_cents]"}
+                    value={:erlang.float_to_binary((v["price_cents"] || 0) / 100, decimals: 2)}
+                    class="input input-bordered input-sm w-24 tabular-nums"
+                  />
+                </div>
+              </div>
+
+              <div class="flex justify-between items-center pt-2 border-t border-base-200">
+                <span class="text-sm font-semibold">Total: {fmt_price(@appt.price_cents)}</span>
+                <button type="submit" class="btn btn-primary btn-sm gap-1">
+                  <span class="hero-check w-4 h-4" aria-hidden="true"></span> Save pricing
+                </button>
+              </div>
+            </form>
           </div>
         </section>
 

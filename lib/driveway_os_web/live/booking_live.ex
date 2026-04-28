@@ -343,8 +343,12 @@ defmodule DrivewayOSWeb.BookingLive do
         if length(existing) >= 4 do
           {:noreply, assign(socket, :errors, %{additional_vehicle: "Maximum 4 extra vehicles"})}
         else
+          # Customer wizard only sets descriptions; the :book action
+          # fills in `price_cents = service.base_price` per entry.
+          new_entry = %{"description" => trimmed}
+
           socket
-          |> put_data(:additional_vehicles, existing ++ [trimmed])
+          |> put_data(:additional_vehicles, existing ++ [new_entry])
           |> assign(:errors, %{})
           |> noreply()
         end
@@ -1298,16 +1302,16 @@ defmodule DrivewayOSWeb.BookingLive do
           </p>
           <ul class="flex flex-wrap gap-2">
             <li
-              :for={{desc, idx} <- Enum.with_index(additional)}
+              :for={{entry, idx} <- Enum.with_index(additional)}
               class="badge badge-lg gap-2 bg-base-200 border-base-300"
             >
-              {desc}
+              {entry["description"]}
               <button
                 type="button"
                 phx-click="remove_additional_vehicle"
                 phx-value-index={idx}
                 class="text-base-content/60 hover:text-error"
-                aria-label={"Remove #{desc}"}
+                aria-label={"Remove " <> entry["description"]}
               >
                 <span class="hero-x-mark w-3 h-3" aria-hidden="true"></span>
               </button>
@@ -1484,7 +1488,7 @@ defmodule DrivewayOSWeb.BookingLive do
           </dt>
           <dd class="col-span-2">
             <div>{@wizard_data["vehicle_description"]}</div>
-            <div :for={v <- additional} class="text-base-content/80">+ {v}</div>
+            <div :for={v <- additional} class="text-base-content/80">+ {v["description"]}</div>
           </dd>
 
           <dt class="text-base-content/60">Address</dt>

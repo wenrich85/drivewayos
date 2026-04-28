@@ -99,7 +99,10 @@ defmodule DrivewayOS.Notifications.BookingEmailTest do
             duration_minutes: service.duration_minutes,
             price_cents: service.base_price_cents,
             vehicle_description: "Primary BMW 530",
-            additional_vehicles: ["Secondary Honda Pilot", "Tertiary Mini Cooper"],
+            additional_vehicles: [
+              %{"description" => "Secondary Honda Pilot"},
+              %{"description" => "Tertiary Mini Cooper"}
+            ],
             service_address: "1 Cedar"
           },
           tenant: ctx.tenant.id

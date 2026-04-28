@@ -126,7 +126,10 @@ defmodule DrivewayOSWeb.AdminAppointmentsExportControllerTest do
             duration_minutes: ctx.service.duration_minutes,
             price_cents: ctx.service.base_price_cents,
             vehicle_description: "BMW 530",
-            additional_vehicles: ["Honda Pilot", "Mini Cooper"],
+            additional_vehicles: [
+              %{"description" => "Honda Pilot"},
+              %{"description" => "Mini Cooper"}
+            ],
             service_address: "1 Cedar"
           },
           tenant: ctx.tenant.id
