@@ -148,7 +148,8 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
 
     pending = Enum.filter(appointments, &(&1.status == :pending))
     upcoming = Enum.filter(appointments, &(&1.status in [:pending, :confirmed]))
-    today = today_appointments(appointments, socket.assigns.current_tenant.timezone)
+    today = day_appointments(appointments, socket.assigns.current_tenant.timezone, 0)
+    tomorrow = day_appointments(appointments, socket.assigns.current_tenant.timezone, 1)
     {revenue_week, revenue_month} = revenue_summary(appointments)
     channels = channel_summary(appointments)
     cancel_reasons = cancellation_reason_summary(appointments)
@@ -179,6 +180,7 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
     |> assign(:customer_map, customer_map)
     |> assign(:checklist, checklist)
     |> assign(:today, today)
+    |> assign(:tomorrow, tomorrow)
     |> assign(:revenue_week, revenue_week)
     |> assign(:revenue_month, revenue_month)
     |> assign(:channels, channels)
@@ -310,12 +312,13 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
     {week, month}
   end
 
-  # Returns the subset of appointments scheduled within today's
-  # local-time window for the tenant's timezone, excluding cancelled
-  # ones. Sorted by scheduled_at ascending — chronological as the
-  # operator works through the day.
-  defp today_appointments(appointments, tz) do
-    {start_utc, end_utc} = local_day_bounds_utc(tz)
+  # Returns the subset of appointments scheduled within a given
+  # local-day window for the tenant's timezone, excluding cancelled
+  # ones. `day_offset` is days from today: 0 = today, 1 = tomorrow.
+  # Sorted by scheduled_at ascending — chronological as the operator
+  # works through the day.
+  defp day_appointments(appointments, tz, day_offset) do
+    {start_utc, end_utc} = local_day_bounds_utc(tz, day_offset)
 
     appointments
     |> Enum.filter(fn a ->
@@ -326,10 +329,10 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
     |> Enum.sort_by(& &1.scheduled_at, DateTime)
   end
 
-  defp local_day_bounds_utc(tz) do
+  defp local_day_bounds_utc(tz, day_offset) do
     case DateTime.shift_zone(DateTime.utc_now(), tz) do
       {:ok, now_local} ->
-        date = DateTime.to_date(now_local)
+        date = DateTime.to_date(now_local) |> Date.add(day_offset)
         {:ok, midnight_local} = NaiveDateTime.new(date, ~T[00:00:00]) |> from_naive_in(tz)
         next_local = DateTime.add(midnight_local, 86_400, :second)
 
@@ -340,7 +343,7 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
         # Tzdata not loaded or unknown zone — fall back to UTC. The
         # widget still works, just at UTC-day boundaries.
         now = DateTime.utc_now()
-        date = DateTime.to_date(now)
+        date = DateTime.to_date(now) |> Date.add(day_offset)
         {:ok, start_utc} = NaiveDateTime.new(date, ~T[00:00:00]) |> from_naive_in("Etc/UTC")
         {start_utc, DateTime.add(start_utc, 86_400, :second)}
     end
@@ -640,6 +643,64 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
                   >
                     Done
                   </span>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <%!-- Tomorrow widget — only renders when there's something
+             on the books for the next local day, since on quiet days
+             a stack of empty cards just adds noise. No inline
+             confirm/start/complete actions; tomorrow's work hasn't
+             started yet, so the operator just wants to plan. --%>
+        <section
+          :if={@tomorrow != []}
+          class="card bg-base-100 shadow-sm border border-base-300"
+        >
+          <div class="card-body p-6">
+            <div class="flex items-center justify-between flex-wrap gap-2">
+              <h2 class="card-title text-lg">Tomorrow</h2>
+              <span class="text-xs text-base-content/60">
+                {length(@tomorrow)} {if length(@tomorrow) == 1, do: "appointment", else: "appointments"}
+              </span>
+            </div>
+
+            <ul class="divide-y divide-base-200 mt-2">
+              <li
+                :for={a <- @tomorrow}
+                class="py-4 flex items-start justify-between gap-3 flex-wrap"
+              >
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-mono text-sm tabular-nums">
+                      {fmt_local_time(a.scheduled_at, @current_tenant.timezone)}
+                    </span>
+                    <.link navigate={~p"/appointments/#{a.id}"} class="font-semibold link link-hover">
+                      {service_name(@service_map, a.service_type_id)}
+                    </.link>
+                    <span class={"badge badge-sm " <> status_badge(a.status)}>{a.status}</span>
+                  </div>
+                  <div class="text-sm text-base-content/70 mt-1 flex items-center gap-1 flex-wrap">
+                    <span class="hero-user w-4 h-4" aria-hidden="true"></span>
+                    {customer_name(@customer_map, a.customer_id)}
+                    <% phone = customer_phone(@customer_map, a.customer_id) %>
+                    <a
+                      :if={phone}
+                      href={"tel:" <> phone}
+                      class="link link-hover font-mono text-xs text-base-content/60 ml-1 inline-flex items-center gap-0.5"
+                      title={"Call " <> phone}
+                    >
+                      <span class="hero-phone w-3 h-3" aria-hidden="true"></span>
+                      {phone}
+                    </a>
+                    <span class="text-base-content/40 mx-1">·</span>
+                    {a.vehicle_description}
+                  </div>
+                  <div class="text-xs text-base-content/60 truncate mt-1 flex items-center gap-1">
+                    <span class="hero-map-pin w-3 h-3 shrink-0" aria-hidden="true"></span>
+                    {a.service_address}
+                  </div>
                 </div>
               </li>
             </ul>

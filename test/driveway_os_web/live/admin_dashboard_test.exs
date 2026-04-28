@@ -521,6 +521,48 @@ defmodule DrivewayOSWeb.AdminDashboardTest do
       assert html =~ "Nothing on today"
     end
 
+    test "Tomorrow widget lists tomorrow's appointments", ctx do
+      tz = ctx.tenant.timezone
+      tomorrow_noon = local_today_at(tz, ~T[12:00:00]) |> DateTime.add(86_400, :second)
+
+      {:ok, _appt} =
+        Appointment
+        |> Ash.Changeset.for_create(
+          :book,
+          %{
+            customer_id: ctx.customer.id,
+            service_type_id: ctx.service.id,
+            scheduled_at: tomorrow_noon,
+            duration_minutes: ctx.service.duration_minutes,
+            price_cents: ctx.service.base_price_cents,
+            vehicle_description: "Tomorrow Sedan",
+            service_address: "1 Tomorrow Ln"
+          },
+          tenant: ctx.tenant.id
+        )
+        |> Ash.create(authorize?: false)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
+
+      assert html =~ "Tomorrow"
+      assert html =~ "Tomorrow Sedan"
+    end
+
+    test "Tomorrow widget hidden when nothing is on tomorrow's books", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
+
+      # No appointments at all → no Tomorrow card. (The phrase
+      # "Tomorrow" must not appear as an h2 title; we proxy that by
+      # checking for the card-title class adjacent to the word.)
+      refute html =~ ~s(<h2 class="card-title text-lg">Tomorrow</h2>)
+    end
+
     test "Start button transitions a confirmed today-appointment to in_progress", ctx do
       tz = ctx.tenant.timezone
       noon_today = local_today_at(tz, ~T[12:00:00])
