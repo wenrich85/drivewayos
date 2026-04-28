@@ -25,6 +25,20 @@ defmodule DrivewayOSWeb.StripeOnboardingController do
       conn.assigns.current_customer.role != :admin ->
         conn |> redirect(to: ~p"/") |> halt()
 
+      not StripeConnect.configured?() ->
+        # Stripe Connect credentials aren't wired up on this server.
+        # Bounce back to the dashboard with a flash so the operator
+        # gets a clear message instead of a 500 from the missing-env
+        # crash that used to happen here.
+        conn
+        |> put_flash(
+          :error,
+          "Stripe Connect isn't configured on this server yet. " <>
+            "Ask the platform admin to set STRIPE_CLIENT_ID."
+        )
+        |> redirect(to: ~p"/admin")
+        |> halt()
+
       true ->
         url = StripeConnect.oauth_url_for(conn.assigns.current_tenant)
         redirect(conn, external: url)

@@ -102,6 +102,20 @@ defmodule DrivewayOS.Billing.StripeConnect do
     Application.fetch_env!(:driveway_os, :stripe_client_id)
   end
 
+  @doc """
+  Returns true when Stripe Connect credentials are configured.
+  Callers (the dashboard CTA, the onboarding controller) use this
+  to short-circuit cleanly instead of calling `oauth_url_for/1`
+  and getting a cryptic config error.
+  """
+  @spec configured?() :: boolean()
+  def configured? do
+    case Application.get_env(:driveway_os, :stripe_client_id) do
+      id when is_binary(id) and id != "" -> true
+      _ -> false
+    end
+  end
+
   defp redirect_uri do
     Application.get_env(:driveway_os, :stripe_oauth_redirect_uri) ||
       build_default_redirect_uri()

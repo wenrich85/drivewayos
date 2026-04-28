@@ -45,6 +45,25 @@ defmodule DrivewayOSWeb.StripeOnboardingControllerTest do
       assert redirected_to(conn, 302) =~ "https://connect.stripe.com/oauth/authorize"
     end
 
+    test "stripe client_id unset: bounces back to /admin with a clear flash",
+         %{conn: conn, tenant: tenant, admin: admin} do
+      # Temporarily blank the client_id so configured?/0 returns false.
+      original = Application.get_env(:driveway_os, :stripe_client_id)
+      Application.put_env(:driveway_os, :stripe_client_id, "")
+      on_exit(fn -> Application.put_env(:driveway_os, :stripe_client_id, original) end)
+
+      {:ok, token, _} = AshAuthentication.Jwt.token_for_user(admin)
+
+      conn =
+        conn
+        |> Plug.Test.init_test_session(%{customer_token: token})
+        |> Map.put(:host, "#{tenant.slug}.lvh.me")
+        |> get("/onboarding/stripe/start")
+
+      assert redirected_to(conn, 302) == "/admin"
+      assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "Stripe Connect isn't configured"
+    end
+
     test "non-admin customer is bounced", %{conn: conn, tenant: tenant} do
       {:ok, customer} =
         DrivewayOS.Accounts.Customer

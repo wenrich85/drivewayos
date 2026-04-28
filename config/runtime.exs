@@ -41,6 +41,19 @@ if config_env() != :test do
   end
 end
 
+# Stripe Connect credentials live here (not gated to :prod) so a
+# dev with test keys can wire up the OAuth flow against
+# https://dashboard.stripe.com/test. Missing values default to ""
+# so `Application.fetch_env!` doesn't raise; callers must guard for
+# the empty case (see `Plans.stripe_configured?/0` and the CTA on
+# /admin which hides itself when unset).
+if config_env() != :test do
+  config :driveway_os,
+    stripe_client_id: System.get_env("STRIPE_CLIENT_ID") || "",
+    stripe_secret_key: System.get_env("STRIPE_SECRET_KEY") || "",
+    stripe_webhook_secret: System.get_env("STRIPE_WEBHOOK_SECRET") || ""
+end
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||
@@ -189,9 +202,4 @@ if config_env() == :prod do
     config :swoosh, :api_client, false
   end
 
-  # ## Stripe Connect (per-tenant) + SaaS billing
-  config :driveway_os,
-    stripe_client_id: System.get_env("STRIPE_CLIENT_ID") || "",
-    stripe_secret_key: System.get_env("STRIPE_SECRET_KEY") || "",
-    stripe_webhook_secret: System.get_env("STRIPE_WEBHOOK_SECRET") || ""
 end

@@ -87,22 +87,40 @@ defmodule DrivewayOSWeb.AdminDashboardTest do
       {:ok, _lv, html} =
         conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
 
-      # Stripe not connected, no block templates → these items render.
-      assert html =~ "Get set up"
+      # Stripe not connected (test config has client_id set), no block
+      # templates → these items render.
+      assert html =~ "Finish setting up"
       assert html =~ "Connect Stripe"
-      assert html =~ "Define your availability"
+      assert html =~ "Set your weekly hours"
     end
 
-    test "shows 'Customize your services' for fresh tenants with default seeds", ctx do
+    test "Stripe row hidden when client_id is unconfigured on this server", ctx do
+      # Blank the env to simulate a server without Stripe credentials.
+      # The CTA can't go anywhere useful, so the whole row drops out
+      # rather than leading the operator to a dead-end button.
+      original = Application.get_env(:driveway_os, :stripe_client_id)
+      Application.put_env(:driveway_os, :stripe_client_id, "")
+      on_exit(fn -> Application.put_env(:driveway_os, :stripe_client_id, original) end)
+
       conn = sign_in(ctx.conn, ctx.admin)
 
       {:ok, _lv, html} =
         conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
 
-      assert html =~ "Customize your services"
+      refute html =~ "Connect Stripe"
+      refute html =~ "Take card payments"
     end
 
-    test "hides 'Customize your services' once the operator renames a default service",
+    test "shows 'Set your service menu' for fresh tenants with default seeds", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
+
+      assert html =~ "Set your service menu"
+    end
+
+    test "hides the service-menu prompt once the operator renames a default service",
          ctx do
       {:ok, [first | _]} =
         ServiceType |> Ash.Query.set_tenant(ctx.tenant.id) |> Ash.read(authorize?: false)
@@ -116,7 +134,7 @@ defmodule DrivewayOSWeb.AdminDashboardTest do
       {:ok, _lv, html} =
         conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
 
-      refute html =~ "Customize your services"
+      refute html =~ "Set your service menu"
     end
 
     test "hides items that are done", ctx do

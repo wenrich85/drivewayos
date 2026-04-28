@@ -19,6 +19,7 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
 
   alias DrivewayOS.Accounts.Customer
   alias DrivewayOS.AppointmentBroadcaster
+  alias DrivewayOS.Billing.StripeConnect
   alias DrivewayOS.Mailer
   alias DrivewayOS.Notifications.BookingEmail
   alias DrivewayOS.Platform.CustomDomain
@@ -367,26 +368,39 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
 
   # Returns a list of `{title, blurb, href}` for the open onboarding
   # items only — completed ones drop out, so when everything's done
-  # the checklist is just `[]` and the card hides itself.
+  # the checklist is just `[]` and the card hides itself. Each
+  # entry is `{title, blurb, cta_label, href}` — the action-specific
+  # CTA label is in the tuple so the dashboard doesn't end up with a
+  # row of identical "Do it" buttons.
   defp build_checklist(tenant, blocks, custom_domains, services) do
     [
-      is_nil(tenant.stripe_account_id) &&
-        {"Connect Stripe", "Take payment for bookings.", "/onboarding/stripe/start"},
+      # Hide the Stripe row if credentials aren't configured at all
+      # — there's no point showing the operator a CTA that points at
+      # an unconfigured OAuth flow.
+      is_nil(tenant.stripe_account_id) and StripeConnect.configured?() &&
+        {"Take card payments",
+         "Connect a Stripe account so customers can pay at booking time. We'll add a small platform fee per charge.",
+         "Connect Stripe",
+         "/onboarding/stripe/start"},
       using_default_services?(services) &&
-        {"Customize your services",
-         "Tweak the seeded Basic Wash + Deep Clean to match your real menu, or add new ones.",
+        {"Set your service menu",
+         "Rename, reprice, or replace the two starter washes (Basic + Deep Clean) with what you actually offer.",
+         "Edit services",
          "/admin/services"},
       Enum.empty?(blocks) &&
-        {"Define your availability",
-         "Customers see concrete time slots once you've added at least one weekly block.",
+        {"Set your weekly hours",
+         "Customers can only pick from time slots you've published. Add at least one weekly availability block.",
+         "Set hours",
          "/admin/schedule"},
       missing_branding?(tenant) &&
-        {"Customize your branding",
-         "Upload a logo, set your support email, pick a brand color.",
+        {"Make it yours",
+         "Upload your logo, set a support email, and pick a brand color so the booking page feels like your shop.",
+         "Customize",
          "/admin/branding"},
       Enum.empty?(custom_domains) &&
-        {"(Optional) Run on your own domain",
-         "Point a hostname like book.yourshop.com at DrivewayOS.",
+        {"Run on your own domain",
+         "Optional. Point a hostname like book.yourshop.com here so customers don't see the DrivewayOS subdomain.",
+         "Add domain",
          "/admin/domains"}
     ]
     |> Enum.filter(& &1)
@@ -485,24 +499,34 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
             <div class="flex items-start gap-3">
               <span class="hero-rocket-launch w-6 h-6 text-warning shrink-0 mt-0.5" aria-hidden="true"></span>
               <div>
-                <h2 class="card-title text-lg">Get set up</h2>
+                <h2 class="card-title text-lg">Finish setting up</h2>
                 <p class="text-sm text-base-content/70">
-                  A few things to take care of before you're ready for real customers.
+                  {length(@checklist)} {if length(@checklist) == 1, do: "thing", else: "things"} left before your shop is ready for real customers.
                 </p>
               </div>
             </div>
 
-            <ul class="space-y-3 mt-3">
+            <ul class="space-y-3 mt-4">
               <li
-                :for={{title, blurb, href} <- @checklist}
-                class="flex gap-3 items-start bg-base-100 border border-base-300 rounded-lg p-4"
+                :for={{title, blurb, cta_label, href} <- @checklist}
+                class="flex gap-3 items-start bg-base-100 border border-base-300 rounded-lg p-4 hover:border-warning/60 transition-colors"
               >
-                <span class="hero-arrow-right-circle w-5 h-5 text-warning shrink-0 mt-0.5" aria-hidden="true"></span>
-                <div class="flex-1">
+                <span
+                  class="hero-arrow-right-circle w-5 h-5 text-warning shrink-0 mt-0.5"
+                  aria-hidden="true"
+                >
+                </span>
+                <div class="flex-1 min-w-0">
                   <div class="font-semibold">{title}</div>
-                  <div class="text-sm text-base-content/70">{blurb}</div>
+                  <div class="text-sm text-base-content/70 mt-0.5">{blurb}</div>
                 </div>
-                <a href={href} class="btn btn-primary btn-sm">Do it</a>
+                <a
+                  href={href}
+                  class="btn btn-primary btn-sm gap-1 shrink-0 self-center"
+                >
+                  {cta_label}
+                  <span class="hero-arrow-right w-3 h-3" aria-hidden="true"></span>
+                </a>
               </li>
             </ul>
           </div>
