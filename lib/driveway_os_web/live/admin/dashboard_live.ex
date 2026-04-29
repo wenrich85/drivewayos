@@ -19,9 +19,9 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
 
   alias DrivewayOS.Accounts.Customer
   alias DrivewayOS.AppointmentBroadcaster
-  alias DrivewayOS.Billing.StripeConnect
   alias DrivewayOS.Mailer
   alias DrivewayOS.Notifications.BookingEmail
+  alias DrivewayOS.Onboarding.Registry
   alias DrivewayOS.Platform.CustomDomain
   alias DrivewayOS.Scheduling.{Appointment, BlockTemplate, ServiceType, Subscription}
 
@@ -373,15 +373,15 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
   # CTA label is in the tuple so the dashboard doesn't end up with a
   # row of identical "Do it" buttons.
   defp build_checklist(tenant, blocks, custom_domains, services) do
-    [
-      # Hide the Stripe row if credentials aren't configured at all
-      # — there's no point showing the operator a CTA that points at
-      # an unconfigured OAuth flow.
-      is_nil(tenant.stripe_account_id) and StripeConnect.configured?() &&
-        {"Take card payments",
-         "Connect a Stripe account so customers can pay at booking time. We'll add a small platform fee per charge.",
-         "Connect Stripe",
-         "/onboarding/stripe/start"},
+    provider_items =
+      tenant
+      |> Registry.needing_setup()
+      |> Enum.map(fn module ->
+        %{title: t, blurb: b, cta_label: c, href: h} = module.display()
+        {t, b, c, h}
+      end)
+
+    internal_items = [
       using_default_services?(services) &&
         {"Set your service menu",
          "Rename, reprice, or replace the two starter washes (Basic + Deep Clean) with what you actually offer.",
@@ -404,6 +404,8 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
          "/admin/domains"}
     ]
     |> Enum.filter(& &1)
+
+    provider_items ++ internal_items
   end
 
   # Tenants ship with two seeded services (slugs "basic-wash" and
