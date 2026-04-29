@@ -10,8 +10,12 @@ defmodule DrivewayOS.Onboarding.Registry do
   Consumers:
     * `DrivewayOSWeb.Admin.DashboardLive` — composes the dashboard
       checklist from `needing_setup/1`.
-    * `DrivewayOSWeb.Admin.OnboardingWizardLive` — renders one
-      section per category from `by_category/1`.
+    * `DrivewayOSWeb.Admin.OnboardingWizardLive` — calls
+      `needing_setup/1` then groups locally for the per-category
+      render.
+
+  `by_category/1` has no Phase 0 consumer; it's reserved for
+  Phase 1 wizard routing (per-category step LVs).
   """
 
   alias DrivewayOS.Platform.Tenant

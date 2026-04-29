@@ -27,7 +27,12 @@ defmodule DrivewayOS.Onboarding.Provider do
           required(:href) => String.t()
         }
 
-  @doc "Stable identifier (e.g. `:stripe_connect`). Used as a map key."
+  @doc """
+  Stable identifier (e.g. `:stripe_connect`). Used in Phase 1 as
+  the map key for per-tenant wizard progress persistence — has no
+  runtime call site in Phase 0 but is load-bearing for the next
+  phase. Don't remove during dead-code cleanup passes.
+  """
   @callback id() :: atom()
 
   @doc "Logical category this provider belongs to."
