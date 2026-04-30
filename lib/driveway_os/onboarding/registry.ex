@@ -21,7 +21,8 @@ defmodule DrivewayOS.Onboarding.Registry do
   alias DrivewayOS.Platform.Tenant
 
   @providers [
-    DrivewayOS.Onboarding.Providers.StripeConnect
+    DrivewayOS.Onboarding.Providers.StripeConnect,
+    DrivewayOS.Onboarding.Providers.Postmark
   ]
 
   @doc "All registered providers, in declaration order."
