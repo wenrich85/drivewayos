@@ -36,3 +36,12 @@ Mox.defmock(DrivewayOS.Notifications.SmsClientMock,
 )
 
 Application.put_env(:driveway_os, :sms_client, DrivewayOS.Notifications.SmsClientMock)
+
+# Postmark client mock — used by Postmark.provision/2 so tests don't
+# hit the real Postmark API. Tests that need to assert on server
+# creation set explicit expectations via Mox.expect/3.
+Mox.defmock(DrivewayOS.Notifications.PostmarkClient.Mock,
+  for: DrivewayOS.Notifications.PostmarkClient
+)
+
+Application.put_env(:driveway_os, :postmark_client, DrivewayOS.Notifications.PostmarkClient.Mock)
