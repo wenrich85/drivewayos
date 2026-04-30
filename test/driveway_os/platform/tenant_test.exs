@@ -232,6 +232,87 @@ defmodule DrivewayOS.Platform.TenantTest do
     end
   end
 
+  describe ":set_wizard_progress" do
+    setup do
+      {:ok, %{tenant: tenant}} =
+        DrivewayOS.Platform.provision_tenant(%{
+          slug: "wp-#{System.unique_integer([:positive])}",
+          display_name: "Wizard Progress Test",
+          admin_email: "wp-#{System.unique_integer([:positive])}@example.com",
+          admin_name: "Owner",
+          admin_password: "Password123!"
+        })
+
+      %{tenant: tenant}
+    end
+
+    test "marks a step as skipped", ctx do
+      {:ok, updated} =
+        ctx.tenant
+        |> Ash.Changeset.for_update(:set_wizard_progress, %{step: :branding, status: :skipped})
+        |> Ash.update(authorize?: false)
+
+      assert updated.wizard_progress == %{"branding" => "skipped"}
+    end
+
+    test "marks a previously-skipped step as pending by removing the key", ctx do
+      {:ok, with_skip} =
+        ctx.tenant
+        |> Ash.Changeset.for_update(:set_wizard_progress, %{step: :services, status: :skipped})
+        |> Ash.update(authorize?: false)
+
+      {:ok, cleared} =
+        with_skip
+        |> Ash.Changeset.for_update(:set_wizard_progress, %{step: :services, status: :pending})
+        |> Ash.update(authorize?: false)
+
+      assert cleared.wizard_progress == %{}
+    end
+
+    test "rejects status that isn't :skipped or :pending", ctx do
+      assert {:error, _} =
+               ctx.tenant
+               |> Ash.Changeset.for_update(:set_wizard_progress, %{
+                 step: :branding,
+                 status: :done
+               })
+               |> Ash.update(authorize?: false)
+    end
+  end
+
+  describe "postmark fields" do
+    setup do
+      {:ok, %{tenant: tenant}} =
+        DrivewayOS.Platform.provision_tenant(%{
+          slug: "pm-#{System.unique_integer([:positive])}",
+          display_name: "Postmark Test",
+          admin_email: "pm-#{System.unique_integer([:positive])}@example.com",
+          admin_name: "Owner",
+          admin_password: "Password123!"
+        })
+
+      %{tenant: tenant}
+    end
+
+    test "tenant starts with nil postmark_server_id and postmark_api_key", ctx do
+      assert ctx.tenant.postmark_server_id == nil
+      assert ctx.tenant.postmark_api_key == nil
+    end
+
+    test ":update can set postmark fields", ctx do
+      {:ok, updated} =
+        ctx.tenant
+        |> Ash.Changeset.for_update(:update, %{
+          postmark_server_id: "12345",
+          postmark_api_key: "server-token-abc"
+        })
+        |> Ash.update(authorize?: false)
+
+      assert updated.postmark_server_id == "12345"
+      assert updated.postmark_api_key == "server-token-abc"
+    end
+  end
+
   defp create_tenant!(display_name, opts \\ []) do
     slug = Keyword.get(opts, :slug, "tnt-#{System.unique_integer([:positive])}")
 

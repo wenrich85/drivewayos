@@ -138,6 +138,27 @@ defmodule DrivewayOS.Platform.Tenant do
       public? true
     end
 
+    attribute :wizard_progress, :map do
+      public? false
+      default %{}
+      description """
+      Onboarding-wizard state. Map keyed by step id (e.g. "branding"),
+      values are exactly "skipped" — done-ness is computed live via
+      Step.complete?/1, never stored. Steps not in the map are pending.
+      """
+    end
+
+    attribute :postmark_server_id, :string do
+      public? false
+      description "Postmark Server id assigned when the tenant completes the Email onboarding step."
+    end
+
+    attribute :postmark_api_key, :string do
+      public? false
+      sensitive? true
+      description "Postmark Server-scoped API key. Used by the Mailer when sending in this tenant's context."
+    end
+
     create_timestamp :inserted_at
     update_timestamp :updated_at
   end
@@ -198,8 +219,44 @@ defmodule DrivewayOS.Platform.Tenant do
         :timezone,
         :status,
         :plan_tier,
-        :loyalty_threshold
+        :loyalty_threshold,
+        :wizard_progress,
+        :postmark_server_id,
+        :postmark_api_key
       ]
+    end
+
+    update :set_wizard_progress do
+      require_atomic? false
+
+      argument :step, :atom, allow_nil?: false
+      argument :status, :atom, allow_nil?: false
+
+      validate fn changeset, _ ->
+        case Ash.Changeset.get_argument(changeset, :status) do
+          s when s in [:skipped, :pending] -> :ok
+          other -> {:error, field: :status, message: "must be :skipped or :pending, got #{inspect(other)}"}
+        end
+      end
+
+      change fn changeset, _ ->
+        step = Ash.Changeset.get_argument(changeset, :step)
+        status = Ash.Changeset.get_argument(changeset, :status)
+        current = changeset.data.wizard_progress || %{}
+
+        case status do
+          :skipped ->
+            next = Map.put(current, to_string(step), "skipped")
+            Ash.Changeset.force_change_attribute(changeset, :wizard_progress, next)
+
+          :pending ->
+            next = Map.delete(current, to_string(step))
+            Ash.Changeset.force_change_attribute(changeset, :wizard_progress, next)
+
+          _ ->
+            changeset
+        end
+      end
     end
 
     update :archive do
