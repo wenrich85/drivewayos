@@ -4,7 +4,7 @@ defmodule DrivewayOS.Onboarding.Provider do
 
   A "provider" here is an external service (Stripe, Postmark, Square,
   etc.) that a tenant can connect during onboarding. The behaviour
-  is intentionally minimal — five callbacks that together let the
+  is intentionally minimal — six callbacks that together let the
   wizard render a card for each provider, decide whether it's
   configured at the platform level, and decide whether THIS tenant
   has finished connecting it.
@@ -55,4 +55,23 @@ defmodule DrivewayOS.Onboarding.Provider do
   checklist hides the row when this returns true.
   """
   @callback setup_complete?(Tenant.t()) :: boolean()
+
+  @doc """
+  Provision the integration for `tenant`. API-first providers do
+  the actual external setup here (POST to the provider's API,
+  store credentials on the tenant, send any verification email).
+  Hosted-redirect providers return `{:error, :hosted_required}` —
+  the wizard then routes the operator to `display.href` instead.
+
+  Args is a per-provider map (e.g. for an API-first provider that
+  needs a tenant-supplied display name). For hosted-redirect
+  providers, the args map is ignored.
+
+  Returns:
+    * `{:ok, updated_tenant}` — provisioning succeeded; persist + advance
+    * `{:error, :hosted_required}` — caller should fall back to display.href
+    * `{:error, term}` — provisioning failed; surface to the operator
+  """
+  @callback provision(Tenant.t(), map()) ::
+              {:ok, Tenant.t()} | {:error, :hosted_required | term()}
 end

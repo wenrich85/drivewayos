@@ -55,4 +55,8 @@ defmodule DrivewayOS.Onboarding.Providers.StripeConnectTest do
 
     assert Provider.setup_complete?(with_acct)
   end
+
+  test "provision/2 returns {:error, :hosted_required}", ctx do
+    assert {:error, :hosted_required} = Provider.provision(ctx.tenant, %{})
+  end
 end

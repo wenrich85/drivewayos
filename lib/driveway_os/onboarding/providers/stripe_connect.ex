@@ -38,4 +38,7 @@ defmodule DrivewayOS.Onboarding.Providers.StripeConnect do
 
   @impl true
   def setup_complete?(%Tenant{stripe_account_id: id}), do: not is_nil(id)
+
+  @impl true
+  def provision(_tenant, _params), do: {:error, :hosted_required}
 end
