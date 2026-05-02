@@ -38,6 +38,7 @@ Optional but you almost certainly want them on for prod.
 | `STRIPE_CLIENT_ID` | Stripe Connect OAuth client id. |
 | `STRIPE_SECRET_KEY` | Stripe platform secret key. |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret. |
+| `POSTMARK_ACCOUNT_TOKEN` | Postmark account-level token used to provision tenant-scoped Servers via the API. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD` | Outbound mail (Zoho, Postmark, SES, etc.). |
 
 Each is optional at boot — the release will start without them —
