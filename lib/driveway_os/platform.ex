@@ -29,6 +29,7 @@ defmodule DrivewayOS.Platform do
     PlatformToken,
     PlatformUser,
     Tenant,
+    TenantReferral,
     TenantSubscription
   }
 
@@ -41,6 +42,7 @@ defmodule DrivewayOS.Platform do
     resource OauthState
     resource AuditLog
     resource Plan
+    resource TenantReferral
   end
 
   @doc """
