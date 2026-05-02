@@ -72,6 +72,7 @@ defmodule DrivewayOSWeb.Router do
     live "/admin/customers", Admin.CustomersLive
     live "/admin/customers/:id", Admin.CustomerDetailLive
     live "/admin/appointments", Admin.AppointmentsLive
+    live "/admin/integrations", Admin.IntegrationsLive
 
     get "/admin/appointments.csv",
         AdminAppointmentsExportController,
