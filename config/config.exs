@@ -82,6 +82,10 @@ config :logger, :default_formatter,
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
+# Default impl for the Zoho Books HTTP client. Tests override this in
+# config/test.exs to point at the Mox mock.
+config :driveway_os, :zoho_client, DrivewayOS.Accounting.ZohoClient.Http
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

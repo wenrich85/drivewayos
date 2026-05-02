@@ -45,3 +45,8 @@ Mox.defmock(DrivewayOS.Notifications.PostmarkClient.Mock,
 )
 
 Application.put_env(:driveway_os, :postmark_client, DrivewayOS.Notifications.PostmarkClient.Mock)
+
+# Zoho client mock — used by the Accounting facade's Zoho provider so
+# tests don't hit the real Zoho Books API. Tests that need to assert
+# on Zoho calls set explicit expectations via Mox.expect/3.
+Mox.defmock(DrivewayOS.Accounting.ZohoClient.Mock, for: DrivewayOS.Accounting.ZohoClient)

@@ -70,6 +70,12 @@ config :driveway_os, :stripe_webhook_secret, "whsec_test_placeholder"
 config :driveway_os, :postmark_account_token, "test-account-token-placeholder"
 config :driveway_os, :postmark_affiliate_ref_id, nil
 
+# Zoho placeholders (test env). Mox replaces all real API calls.
+config :driveway_os, :zoho_client, DrivewayOS.Accounting.ZohoClient.Mock
+config :driveway_os, :zoho_client_id, "test-zoho-client-id"
+config :driveway_os, :zoho_client_secret, "test-zoho-client-secret"
+config :driveway_os, :zoho_affiliate_ref_id, nil
+
 # --- Wallaby (browser tests) ---
 # Tests must be tagged `:browser` to use this; everything else runs
 # in the regular Sandbox. Wallaby points at port 4002 (the test
