@@ -67,6 +67,10 @@ defmodule DrivewayOS.Accounting.OAuth do
   def complete_onboarding(%Tenant{id: tenant_id}, code) when is_binary(code) do
     with {:ok, %{access_token: at, refresh_token: rt, expires_in: secs}} <-
            ZohoClient.impl().exchange_oauth_code(code, redirect_uri()),
+         # Probe /organizations to discover the tenant's primary org_id.
+         # We pass "" for org_id here because we don't have one yet — this
+         # is the call that returns it. Subsequent provider calls all pass
+         # the discovered org_id from the AccountingConnection row.
          {:ok, %{"organizations" => [%{"organization_id" => org_id} | _]}} <-
            ZohoClient.impl().api_get(at, "", "/organizations", []) do
       expires_at = DateTime.add(DateTime.utc_now(), secs, :second)
