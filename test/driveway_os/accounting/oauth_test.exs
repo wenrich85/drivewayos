@@ -130,6 +130,47 @@ defmodule DrivewayOS.Accounting.OAuthTest do
       assert Enum.count(all, &(&1.tenant_id == ctx.tenant.id)) == 1
     end
 
+    test "disconnect → reconnect clears disconnected_at and restores active state", ctx do
+      # First connect
+      expect(ZohoClient.Mock, :exchange_oauth_code, fn _, _ ->
+        {:ok, %{access_token: "at-1", refresh_token: "rt-1", expires_in: 3600}}
+      end)
+
+      expect(ZohoClient.Mock, :api_get, fn _, _, "/organizations", _ ->
+        {:ok, %{"organizations" => [%{"organization_id" => "999"}]}}
+      end)
+
+      {:ok, conn1} = OAuth.complete_onboarding(ctx.tenant, "code-1")
+
+      # Disconnect
+      {:ok, disconnected} =
+        conn1 |> Ash.Changeset.for_update(:disconnect, %{}) |> Ash.update(authorize?: false)
+
+      assert %DateTime{} = disconnected.disconnected_at
+
+      # Reconnect — possibly to a different org
+      expect(ZohoClient.Mock, :exchange_oauth_code, fn _, _ ->
+        {:ok, %{access_token: "at-2", refresh_token: "rt-2", expires_in: 3600}}
+      end)
+
+      expect(ZohoClient.Mock, :api_get, fn _, _, "/organizations", _ ->
+        {:ok, %{"organizations" => [%{"organization_id" => "different-456"}]}}
+      end)
+
+      {:ok, conn2} = OAuth.complete_onboarding(ctx.tenant, "code-2")
+
+      # All three reconnect-fix invariants:
+      assert conn2.disconnected_at == nil
+      assert conn2.auto_sync_enabled == true
+      assert conn2.external_org_id == "different-456"
+      assert conn2.access_token == "at-2"
+
+      # And get_active_accounting_connection/2 should now succeed —
+      # this is the silent-failure path that motivated the fix.
+      assert {:ok, _} =
+               DrivewayOS.Platform.get_active_accounting_connection(ctx.tenant.id, :zoho_books)
+    end
+
     test "code-exchange failure returns error tuple, no row written", ctx do
       expect(ZohoClient.Mock, :exchange_oauth_code, fn _, _ ->
         {:error, %{status: 400, body: %{"error" => "invalid_code"}}}

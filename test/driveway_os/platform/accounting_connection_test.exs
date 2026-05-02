@@ -137,6 +137,34 @@ defmodule DrivewayOS.Platform.AccountingConnectionTest do
       |> Ash.create(authorize?: false)
   end
 
+  test "reconnect clears disconnected_at, restores active state, updates org_id", ctx do
+    # Connect, disconnect, then reconnect
+    conn = connect_zoho!(ctx.tenant.id)
+
+    {:ok, disconnected} =
+      conn |> Ash.Changeset.for_update(:disconnect, %{}) |> Ash.update(authorize?: false)
+
+    assert %DateTime{} = disconnected.disconnected_at
+    refute disconnected.auto_sync_enabled
+
+    {:ok, reconnected} =
+      disconnected
+      |> Ash.Changeset.for_update(:reconnect, %{
+        access_token: "at-fresh",
+        refresh_token: "rt-fresh",
+        access_token_expires_at: DateTime.add(DateTime.utc_now(), 3600, :second),
+        external_org_id: "different-org-456"
+      })
+      |> Ash.update(authorize?: false)
+
+    assert reconnected.disconnected_at == nil
+    assert reconnected.auto_sync_enabled == true
+    assert reconnected.access_token == "at-fresh"
+    assert reconnected.refresh_token == "rt-fresh"
+    assert reconnected.external_org_id == "different-org-456"
+    assert %DateTime{} = reconnected.connected_at
+  end
+
   defp connect_zoho!(tenant_id) do
     AccountingConnection
     |> Ash.Changeset.for_create(:connect, %{

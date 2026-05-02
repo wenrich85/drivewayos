@@ -92,22 +92,17 @@ defmodule DrivewayOS.Accounting.OAuth do
   defp upsert_connection(tenant_id, org_id, access_token, refresh_token, expires_at) do
     case DrivewayOS.Platform.get_accounting_connection(tenant_id, :zoho_books) do
       {:ok, conn} ->
+        # Reconnect path: update tokens + org_id, clear disconnected_at,
+        # resume sync. Single atomic action vs the previous chain of
+        # :refresh_tokens then :resume that left disconnected_at populated.
         conn
-        |> Ash.Changeset.for_update(:refresh_tokens, %{
+        |> Ash.Changeset.for_update(:reconnect, %{
           access_token: access_token,
           refresh_token: refresh_token,
-          access_token_expires_at: expires_at
+          access_token_expires_at: expires_at,
+          external_org_id: org_id
         })
         |> Ash.update(authorize?: false)
-        |> case do
-          {:ok, updated} ->
-            updated
-            |> Ash.Changeset.for_update(:resume, %{})
-            |> Ash.update(authorize?: false)
-
-          err ->
-            err
-        end
 
       {:error, :not_found} ->
         AccountingConnection

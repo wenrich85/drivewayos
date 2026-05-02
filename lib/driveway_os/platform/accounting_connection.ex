@@ -98,6 +98,13 @@ defmodule DrivewayOS.Platform.AccountingConnection do
       accept [:access_token, :refresh_token, :access_token_expires_at]
     end
 
+    update :reconnect do
+      accept [:access_token, :refresh_token, :access_token_expires_at, :external_org_id]
+      change set_attribute(:disconnected_at, nil)
+      change set_attribute(:auto_sync_enabled, true)
+      change set_attribute(:connected_at, &DateTime.utc_now/0)
+    end
+
     update :record_sync_success do
       change set_attribute(:last_sync_at, &DateTime.utc_now/0)
       change set_attribute(:last_sync_error, nil)
