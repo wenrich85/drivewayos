@@ -60,6 +60,17 @@ defmodule DrivewayOS.Onboarding.Providers.Postmark do
     end
   end
 
+  @impl true
+  def affiliate_config do
+    %{
+      ref_param: "ref",
+      ref_id: Application.get_env(:driveway_os, :postmark_affiliate_ref_id)
+    }
+  end
+
+  @impl true
+  def tenant_perk, do: nil
+
   defp save_credentials(tenant, server_id, api_key) do
     tenant
     |> Ash.Changeset.for_update(:update, %{

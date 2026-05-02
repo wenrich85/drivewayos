@@ -59,4 +59,16 @@ defmodule DrivewayOS.Onboarding.Providers.StripeConnectTest do
   test "provision/2 returns {:error, :hosted_required}", ctx do
     assert {:error, :hosted_required} = Provider.provision(ctx.tenant, %{})
   end
+
+  describe "affiliate_config/0" do
+    test "returns nil — Stripe revenue is platform fee, not referral" do
+      assert Provider.affiliate_config() == nil
+    end
+  end
+
+  describe "tenant_perk/0" do
+    test "returns nil" do
+      assert Provider.tenant_perk() == nil
+    end
+  end
 end

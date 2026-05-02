@@ -90,4 +90,28 @@ defmodule DrivewayOS.Onboarding.Providers.PostmarkTest do
       assert reloaded.postmark_api_key == nil
     end
   end
+
+  describe "affiliate_config/0" do
+    test "returns %{ref_param, ref_id} with ref_id from app env" do
+      original = Application.get_env(:driveway_os, :postmark_affiliate_ref_id)
+      Application.put_env(:driveway_os, :postmark_affiliate_ref_id, "drivewayos")
+      on_exit(fn -> Application.put_env(:driveway_os, :postmark_affiliate_ref_id, original) end)
+
+      assert %{ref_param: "ref", ref_id: "drivewayos"} = Provider.affiliate_config()
+    end
+
+    test "ref_id is nil when env var is unset" do
+      original = Application.get_env(:driveway_os, :postmark_affiliate_ref_id)
+      Application.put_env(:driveway_os, :postmark_affiliate_ref_id, nil)
+      on_exit(fn -> Application.put_env(:driveway_os, :postmark_affiliate_ref_id, original) end)
+
+      assert %{ref_param: "ref", ref_id: nil} = Provider.affiliate_config()
+    end
+  end
+
+  describe "tenant_perk/0" do
+    test "returns nil — no perk shipping in V1" do
+      assert Provider.tenant_perk() == nil
+    end
+  end
 end

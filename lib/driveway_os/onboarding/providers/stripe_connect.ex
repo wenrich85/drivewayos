@@ -41,4 +41,10 @@ defmodule DrivewayOS.Onboarding.Providers.StripeConnect do
 
   @impl true
   def provision(_tenant, _params), do: {:error, :hosted_required}
+
+  @impl true
+  def affiliate_config, do: nil
+
+  @impl true
+  def tenant_perk, do: nil
 end
