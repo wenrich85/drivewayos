@@ -63,4 +63,65 @@ defmodule DrivewayOS.Onboarding.AffiliateTest do
       assert Affiliate.perk_copy(:nonexistent) == nil
     end
   end
+
+  describe "log_event/4" do
+    setup do
+      {:ok, %{tenant: tenant}} =
+        DrivewayOS.Platform.provision_tenant(%{
+          slug: "aff-#{System.unique_integer([:positive])}",
+          display_name: "Affiliate Log Test",
+          admin_email: "aff-#{System.unique_integer([:positive])}@example.com",
+          admin_name: "Owner",
+          admin_password: "Password123!"
+        })
+
+      %{tenant: tenant}
+    end
+
+    test "writes a TenantReferral row with the given fields", ctx do
+      assert :ok = Affiliate.log_event(ctx.tenant, :postmark, :click, %{wizard_step: "email"})
+
+      {:ok, all} = Ash.read(DrivewayOS.Platform.TenantReferral, authorize?: false)
+      [row] = Enum.filter(all, &(&1.tenant_id == ctx.tenant.id))
+
+      assert row.provider == :postmark
+      assert row.event_type == :click
+      # jsonb roundtrip strips atom keys to strings (see Task 1).
+      assert row.metadata == %{"wizard_step" => "email"}
+      assert %DateTime{} = row.occurred_at
+    end
+
+    test "metadata defaults to empty map when omitted", ctx do
+      assert :ok = Affiliate.log_event(ctx.tenant, :stripe_connect, :provisioned)
+
+      {:ok, all} = Ash.read(DrivewayOS.Platform.TenantReferral, authorize?: false)
+      [row] = Enum.filter(all, &(&1.tenant_id == ctx.tenant.id))
+
+      assert row.metadata == %{}
+    end
+
+    test "returns :ok and does not raise on unknown event_type", ctx do
+      # Logger emits a warning; we capture-and-ignore to avoid noisy
+      # test output. The contract is "always returns :ok" — the
+      # internal Ash error is swallowed, not propagated.
+      import ExUnit.CaptureLog
+
+      result =
+        capture_log(fn ->
+          assert :ok =
+                   Affiliate.log_event(
+                     ctx.tenant,
+                     :postmark,
+                     :totally_invalid,
+                     %{}
+                   )
+        end)
+
+      assert result =~ "Affiliate.log_event failed"
+
+      # No row written.
+      {:ok, all} = Ash.read(DrivewayOS.Platform.TenantReferral, authorize?: false)
+      assert Enum.filter(all, &(&1.tenant_id == ctx.tenant.id)) == []
+    end
+  end
 end
