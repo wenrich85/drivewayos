@@ -1,8 +1,9 @@
 defmodule DrivewayOS.Platform.OauthState do
   @moduledoc """
-  Single-use state token issued when a tenant kicks off Stripe
-  Connect OAuth. Stripe echoes the token back on its callback so we
-  can prove the callback wasn't forged.
+  Single-use state token issued when a tenant kicks off a third-party
+  OAuth flow (Stripe Connect, Zoho Books). The provider echoes the
+  token back on its OAuth callback so we can prove the callback
+  wasn't forged.
 
   Lifecycle: created on `oauth_url_for/1`, deleted on
   `verify_state/1` (success), expires after 10 minutes.
