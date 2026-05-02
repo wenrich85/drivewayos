@@ -72,11 +72,12 @@ defmodule DrivewayOS.Onboarding.Providers.Postmark do
   defp send_welcome_email(tenant) do
     {:ok, admin} = first_admin(tenant)
 
-    # The welcome email is a DrivewayOS platform notification confirming
-    # provisioning succeeded. It goes through the shared SMTP adapter
-    # (not the just-provisioned Postmark server) so that delivery works
-    # even before the new server is fully verified.
-    Mailer.deliver(welcome_email(tenant, admin))
+    # The welcome email IS the deliverability probe for the
+    # just-provisioned Postmark server (per spec decision #7). Routing
+    # it through `Mailer.for_tenant/1` means a bad api_key surfaces
+    # here — at the most actionable moment in the wizard — instead of
+    # silently breaking the first booking confirmation later.
+    Mailer.deliver(welcome_email(tenant, admin), Mailer.for_tenant(tenant))
     :ok
   rescue
     e -> {:error, %{reason: :welcome_email_failed, exception: Exception.message(e)}}

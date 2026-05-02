@@ -372,7 +372,7 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
   # entry is `{title, blurb, cta_label, href}` — the action-specific
   # CTA label is in the tuple so the dashboard doesn't end up with a
   # row of identical "Do it" buttons.
-  defp build_checklist(tenant, blocks, custom_domains, _services) do
+  defp build_checklist(tenant, _blocks, custom_domains, _services) do
     provider_items =
       tenant
       |> Registry.needing_setup()
@@ -387,7 +387,7 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
          "Rename, reprice, or replace the two starter washes (Basic + Deep Clean) with what you actually offer.",
          "Edit services",
          "/admin/services"},
-      Enum.empty?(blocks) &&
+      not DrivewayOS.Onboarding.Steps.Schedule.complete?(tenant) &&
         {"Set your weekly hours",
          "Customers can only pick from time slots you've published. Add at least one weekly availability block.",
          "Set hours",
