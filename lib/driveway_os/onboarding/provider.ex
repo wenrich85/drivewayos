@@ -4,10 +4,12 @@ defmodule DrivewayOS.Onboarding.Provider do
 
   A "provider" here is an external service (Stripe, Postmark, Square,
   etc.) that a tenant can connect during onboarding. The behaviour
-  is intentionally minimal — six callbacks that together let the
-  wizard render a card for each provider, decide whether it's
-  configured at the platform level, and decide whether THIS tenant
-  has finished connecting it.
+  is intentionally minimal — eight callbacks (six required, two
+  optional) that together let the wizard render a card for each
+  provider, decide whether it's configured at the platform level,
+  decide whether THIS tenant has finished connecting it, and
+  optionally surface affiliate / referral metadata + tenant-facing
+  perk copy.
 
   See also: `DrivewayOS.Onboarding.Registry` for the canonical list
   of providers, and `docs/superpowers/specs/2026-04-28-tenant-onboarding-roadmap.md`
@@ -74,4 +76,40 @@ defmodule DrivewayOS.Onboarding.Provider do
   """
   @callback provision(Tenant.t(), map()) ::
               {:ok, Tenant.t()} | {:error, :hosted_required | term()}
+
+  @typedoc "Affiliate config — query-param name + ref id, or nil when no program."
+  @type affiliate_config :: %{ref_param: String.t(), ref_id: String.t() | nil} | nil
+
+  @doc """
+  Affiliate / referral configuration for this provider, or nil if
+  none. Shape: `%{ref_param: <query-param-name>, ref_id: <ref-value>}`.
+
+  When the returned map's `ref_id` is `nil` (env var unset) or this
+  callback returns `nil`, `Onboarding.Affiliate.tag_url/2` is a
+  passthrough.
+
+  Implementations typically read the ref_id from app config so it
+  can be set per-environment via env vars without redeploying:
+
+      def affiliate_config do
+        %{
+          ref_param: "ref",
+          ref_id: Application.get_env(:driveway_os, :postmark_affiliate_ref_id)
+        }
+      end
+  """
+  @callback affiliate_config() :: affiliate_config()
+
+  @doc """
+  Visible-to-tenant perk copy, or `nil` if no perk is offered. The
+  wizard card renders the string below the provider's blurb when
+  non-nil.
+
+  Static text only — perk copy is marketing copy, not a credential,
+  so it lives hardcoded in the provider module rather than env-var
+  indirection.
+  """
+  @callback tenant_perk() :: String.t() | nil
+
+  @optional_callbacks affiliate_config: 0, tenant_perk: 0
 end
