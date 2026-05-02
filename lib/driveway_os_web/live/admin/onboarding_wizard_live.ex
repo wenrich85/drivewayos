@@ -1,19 +1,25 @@
 defmodule DrivewayOSWeb.Admin.OnboardingWizardLive do
   @moduledoc """
-  Stub wizard at `/admin/onboarding`. Phase 0 ships this as a
-  directory of provider cards grouped by category — Phase 1 will
-  replace the body with the actual linear wizard
-  (Branding → Services → Schedule → Payment → Email).
+  Mandatory linear wizard at `/admin/onboarding`. Walks a freshly-
+  provisioned tenant through Branding → Services → Schedule →
+  Payment → Email.
 
-  Lives next to the existing admin LVs so it picks up the same
-  tenant + customer mounts. Auth: tenant-scoped + admin-only.
+  State machine: `DrivewayOS.Onboarding.Wizard` (pure functions).
+  Persistence: `tenant.wizard_progress` jsonb map (only `:skipped`
+  flags persisted; done-ness is computed via each step's
+  `complete?/1` predicate).
+
+  When `Wizard.complete?/1` returns true, the LV redirects to
+  `/admin` with a flash. Skip-for-later writes a :skipped flag and
+  re-renders against the next step. The wizard does not lock the
+  tenant in — direct navigation to `/admin` works mid-wizard.
   """
   use DrivewayOSWeb, :live_view
 
   on_mount DrivewayOSWeb.LoadTenantHook
   on_mount DrivewayOSWeb.LoadCustomerHook
 
-  alias DrivewayOS.Onboarding.Registry
+  alias DrivewayOS.Onboarding.Wizard
 
   @impl true
   def mount(_params, _session, socket) do
@@ -27,84 +33,108 @@ defmodule DrivewayOSWeb.Admin.OnboardingWizardLive do
       socket.assigns.current_customer.role != :admin ->
         {:ok, push_navigate(socket, to: ~p"/")}
 
+      Wizard.complete?(socket.assigns.current_tenant) ->
+        {:ok,
+         socket
+         |> put_flash(:info, "You're all set. Welcome to your dashboard.")
+         |> push_navigate(to: ~p"/admin")}
+
       true ->
         {:ok,
          socket
          |> assign(:page_title, "Set up your shop")
-         |> assign(:groups, group_pending(socket.assigns.current_tenant))}
+         |> assign(:errors, %{})
+         |> assign_step()}
     end
   end
 
-  # Returns a list of {category, [provider_module, ...]} for the
-  # categories where this tenant still has providers needing setup.
-  # Empty categories drop out so an all-done shop sees an empty list.
-  defp group_pending(tenant) do
-    tenant
-    |> Registry.needing_setup()
-    |> Enum.group_by(& &1.category())
-    |> Enum.sort_by(fn {category, _} -> category end)
+  defp assign_step(socket) do
+    step = Wizard.current_step(socket.assigns.current_tenant)
+    assign(socket, :current_step, step)
   end
 
-  defp category_label(:payment), do: "Payment"
-  defp category_label(:email), do: "Email"
-  defp category_label(:accounting), do: "Accounting"
-  defp category_label(other), do: other |> Atom.to_string() |> String.capitalize()
+  @impl true
+  def handle_event("step_submit", params, socket) do
+    step = socket.assigns.current_step
+
+    case step.submit(params, socket) do
+      {:ok, socket} ->
+        socket = assign(socket, :errors, %{})
+
+        if Wizard.complete?(socket.assigns.current_tenant) do
+          {:noreply,
+           socket
+           |> put_flash(:info, "You're all set. Welcome to your dashboard.")
+           |> push_navigate(to: ~p"/admin")}
+        else
+          {:noreply, assign_step(socket)}
+        end
+
+      {:error, message} ->
+        {:noreply, assign(socket, :errors, %{base: message})}
+    end
+  end
+
+  def handle_event("skip_step", %{"step" => step_id}, socket) do
+    step_atom = String.to_existing_atom(step_id)
+    {:ok, updated} = Wizard.skip(socket.assigns.current_tenant, step_atom)
+
+    socket = assign(socket, :current_tenant, updated)
+
+    if Wizard.complete?(updated) do
+      {:noreply,
+       socket
+       |> put_flash(:info, "You're all set. Welcome to your dashboard.")
+       |> push_navigate(to: ~p"/admin")}
+    else
+      {:noreply, assign_step(socket)}
+    end
+  end
+
+  defp step_position(step) do
+    Wizard.steps() |> Enum.find_index(&(&1 == step)) |> Kernel.+(1)
+  end
+
+  defp total_steps, do: length(Wizard.steps())
 
   @impl true
   def render(assigns) do
     ~H"""
     <main class="min-h-screen bg-base-200 px-4 py-8 sm:py-12">
-      <div class="max-w-3xl mx-auto space-y-6">
+      <div class="max-w-2xl mx-auto space-y-6">
         <header>
           <a
             href="/admin"
             class="inline-flex items-center gap-1 text-sm text-base-content/60 hover:text-base-content transition-colors"
           >
-            <span class="hero-arrow-left w-4 h-4" aria-hidden="true"></span> Dashboard
+            <span class="hero-arrow-left w-4 h-4" aria-hidden="true"></span> Skip to dashboard
           </a>
-          <h1 class="text-3xl font-bold tracking-tight mt-2">Set up your shop</h1>
-          <p class="text-sm text-base-content/70 mt-1">
-            Connect the integrations your shop needs. We'll walk you through each one.
+          <p class="text-xs font-semibold uppercase tracking-wide text-base-content/60 mt-3">
+            Step {step_position(@current_step)} of {total_steps()}
           </p>
+          <h1 class="text-3xl font-bold tracking-tight">{@current_step.title()}</h1>
         </header>
 
-        <div :if={@groups == []} class="card bg-base-100 shadow-sm border border-base-300">
-          <div class="card-body text-center py-10 px-4">
-            <span class="hero-check-circle w-12 h-12 mx-auto text-success" aria-hidden="true"></span>
-            <h2 class="mt-3 text-lg font-semibold">All set</h2>
-            <p class="text-sm text-base-content/70 mt-1">
-              Every available integration is connected. You're ready for customers.
-            </p>
-          </div>
+        <div :if={@errors[:base]} role="alert" class="alert alert-error text-sm">
+          {@errors[:base]}
         </div>
 
-        <section
-          :for={{category, providers} <- @groups}
-          class="card bg-base-100 shadow-sm border border-base-300"
-        >
+        <section class="card bg-base-100 shadow-sm border border-base-300">
           <div class="card-body p-6">
-            <h2 class="card-title text-lg">{category_label(category)}</h2>
-            <ul class="space-y-3 mt-2">
-              <li
-                :for={provider <- providers}
-                class="flex gap-3 items-start bg-base-200/50 border border-base-300 rounded-lg p-4"
-              >
-                <% display = provider.display() %>
-                <div class="flex-1 min-w-0">
-                  <div class="font-semibold">{display.title}</div>
-                  <div class="text-sm text-base-content/70 mt-0.5">{display.blurb}</div>
-                </div>
-                <a
-                  href={display.href}
-                  class="btn btn-primary btn-sm gap-1 shrink-0 self-center"
-                >
-                  {display.cta_label}
-                  <span class="hero-arrow-right w-3 h-3" aria-hidden="true"></span>
-                </a>
-              </li>
-            </ul>
+            {@current_step.render(assigns)}
           </div>
         </section>
+
+        <div class="flex justify-end">
+          <button
+            type="button"
+            phx-click="skip_step"
+            phx-value-step={@current_step.id()}
+            class="btn btn-ghost btn-sm text-base-content/60"
+          >
+            Skip for now
+          </button>
+        </div>
       </div>
     </main>
     """

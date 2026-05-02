@@ -57,7 +57,7 @@ defmodule DrivewayOSWeb.Admin.OnboardingWizardLiveTest do
   end
 
   describe "rendering" do
-    test "admin sees a page listing the Stripe Connect provider under Payment", ctx do
+    test "admin lands on the Branding step on a fresh tenant", ctx do
       conn = sign_in(ctx.conn, ctx.admin)
 
       {:ok, _lv, html} =
@@ -65,28 +65,76 @@ defmodule DrivewayOSWeb.Admin.OnboardingWizardLiveTest do
         |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
         |> live(~p"/admin/onboarding")
 
-      # Section header for the :payment category.
-      assert html =~ "Payment"
-      # The provider's display.title.
-      assert html =~ "Take card payments"
-      # The provider's display.cta_label inside an anchor with the href.
-      assert html =~ ~s(href="/onboarding/stripe/start")
-      assert html =~ "Connect Stripe"
+      assert html =~ "Step 1 of 5"
+      assert html =~ "Make it yours"
+    end
+  end
+
+  describe "linear flow" do
+    test "fresh tenant lands on the Branding step", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, _lv, html} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/admin/onboarding")
+
+      assert html =~ "Make it yours"
+      assert html =~ "Support email"
     end
 
-    test "providers that are already set up don't render", ctx do
-      ctx.tenant
-      |> Ash.Changeset.for_update(:update, %{stripe_account_id: "acct_done_x"})
-      |> Ash.update!(authorize?: false)
-
+    test "submitting Branding form advances to Services", ctx do
       conn = sign_in(ctx.conn, ctx.admin)
 
-      {:ok, _lv, html} =
+      {:ok, lv, _} =
         conn
         |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
         |> live(~p"/admin/onboarding")
 
-      refute html =~ "Connect Stripe"
+      html =
+        lv
+        |> form("#step-branding-form", %{
+          "branding" => %{"support_email" => "hello@acme.test"}
+        })
+        |> render_submit()
+
+      # After submit, the next pending step is Services (default
+      # seeded services unchanged → Services.complete?/1 = false).
+      assert html =~ "Set your service menu"
+    end
+
+    test "Skip-for-now marks step skipped + advances", ctx do
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      {:ok, lv, _} =
+        conn
+        |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+        |> live(~p"/admin/onboarding")
+
+      html = render_click(lv, "skip_step", %{"step" => "branding"})
+
+      reloaded =
+        Ash.get!(DrivewayOS.Platform.Tenant, ctx.tenant.id, authorize?: false)
+
+      assert reloaded.wizard_progress == %{"branding" => "skipped"}
+      assert html =~ "Set your service menu"
+    end
+
+    test "wizard redirects to /admin when all steps are complete or skipped", ctx do
+      # Mark every step as skipped (cheapest way to satisfy Wizard.complete?/1).
+      # Chain updates so each iteration reads the latest wizard_progress.
+      Enum.reduce([:branding, :services, :schedule, :payment, :email], ctx.tenant, fn step_id, tenant ->
+        tenant
+        |> Ash.Changeset.for_update(:set_wizard_progress, %{step: step_id, status: :skipped})
+        |> Ash.update!(authorize?: false)
+      end)
+
+      conn = sign_in(ctx.conn, ctx.admin)
+
+      assert {:error, {:live_redirect, %{to: "/admin"}}} =
+               conn
+               |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me")
+               |> live(~p"/admin/onboarding")
     end
   end
 end
