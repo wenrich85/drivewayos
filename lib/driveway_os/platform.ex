@@ -22,6 +22,7 @@ defmodule DrivewayOS.Platform do
   require Ash.Query
 
   alias DrivewayOS.Platform.{
+    AccountingConnection,
     AuditLog,
     CustomDomain,
     OauthState,
@@ -43,6 +44,7 @@ defmodule DrivewayOS.Platform do
     resource AuditLog
     resource Plan
     resource TenantReferral
+    resource AccountingConnection
   end
 
   @doc """
@@ -85,6 +87,47 @@ defmodule DrivewayOS.Platform do
          |> Ash.read(authorize?: false) do
       {:ok, [tenant]} -> {:ok, tenant}
       _ -> {:error, :not_found}
+    end
+  end
+
+  @doc """
+  Look up the AccountingConnection for a (tenant, provider) tuple.
+  Returns `{:ok, connection}` or `{:error, :not_found}`. Used by the
+  Accounting modules to load credentials before any provider call.
+  """
+  @spec get_accounting_connection(binary(), atom()) ::
+          {:ok, AccountingConnection.t()} | {:error, :not_found}
+  def get_accounting_connection(tenant_id, provider)
+      when is_binary(tenant_id) and is_atom(provider) do
+    AccountingConnection
+    |> Ash.Query.filter(tenant_id == ^tenant_id and provider == ^provider)
+    |> Ash.read_one(authorize?: false)
+    |> case do
+      {:ok, nil} -> {:error, :not_found}
+      {:ok, conn} -> {:ok, conn}
+      {:error, _} -> {:error, :not_found}
+    end
+  end
+
+  @doc """
+  Like `get_accounting_connection/2` but also rejects rows that
+  aren't actively syncing — disconnected, paused, or missing tokens.
+  Returns `{:error, :no_active_connection}` for any of those states.
+  """
+  @spec get_active_accounting_connection(binary(), atom()) ::
+          {:ok, AccountingConnection.t()} | {:error, :no_active_connection}
+  def get_active_accounting_connection(tenant_id, provider) do
+    case get_accounting_connection(tenant_id, provider) do
+      {:ok, %AccountingConnection{
+         auto_sync_enabled: true,
+         disconnected_at: nil,
+         access_token: token
+       } = conn}
+      when is_binary(token) ->
+        {:ok, conn}
+
+      _ ->
+        {:error, :no_active_connection}
     end
   end
 
