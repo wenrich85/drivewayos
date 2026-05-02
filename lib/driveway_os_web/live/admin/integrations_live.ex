@@ -136,9 +136,15 @@ defmodule DrivewayOSWeb.Admin.IntegrationsLive do
                         </button>
                       <% end %>
                     <% end %>
-                    <button phx-click="disconnect" phx-value-id={conn.id} class="btn btn-sm btn-error">
-                      Disconnect
-                    </button>
+                    <%= if is_nil(conn.disconnected_at) do %>
+                      <button
+                        phx-click="disconnect"
+                        phx-value-id={conn.id}
+                        class="btn btn-sm btn-error"
+                      >
+                        Disconnect
+                      </button>
+                    <% end %>
                   </td>
                 </tr>
               <% end %>

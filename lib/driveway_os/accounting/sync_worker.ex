@@ -56,7 +56,7 @@ defmodule DrivewayOS.Accounting.SyncWorker do
   end
 
   defp ensure_token_fresh(%AccountingConnection{access_token_expires_at: exp} = conn) do
-    if DateTime.compare(exp, DateTime.utc_now()) == :gt do
+    if not is_nil(exp) and DateTime.compare(exp, DateTime.utc_now()) == :gt do
       {:ok, conn}
     else
       case ZohoClient.impl().refresh_access_token(conn.refresh_token) do
@@ -109,13 +109,17 @@ defmodule DrivewayOS.Accounting.SyncWorker do
       {:ok, conn} ->
         conn
         |> Ash.Changeset.for_update(:record_sync_error, %{
-          last_sync_error: inspect(reason)
+          last_sync_error: truncate(inspect(reason), 500)
         })
         |> Ash.update!(authorize?: false)
 
       _ ->
         :ok
     end
+  end
+
+  defp truncate(s, max) when is_binary(s) do
+    if byte_size(s) > max, do: binary_part(s, 0, max) <> "…", else: s
   end
 
   defp send_reconnect_email(tenant_id) do

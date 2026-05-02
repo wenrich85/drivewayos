@@ -62,7 +62,7 @@ defmodule DrivewayOS.Billing.StripeConnect do
     case OauthState
          |> Ash.Query.for_read(:by_token, %{token: token})
          |> Ash.read(authorize?: false) do
-      {:ok, [%OauthState{} = state]} ->
+      {:ok, [%OauthState{purpose: :stripe_connect} = state]} ->
         # Consume — single use even on success.
         Ash.destroy!(state, authorize?: false)
         {:ok, state.tenant_id}

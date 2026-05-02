@@ -74,6 +74,28 @@ defmodule DrivewayOS.Billing.StripeConnectTest do
     test "unknown state returns :invalid_state" do
       assert {:error, :invalid_state} = StripeConnect.verify_state("not-a-real-state")
     end
+
+    test "verify_state rejects a state token with a non-stripe_connect purpose" do
+      {:ok, %{tenant: tenant}} =
+        DrivewayOS.Platform.provision_tenant(%{
+          slug: "sc-#{System.unique_integer([:positive])}",
+          display_name: "Cross-purpose Test",
+          admin_email: "sc-#{System.unique_integer([:positive])}@example.com",
+          admin_name: "Owner",
+          admin_password: "Password123!"
+        })
+
+      {:ok, zoho_state} =
+        DrivewayOS.Platform.OauthState
+        |> Ash.Changeset.for_create(:issue, %{
+          tenant_id: tenant.id,
+          purpose: :zoho_books
+        })
+        |> Ash.create(authorize?: false)
+
+      assert {:error, :invalid_state} =
+               DrivewayOS.Billing.StripeConnect.verify_state(zoho_state.token)
+    end
   end
 
   describe "complete_onboarding/2" do

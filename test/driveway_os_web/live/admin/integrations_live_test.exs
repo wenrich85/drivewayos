@@ -90,6 +90,16 @@ defmodule DrivewayOSWeb.Admin.IntegrationsLiveTest do
     assert refreshed.disconnected_at != nil
   end
 
+  test "Disconnect button is hidden on already-disconnected rows", ctx do
+    conn_row = connect_zoho!(ctx.tenant.id)
+    conn_row |> Ash.Changeset.for_update(:disconnect, %{}) |> Ash.update!(authorize?: false)
+
+    {:ok, _view, html} = live(ctx.conn, "/admin/integrations")
+
+    assert html =~ "Disconnected"
+    refute html =~ ~s(phx-click="disconnect")
+  end
+
   test "Pause does NOT mutate a connection from a different tenant", ctx do
     # Create a second tenant with its own connection
     {:ok, %{tenant: other_tenant}} =
