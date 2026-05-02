@@ -48,7 +48,7 @@ defmodule DrivewayOSWeb.StripeOnboardingController do
             conn.assigns.current_tenant,
             :stripe_connect,
             :click,
-            %{wizard_step: :payment}
+            %{wizard_step: "payment"}
           )
 
         redirect(conn, external: url)

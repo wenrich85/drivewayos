@@ -2,7 +2,8 @@ defmodule DrivewayOS.Platform.TenantReferralTest do
   @moduledoc """
   Pin the `Platform.TenantReferral` contract: events are creatable
   via the `:log` action, readable, and constrained to the documented
-  event_type enum. FK to tenant cascades on tenant delete.
+  event_type enum. FK to tenant is required (cascade behavior is a
+  Postgres-level concern, not exercised in this suite).
   """
   use DrivewayOS.DataCase, async: false
 

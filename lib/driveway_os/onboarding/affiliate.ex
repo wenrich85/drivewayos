@@ -21,7 +21,7 @@ defmodule DrivewayOS.Onboarding.Affiliate do
   Example metadata contracts (V1, freeform; documented here for
   greppability):
 
-    * `:click` on Stripe → `%{wizard_step: :payment, oauth_state: "..."}`
+    * `:click` on Stripe → `%{wizard_step: "payment", oauth_state: "..."}`
     * `:provisioned` on Postmark → `%{server_id: "99001"}`
     * `:revenue_attributed` (Phase 4+) → `%{provider_payout_id: "...", cents: 1234}`
   """

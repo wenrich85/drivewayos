@@ -58,7 +58,7 @@ defmodule DrivewayOS.Onboarding.Steps.Email do
     # Log :click before the API call so a failed provision still
     # leaves a funnel breadcrumb. log_event/4 is fire-and-forget —
     # it always returns :ok, even on persistence failure.
-    :ok = Affiliate.log_event(tenant, :postmark, :click, %{wizard_step: :email})
+    :ok = Affiliate.log_event(tenant, :postmark, :click, %{wizard_step: "email"})
 
     case Postmark.provision(tenant, %{}) do
       {:ok, updated} ->
