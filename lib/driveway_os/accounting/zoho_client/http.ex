@@ -21,6 +21,12 @@ defmodule DrivewayOS.Accounting.ZohoClient.Http do
         "code" => code
       })
 
+    # Note: unlike `refresh_access_token` / `api_*`, this returns the
+    # full {status, body} map on non-200. Code-exchange is a one-shot
+    # OAuth-callback flow — the body's `error_description` field
+    # distinguishes "code expired" / "invalid_grant" / "redirect_uri
+    # mismatch", which the controller needs to render an actionable
+    # error message. `{:error, :auth_failed}` would discard that.
     case Req.post("#{@oauth_base}/oauth/v2/token",
            body: body,
            headers: [{"content-type", "application/x-www-form-urlencoded"}]
@@ -43,7 +49,7 @@ defmodule DrivewayOS.Accounting.ZohoClient.Http do
   end
 
   @impl true
-  def refresh_access_token(refresh_token, _client_secret) do
+  def refresh_access_token(refresh_token) do
     body =
       URI.encode_query(%{
         "grant_type" => "refresh_token",

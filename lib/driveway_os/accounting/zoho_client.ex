@@ -5,7 +5,7 @@ defmodule DrivewayOS.Accounting.ZohoClient do
     * `exchange_oauth_code/2` — POST to /oauth/v2/token to convert
       the authorization code returned on the OAuth callback into an
       access_token + refresh_token.
-    * `refresh_access_token/2` — POST to /oauth/v2/token with grant
+    * `refresh_access_token/1` — POST to /oauth/v2/token with grant
       type `refresh_token` to get a fresh access_token when the
       stored one expires.
     * `api_get/4` / `api_post/4` — REST calls against
@@ -25,7 +25,7 @@ defmodule DrivewayOS.Accounting.ZohoClient do
                }}
               | {:error, term()}
 
-  @callback refresh_access_token(refresh_token :: String.t(), client_secret :: String.t()) ::
+  @callback refresh_access_token(refresh_token :: String.t()) ::
               {:ok, %{access_token: String.t(), expires_in: integer()}}
               | {:error, term()}
 
@@ -48,7 +48,7 @@ defmodule DrivewayOS.Accounting.ZohoClient do
   def impl, do: Application.get_env(:driveway_os, :zoho_client, __MODULE__.Http)
 
   defdelegate exchange_oauth_code(code, redirect_uri), to: __MODULE__.Http
-  defdelegate refresh_access_token(refresh_token, client_secret), to: __MODULE__.Http
+  defdelegate refresh_access_token(refresh_token), to: __MODULE__.Http
   defdelegate api_get(access_token, org_id, path, params), to: __MODULE__.Http
   defdelegate api_post(access_token, org_id, path, body), to: __MODULE__.Http
 end
