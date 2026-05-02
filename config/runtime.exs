@@ -53,7 +53,10 @@ if config_env() != :test do
     stripe_secret_key: System.get_env("STRIPE_SECRET_KEY") || "",
     stripe_webhook_secret: System.get_env("STRIPE_WEBHOOK_SECRET") || "",
     postmark_account_token: System.get_env("POSTMARK_ACCOUNT_TOKEN") || "",
-    postmark_affiliate_ref_id: System.get_env("POSTMARK_AFFILIATE_REF_ID")
+    postmark_affiliate_ref_id: System.get_env("POSTMARK_AFFILIATE_REF_ID"),
+    zoho_client_id: System.get_env("ZOHO_CLIENT_ID") || "",
+    zoho_client_secret: System.get_env("ZOHO_CLIENT_SECRET") || "",
+    zoho_affiliate_ref_id: System.get_env("ZOHO_AFFILIATE_REF_ID")
 end
 
 if config_env() == :prod do
