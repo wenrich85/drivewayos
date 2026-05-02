@@ -372,7 +372,7 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
   # entry is `{title, blurb, cta_label, href}` — the action-specific
   # CTA label is in the tuple so the dashboard doesn't end up with a
   # row of identical "Do it" buttons.
-  defp build_checklist(tenant, blocks, custom_domains, services) do
+  defp build_checklist(tenant, blocks, custom_domains, _services) do
     provider_items =
       tenant
       |> Registry.needing_setup()
@@ -382,7 +382,7 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
       end)
 
     internal_items = [
-      using_default_services?(services) &&
+      not DrivewayOS.Onboarding.Steps.Services.complete?(tenant) &&
         {"Set your service menu",
          "Rename, reprice, or replace the two starter washes (Basic + Deep Clean) with what you actually offer.",
          "Edit services",
@@ -392,7 +392,7 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
          "Customers can only pick from time slots you've published. Add at least one weekly availability block.",
          "Set hours",
          "/admin/schedule"},
-      missing_branding?(tenant) &&
+      not DrivewayOS.Onboarding.Steps.Branding.complete?(tenant) &&
         {"Make it yours",
          "Upload your logo, set a support email, and pick a brand color so the booking page feels like your shop.",
          "Customize",
@@ -408,21 +408,6 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
     provider_items ++ internal_items
   end
 
-  # Tenants ship with two seeded services (slugs "basic-wash" and
-  # "deep-clean"). If those are still the literal set on the
-  # account, the operator hasn't customized — surface the prompt.
-  # Renaming, repricing, or adding a new ServiceType drops the
-  # checklist item.
-  defp using_default_services?(services) do
-    slugs = services |> Enum.map(& &1.slug) |> Enum.sort()
-    slugs == ["basic-wash", "deep-clean"]
-  end
-
-  # Onboarding-time defaults like "no logo" + "no support email"
-  # mean the operator hasn't customized branding yet.
-  defp missing_branding?(tenant) do
-    is_nil(tenant.support_email) and is_nil(tenant.logo_url)
-  end
 
   defp fmt_price(cents), do: "$" <> :erlang.float_to_binary(cents / 100, decimals: 2)
 
