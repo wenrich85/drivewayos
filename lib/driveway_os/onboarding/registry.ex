@@ -47,4 +47,18 @@ defmodule DrivewayOS.Onboarding.Registry do
     |> Enum.filter(& &1.configured?())
     |> Enum.reject(& &1.setup_complete?(tenant))
   end
+
+  @doc """
+  Look up a provider module by its `id/0` value. Returns
+  `{:ok, module}` or `:error`. Used by `Onboarding.Affiliate` to
+  resolve provider id atoms to their implementations without
+  exposing the `@providers` list directly.
+  """
+  @spec fetch(atom()) :: {:ok, module()} | :error
+  def fetch(provider_id) when is_atom(provider_id) do
+    case Enum.find(@providers, &(&1.id() == provider_id)) do
+      nil -> :error
+      mod -> {:ok, mod}
+    end
+  end
 end

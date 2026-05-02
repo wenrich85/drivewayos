@@ -49,4 +49,15 @@ defmodule DrivewayOS.Onboarding.RegistryTest do
 
     refute StripeConnect in Registry.needing_setup(ctx.tenant)
   end
+
+  describe "fetch/1" do
+    test "returns {:ok, module} for a known provider id" do
+      assert {:ok, DrivewayOS.Onboarding.Providers.Postmark} = Registry.fetch(:postmark)
+      assert {:ok, DrivewayOS.Onboarding.Providers.StripeConnect} = Registry.fetch(:stripe_connect)
+    end
+
+    test "returns :error for an unknown id" do
+      assert :error = Registry.fetch(:totally_made_up)
+    end
+  end
 end
