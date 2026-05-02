@@ -52,7 +52,7 @@ defmodule DrivewayOS.Scheduling.LoyaltyHooks do
 
     tenant
     |> BookingEmail.loyalty_earned(customer, t)
-    |> Mailer.deliver()
+    |> Mailer.deliver(Mailer.for_tenant(tenant))
 
     :ok
   rescue

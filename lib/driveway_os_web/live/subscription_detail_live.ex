@@ -132,7 +132,7 @@ defmodule DrivewayOSWeb.SubscriptionDetailLive do
   defp notify_cancelled(tenant, customer, sub, service) do
     tenant
     |> BookingEmail.subscription_cancelled(customer, sub, service)
-    |> Mailer.deliver()
+    |> Mailer.deliver(Mailer.for_tenant(tenant))
 
     :ok
   rescue

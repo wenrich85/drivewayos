@@ -107,7 +107,7 @@ defmodule DrivewayOSWeb.Admin.DashboardLive do
           :cancel -> BookingEmail.cancelled(tenant, booker, appt, service)
         end
 
-      Mailer.deliver(email)
+      Mailer.deliver(email, Mailer.for_tenant(tenant))
     end
 
     :ok

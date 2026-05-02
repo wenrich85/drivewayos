@@ -54,7 +54,7 @@ defmodule DrivewayOS.Accounts.Deletion do
   defp send_confirmation(tenant, customer) do
     tenant
     |> BookingEmail.account_deleted(customer)
-    |> Mailer.deliver()
+    |> Mailer.deliver(Mailer.for_tenant(tenant))
   rescue
     e ->
       Logger.warning("[deletion] confirmation email failed: #{inspect(e)}")

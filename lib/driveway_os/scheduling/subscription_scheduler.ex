@@ -156,7 +156,7 @@ defmodule DrivewayOS.Scheduling.SubscriptionScheduler do
            Ash.get(Customer, sub.customer_id, tenant: tenant.id, authorize?: false) do
       tenant
       |> BookingEmail.subscription_appointment_created(customer, appt, service)
-      |> Mailer.deliver()
+      |> Mailer.deliver(Mailer.for_tenant(tenant))
     end
 
     :ok

@@ -215,7 +215,7 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
             service,
             old_scheduled_at
           )
-          |> Mailer.deliver()
+          |> Mailer.deliver(Mailer.for_tenant(tenant))
         end
 
       _ ->
@@ -239,7 +239,7 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
       {:ok, service} ->
         tenant
         |> BookingEmail.rescheduled(booker, appt, service, old_scheduled_at)
-        |> Mailer.deliver()
+        |> Mailer.deliver(Mailer.for_tenant(tenant))
 
       _ ->
         :ok
@@ -341,13 +341,15 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
   end
 
   defp do_resend_email(socket) do
-    socket.assigns.current_tenant
+    tenant = socket.assigns.current_tenant
+
+    tenant
     |> BookingEmail.confirmation(
       socket.assigns.booker,
       socket.assigns.appt,
       socket.assigns.service
     )
-    |> Mailer.deliver()
+    |> Mailer.deliver(Mailer.for_tenant(tenant))
 
     {:noreply, assign(socket, :flash_msg, "Confirmation email re-sent.")}
   rescue
@@ -502,12 +504,12 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
       :confirm ->
         tenant
         |> BookingEmail.confirmed(booker, updated, service)
-        |> Mailer.deliver()
+        |> Mailer.deliver(Mailer.for_tenant(tenant))
 
       :cancel ->
         tenant
         |> BookingEmail.cancelled(booker, updated, service)
-        |> Mailer.deliver()
+        |> Mailer.deliver(Mailer.for_tenant(tenant))
 
         # Customer-initiated cancellations also alert tenant admins
         # so they can re-shuffle their day.
@@ -515,7 +517,7 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
           for admin <- DrivewayOS.Accounts.tenant_admins(tenant.id) do
             tenant
             |> BookingEmail.customer_cancellation_alert(admin, booker, updated, service)
-            |> Mailer.deliver()
+            |> Mailer.deliver(Mailer.for_tenant(tenant))
           end
         end
 

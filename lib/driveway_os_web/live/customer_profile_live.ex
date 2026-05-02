@@ -291,7 +291,7 @@ defmodule DrivewayOSWeb.CustomerProfileLive do
       {:ok, service} ->
         tenant
         |> BookingEmail.subscription_cancelled(customer, sub, service)
-        |> Mailer.deliver()
+        |> Mailer.deliver(Mailer.for_tenant(tenant))
 
       _ ->
         :ok

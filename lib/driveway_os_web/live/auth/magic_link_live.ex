@@ -99,7 +99,7 @@ defmodule DrivewayOSWeb.Auth.MagicLinkLive do
   defp send_email(tenant, customer, link_url) do
     tenant
     |> MagicLinkEmail.sign_in(customer, link_url)
-    |> Mailer.deliver()
+    |> Mailer.deliver(Mailer.for_tenant(tenant))
   rescue
     # Don't crash the LV if SMTP is briefly down — the user just
     # sees the same "check your email" message and can retry.

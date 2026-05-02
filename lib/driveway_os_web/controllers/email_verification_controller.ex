@@ -64,7 +64,7 @@ defmodule DrivewayOSWeb.EmailVerificationController do
 
     tenant
     |> EmailVerification.build_email(customer, link)
-    |> DrivewayOS.Mailer.deliver()
+    |> DrivewayOS.Mailer.deliver(DrivewayOS.Mailer.for_tenant(tenant))
   rescue
     _ -> :error
   end

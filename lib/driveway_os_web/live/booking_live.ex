@@ -904,7 +904,7 @@ defmodule DrivewayOSWeb.BookingLive do
   defp send_confirmation_email(tenant, customer, appt, service) do
     tenant
     |> BookingEmail.confirmation(customer, appt, service)
-    |> Mailer.deliver()
+    |> Mailer.deliver(Mailer.for_tenant(tenant))
 
     maybe_send_confirmation_sms(tenant, customer, appt, service)
   rescue
@@ -929,7 +929,7 @@ defmodule DrivewayOSWeb.BookingLive do
     for admin <- DrivewayOS.Accounts.tenant_admins(tenant.id) do
       tenant
       |> BookingEmail.new_booking_alert(admin, customer, appt, service)
-      |> Mailer.deliver()
+      |> Mailer.deliver(Mailer.for_tenant(tenant))
     end
   rescue
     _ -> :error

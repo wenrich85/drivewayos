@@ -136,7 +136,7 @@ defmodule DrivewayOS.Notifications.ReminderScheduler do
   defp send_email(tenant, customer, appt, service) do
     tenant
     |> BookingEmail.reminder(customer, appt, service)
-    |> Mailer.deliver()
+    |> Mailer.deliver(Mailer.for_tenant(tenant))
 
     if Plans.tenant_can?(tenant, :sms_notifications) do
       BookingSms.reminder(tenant, customer, appt, service)

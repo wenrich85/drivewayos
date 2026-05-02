@@ -22,7 +22,7 @@ defmodule DrivewayOS.Accounts.PasswordResetSender do
 
         tenant
         |> PasswordResetEmail.reset_link(user, link_url)
-        |> Mailer.deliver()
+        |> Mailer.deliver(Mailer.for_tenant(tenant))
 
       _ ->
         :ok

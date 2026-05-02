@@ -222,7 +222,7 @@ defmodule DrivewayOSWeb.StripeWebhookController do
            ) do
       tenant
       |> BookingEmail.confirmation(customer, appt, service)
-      |> Mailer.deliver()
+      |> Mailer.deliver(Mailer.for_tenant(tenant))
     else
       _ -> :error
     end

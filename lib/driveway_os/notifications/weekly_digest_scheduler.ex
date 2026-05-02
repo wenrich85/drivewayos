@@ -120,7 +120,7 @@ defmodule DrivewayOS.Notifications.WeeklyDigestScheduler do
       Enum.each(admins, fn admin ->
         tenant
         |> BookingEmail.weekly_digest(admin, stats)
-        |> Mailer.deliver()
+        |> Mailer.deliver(Mailer.for_tenant(tenant))
       end)
 
       tenant
