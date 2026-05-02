@@ -33,7 +33,7 @@ defmodule DrivewayOS.Onboarding.Steps.Email do
     ~H"""
     <form id="step-email-form" phx-submit="step_submit" class="space-y-3">
       <p class="text-sm text-base-content/70">{@display.blurb}</p>
-      <%= if perk = DrivewayOS.Onboarding.Affiliate.perk_copy(:postmark) do %>
+      <%= if perk = Affiliate.perk_copy(:postmark) do %>
         <p class="text-xs text-success font-medium">{perk}</p>
       <% end %>
       <p class="text-xs text-base-content/60">

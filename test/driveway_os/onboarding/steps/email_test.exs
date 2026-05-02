@@ -79,7 +79,12 @@ defmodule DrivewayOS.Onboarding.Steps.EmailTest do
 
       {:ok, all} = Ash.read(DrivewayOS.Platform.TenantReferral, authorize?: false)
       events = Enum.filter(all, &(&1.tenant_id == ctx.tenant.id))
-      types = events |> Enum.map(& &1.event_type) |> Enum.sort()
+      # Sort by occurred_at to assert chronological order — :click comes
+      # before :provisioned regardless of alphabetic accident.
+      types =
+        events
+        |> Enum.sort_by(& &1.occurred_at, DateTime)
+        |> Enum.map(& &1.event_type)
 
       assert types == [:click, :provisioned]
       assert Enum.all?(events, &(&1.provider == :postmark))
