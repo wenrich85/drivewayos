@@ -45,6 +45,25 @@ defmodule DrivewayOSWeb.StripeOnboardingControllerTest do
       assert redirected_to(conn, 302) =~ "https://connect.stripe.com/oauth/authorize"
     end
 
+    test "logs an affiliate :click event before redirecting to Stripe",
+         %{conn: conn, tenant: tenant, admin: admin} do
+      {:ok, token, _} = AshAuthentication.Jwt.token_for_user(admin)
+
+      conn =
+        conn
+        |> Plug.Test.init_test_session(%{customer_token: token})
+        |> Map.put(:host, "#{tenant.slug}.lvh.me")
+        |> get("/onboarding/stripe/start")
+
+      # The redirect happens; we just verify the logged event.
+      assert redirected_to(conn, 302) =~ "https://connect.stripe.com/oauth/authorize"
+
+      {:ok, all} = Ash.read(DrivewayOS.Platform.TenantReferral, authorize?: false)
+      [event] = Enum.filter(all, &(&1.tenant_id == tenant.id))
+      assert event.provider == :stripe_connect
+      assert event.event_type == :click
+    end
+
     test "stripe client_id unset: bounces back to /admin with a clear flash",
          %{conn: conn, tenant: tenant, admin: admin} do
       # Temporarily blank the client_id so configured?/0 returns false.
@@ -118,6 +137,12 @@ defmodule DrivewayOSWeb.StripeOnboardingControllerTest do
       # Tenant got the account id.
       reloaded = Platform.get_tenant_by_slug!(tenant.slug)
       assert reloaded.stripe_account_id == "acct_123callback"
+
+      # And we logged the :provisioned affiliate event.
+      {:ok, all} = Ash.read(DrivewayOS.Platform.TenantReferral, authorize?: false)
+      [event] = Enum.filter(all, &(&1.tenant_id == tenant.id and &1.event_type == :provisioned))
+      assert event.provider == :stripe_connect
+      assert event.metadata["stripe_account_id"] == "acct_123callback"
     end
 
     test "wizard incomplete: callback redirects to /admin/onboarding",

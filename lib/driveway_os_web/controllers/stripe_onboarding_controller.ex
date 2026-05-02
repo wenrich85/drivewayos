@@ -12,7 +12,7 @@ defmodule DrivewayOSWeb.StripeOnboardingController do
   use DrivewayOSWeb, :controller
 
   alias DrivewayOS.Billing.StripeConnect
-  alias DrivewayOS.Onboarding.Wizard
+  alias DrivewayOS.Onboarding.{Affiliate, Wizard}
   alias DrivewayOS.Platform
 
   def start(conn, _params) do
@@ -42,6 +42,15 @@ defmodule DrivewayOSWeb.StripeOnboardingController do
 
       true ->
         url = StripeConnect.oauth_url_for(conn.assigns.current_tenant)
+
+        :ok =
+          Affiliate.log_event(
+            conn.assigns.current_tenant,
+            :stripe_connect,
+            :click,
+            %{wizard_step: :payment}
+          )
+
         redirect(conn, external: url)
     end
   end
@@ -50,6 +59,14 @@ defmodule DrivewayOSWeb.StripeOnboardingController do
     with {:ok, tenant_id} <- StripeConnect.verify_state(state),
          tenant when not is_nil(tenant) <- Ash.get!(Platform.Tenant, tenant_id),
          {:ok, updated} <- StripeConnect.complete_onboarding(tenant, code) do
+      :ok =
+        Affiliate.log_event(
+          updated,
+          :stripe_connect,
+          :provisioned,
+          %{stripe_account_id: updated.stripe_account_id}
+        )
+
       redirect(conn, external: tenant_post_stripe_url(updated))
     else
       _ -> send_resp(conn, 400, "Stripe onboarding failed.")
