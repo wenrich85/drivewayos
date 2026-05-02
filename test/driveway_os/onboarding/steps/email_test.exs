@@ -59,4 +59,54 @@ defmodule DrivewayOS.Onboarding.Steps.EmailTest do
 
     assert {:error, _} = Step.submit(%{}, socket)
   end
+
+  describe "submit/2 affiliate logging" do
+    test "logs :click then :provisioned on Postmark API success", ctx do
+      expect(PostmarkClient.Mock, :create_server, fn _name, _opts ->
+        {:ok, %{server_id: 88_001, api_key: "server-token-pq"}}
+      end)
+
+      socket = %Phoenix.LiveView.Socket{
+        assigns: %{
+          __changed__: %{},
+          current_tenant: ctx.tenant,
+          current_customer: ctx.admin,
+          errors: %{}
+        }
+      }
+
+      assert {:ok, _} = Step.submit(%{}, socket)
+
+      {:ok, all} = Ash.read(DrivewayOS.Platform.TenantReferral, authorize?: false)
+      events = Enum.filter(all, &(&1.tenant_id == ctx.tenant.id))
+      types = events |> Enum.map(& &1.event_type) |> Enum.sort()
+
+      assert types == [:click, :provisioned]
+      assert Enum.all?(events, &(&1.provider == :postmark))
+    end
+
+    test "logs only :click when Postmark API fails", ctx do
+      expect(PostmarkClient.Mock, :create_server, fn _, _ ->
+        {:error, %{status: 401, body: %{"Message" => "Invalid token"}}}
+      end)
+
+      socket = %Phoenix.LiveView.Socket{
+        assigns: %{
+          __changed__: %{},
+          current_tenant: ctx.tenant,
+          current_customer: ctx.admin,
+          errors: %{}
+        }
+      }
+
+      assert {:error, _} = Step.submit(%{}, socket)
+
+      {:ok, all} = Ash.read(DrivewayOS.Platform.TenantReferral, authorize?: false)
+      events = Enum.filter(all, &(&1.tenant_id == ctx.tenant.id))
+
+      assert [event] = events
+      assert event.event_type == :click
+      assert event.provider == :postmark
+    end
+  end
 end

@@ -13,7 +13,7 @@ defmodule DrivewayOS.Onboarding.Steps.Email do
 
   use Phoenix.Component
 
-  alias DrivewayOS.Onboarding.Providers.Postmark
+  alias DrivewayOS.Onboarding.{Affiliate, Providers.Postmark}
   alias DrivewayOS.Platform.Tenant
 
   @impl true
@@ -33,6 +33,9 @@ defmodule DrivewayOS.Onboarding.Steps.Email do
     ~H"""
     <form id="step-email-form" phx-submit="step_submit" class="space-y-3">
       <p class="text-sm text-base-content/70">{@display.blurb}</p>
+      <%= if perk = DrivewayOS.Onboarding.Affiliate.perk_copy(:postmark) do %>
+        <p class="text-xs text-success font-medium">{perk}</p>
+      <% end %>
       <p class="text-xs text-base-content/60">
         We'll create a Postmark server for your shop and send you a quick test email
         to confirm everything's working. Takes a few seconds.
@@ -52,8 +55,18 @@ defmodule DrivewayOS.Onboarding.Steps.Email do
   def submit(_params, socket) do
     tenant = socket.assigns.current_tenant
 
+    # Log :click before the API call so a failed provision still
+    # leaves a funnel breadcrumb. log_event/4 is fire-and-forget —
+    # it always returns :ok, even on persistence failure.
+    :ok = Affiliate.log_event(tenant, :postmark, :click, %{wizard_step: :email})
+
     case Postmark.provision(tenant, %{}) do
       {:ok, updated} ->
+        :ok =
+          Affiliate.log_event(updated, :postmark, :provisioned, %{
+            server_id: updated.postmark_server_id
+          })
+
         {:ok, Phoenix.Component.assign(socket, :current_tenant, updated)}
 
       {:error, reason} ->
