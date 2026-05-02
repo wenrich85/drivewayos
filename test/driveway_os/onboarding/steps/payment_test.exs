@@ -66,4 +66,18 @@ defmodule DrivewayOS.Onboarding.Steps.PaymentTest do
     assert html =~ "Connect Stripe"
     assert html =~ "/onboarding/stripe/start"
   end
+
+  describe "render/1 perk copy" do
+    test "does not render perk paragraph when StripeConnect.tenant_perk/0 is nil (V1 default)" do
+      html =
+        Step.render(%{__changed__: %{}})
+        |> Phoenix.LiveViewTest.rendered_to_string()
+
+      # V1: StripeConnect.tenant_perk/0 returns nil. The success-text
+      # class shouldn't appear in the DOM. Once a provider returns a
+      # non-nil string, this regression flips and the if-let branch
+      # renders.
+      refute html =~ "text-success"
+    end
+  end
 end

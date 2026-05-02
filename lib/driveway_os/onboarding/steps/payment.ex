@@ -15,7 +15,7 @@ defmodule DrivewayOS.Onboarding.Steps.Payment do
 
   use Phoenix.Component
 
-  alias DrivewayOS.Onboarding.Providers.StripeConnect
+  alias DrivewayOS.Onboarding.{Affiliate, Providers.StripeConnect}
   alias DrivewayOS.Platform.Tenant
 
   @impl true
@@ -35,6 +35,9 @@ defmodule DrivewayOS.Onboarding.Steps.Payment do
     ~H"""
     <div class="space-y-3">
       <p class="text-sm text-base-content/70">{@display.blurb}</p>
+      <%= if perk = Affiliate.perk_copy(:stripe_connect) do %>
+        <p class="text-xs text-success font-medium">{perk}</p>
+      <% end %>
       <a href={@display.href} class="btn btn-primary btn-sm gap-1">
         {@display.cta_label}
         <span class="hero-arrow-right w-3 h-3" aria-hidden="true"></span>
