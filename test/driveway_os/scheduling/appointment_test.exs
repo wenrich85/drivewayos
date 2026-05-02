@@ -11,6 +11,7 @@ defmodule DrivewayOS.Scheduling.AppointmentTest do
   flow that creates appointments lands in Slice 6b.
   """
   use DrivewayOS.DataCase, async: false
+  use Oban.Testing, repo: DrivewayOS.Repo
 
   alias DrivewayOS.Accounts.Customer
   alias DrivewayOS.Platform.Tenant
@@ -193,6 +194,21 @@ defmodule DrivewayOS.Scheduling.AppointmentTest do
 
       assert cancelled.status == :cancelled
       assert cancelled.cancellation_reason == "weather"
+    end
+  end
+
+  describe ":mark_paid enqueues Accounting.SyncWorker (Phase 3 Task 10)" do
+    test "enqueues with tenant_id + appointment_id args", ctx do
+      {:ok, appt} = book!(ctx.tenant_a, ctx.customer_a, ctx.service_a)
+
+      appt
+      |> Ash.Changeset.for_update(:mark_paid, %{stripe_payment_intent_id: "pi_test_123"})
+      |> Ash.update!(authorize?: false, tenant: ctx.tenant_a.id)
+
+      assert_enqueued(
+        worker: DrivewayOS.Accounting.SyncWorker,
+        args: %{"tenant_id" => ctx.tenant_a.id, "appointment_id" => appt.id}
+      )
     end
   end
 

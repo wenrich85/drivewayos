@@ -61,6 +61,11 @@ config :driveway_os, :session_cookie_domain, ".lvh.me"
 # drive its dispatch path directly with a deterministic `now`.
 config :driveway_os, :start_schedulers?, false
 
+# Oban runs in :manual mode — jobs are not auto-executed. Tests use
+# `perform_job/2` (unit-style) and `assert_enqueued/1` (integration-
+# style) from `Oban.Testing`. No supervisor is required for either.
+config :driveway_os, Oban, testing: :manual
+
 # Stripe placeholders (test env). Mox replaces all real API calls.
 config :driveway_os, :stripe_client_id, "ca_test_placeholder"
 config :driveway_os, :stripe_secret_key, "sk_test_placeholder"

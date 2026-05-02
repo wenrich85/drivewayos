@@ -410,10 +410,38 @@ defmodule DrivewayOS.Scheduling.Appointment do
     update :mark_paid do
       argument :stripe_payment_intent_id, :string
 
+      # The after_action hook below isn't atomic-eligible (Ash's
+      # AfterAction change doesn't implement atomic/3), so we drop
+      # out of atomic mode for this action. Same pattern as
+      # `:complete` (loyalty hook) and `:reschedule`.
+      require_atomic? false
+
       change set_attribute(:payment_status, :paid)
       change set_attribute(:paid_at, &DateTime.utc_now/0)
       change set_attribute(:status, :confirmed)
       change set_attribute(:stripe_payment_intent_id, arg(:stripe_payment_intent_id))
+
+      # Phase 3 Task 10: kick off accounting sync for this paid
+      # appointment. `after_action` runs only on a successful commit,
+      # so we never enqueue for a rolled-back update. Errors during
+      # `Oban.insert` are swallowed — the payment flow must never
+      # block on accounting plumbing (worst case: the operator can
+      # manually re-trigger sync from the admin UI).
+      change after_action(fn _changeset, appointment, _ctx ->
+               try do
+                 DrivewayOS.Accounting.SyncWorker.new(%{
+                   "tenant_id" => appointment.tenant_id,
+                   "appointment_id" => appointment.id
+                 })
+                 |> Oban.insert()
+               rescue
+                 e ->
+                   require Logger
+                   Logger.warning("Accounting sync enqueue failed: #{Exception.message(e)}")
+               end
+
+               {:ok, appointment}
+             end)
     end
 
     update :mark_refunded do

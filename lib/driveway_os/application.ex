@@ -11,6 +11,11 @@ defmodule DrivewayOS.Application do
       [
         DrivewayOSWeb.Telemetry,
         DrivewayOS.Repo,
+        # Oban must start AFTER the Repo (it depends on it) and
+        # BEFORE the schedulers / Endpoint that may enqueue jobs.
+        # `testing: :manual` (config/test.exs) keeps it inert
+        # under the test sandbox.
+        {Oban, Application.fetch_env!(:driveway_os, Oban)},
         {DNSCluster, query: Application.get_env(:driveway_os, :dns_cluster_query) || :ignore},
         {Phoenix.PubSub, name: DrivewayOS.PubSub},
         DrivewayOS.RateLimiter

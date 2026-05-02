@@ -86,6 +86,17 @@ config :phoenix, :json_library, Jason
 # config/test.exs to point at the Mox mock.
 config :driveway_os, :zoho_client, DrivewayOS.Accounting.ZohoClient.Http
 
+# Oban — background jobs (Phase 3). The :billing queue runs the
+# Accounting.SyncWorker enqueued from Appointment.mark_paid; the
+# :default queue is reserved for any future workers we add.
+# Pruner removes completed jobs older than 7 days.
+config :driveway_os, Oban,
+  repo: DrivewayOS.Repo,
+  queues: [billing: 5, default: 10],
+  plugins: [
+    {Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7}
+  ]
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"
