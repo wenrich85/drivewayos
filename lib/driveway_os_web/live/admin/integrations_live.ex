@@ -37,21 +37,33 @@ defmodule DrivewayOSWeb.Admin.IntegrationsLive do
 
   @impl true
   def handle_event("pause", %{"id" => id}, socket) do
-    {:ok, conn} = Ash.get(AccountingConnection, id, authorize?: false)
-    conn |> Ash.Changeset.for_update(:pause, %{}) |> Ash.update!(authorize?: false)
-    {:noreply, load_connections(socket)}
+    with_owned_connection(socket, id, &Ash.Changeset.for_update(&1, :pause, %{}))
   end
 
   def handle_event("resume", %{"id" => id}, socket) do
-    {:ok, conn} = Ash.get(AccountingConnection, id, authorize?: false)
-    conn |> Ash.Changeset.for_update(:resume, %{}) |> Ash.update!(authorize?: false)
-    {:noreply, load_connections(socket)}
+    with_owned_connection(socket, id, &Ash.Changeset.for_update(&1, :resume, %{}))
   end
 
   def handle_event("disconnect", %{"id" => id}, socket) do
-    {:ok, conn} = Ash.get(AccountingConnection, id, authorize?: false)
-    conn |> Ash.Changeset.for_update(:disconnect, %{}) |> Ash.update!(authorize?: false)
-    {:noreply, load_connections(socket)}
+    with_owned_connection(socket, id, &Ash.Changeset.for_update(&1, :disconnect, %{}))
+  end
+
+  # Fetch the connection by id but only proceed if it belongs to the
+  # current tenant. Defends against crafted phx-click events that pass
+  # another tenant's connection id — the list query is tenant-scoped
+  # but `phx-value-id` is attacker-controlled.
+  defp with_owned_connection(socket, id, changeset_fn) do
+    tenant_id = socket.assigns.current_tenant.id
+
+    case Ash.get(AccountingConnection, id, authorize?: false) do
+      {:ok, %AccountingConnection{tenant_id: ^tenant_id} = conn} ->
+        conn |> changeset_fn.() |> Ash.update!(authorize?: false)
+        {:noreply, load_connections(socket)}
+
+      _ ->
+        # Wrong tenant or not found — silently no-op (don't leak existence).
+        {:noreply, socket}
+    end
   end
 
   defp load_connections(socket) do

@@ -90,6 +90,34 @@ defmodule DrivewayOSWeb.Admin.IntegrationsLiveTest do
     assert refreshed.disconnected_at != nil
   end
 
+  test "Pause does NOT mutate a connection from a different tenant", ctx do
+    # Create a second tenant with its own connection
+    {:ok, %{tenant: other_tenant}} =
+      Platform.provision_tenant(%{
+        slug: "other-#{System.unique_integer([:positive])}",
+        display_name: "Other Tenant",
+        admin_email: "other-#{System.unique_integer([:positive])}@example.com",
+        admin_name: "Other",
+        admin_password: "Password123!"
+      })
+
+    other_conn = connect_zoho!(other_tenant.id)
+
+    # Sign-in as ctx.tenant's admin, render the page (empty for them).
+    {:ok, view, _html} = live(ctx.conn, "/admin/integrations")
+
+    # Attempt to pause OTHER tenant's connection by crafting the event.
+    # render_click bypasses the DOM filter — exactly what an attacker
+    # would do via the browser console / DevTools.
+    render_click(view, "pause", %{"id" => other_conn.id})
+
+    # other_conn should still be active (untouched).
+    {:ok, refreshed} =
+      Platform.get_accounting_connection(other_tenant.id, :zoho_books)
+
+    assert refreshed.auto_sync_enabled == true
+  end
+
   defp connect_zoho!(tenant_id) do
     AccountingConnection
     |> Ash.Changeset.for_create(:connect, %{
