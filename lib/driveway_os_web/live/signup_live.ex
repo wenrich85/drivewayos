@@ -331,7 +331,7 @@ defmodule DrivewayOSWeb.SignupLive do
     {:ok, token, _} = AshAuthentication.Jwt.token_for_user(admin)
 
     base = tenant_root_base_url(tenant)
-    return_to = URI.encode_www_form("/admin")
+    return_to = URI.encode_www_form("/admin/onboarding")
     encoded_token = URI.encode_www_form(token)
 
     "#{base}/auth/customer/store-token?token=#{encoded_token}&return_to=#{return_to}"

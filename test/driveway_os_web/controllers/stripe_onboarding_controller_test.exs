@@ -120,6 +120,29 @@ defmodule DrivewayOSWeb.StripeOnboardingControllerTest do
       assert reloaded.stripe_account_id == "acct_123callback"
     end
 
+    test "wizard incomplete: callback redirects to /admin/onboarding",
+         %{conn: conn, tenant: tenant} do
+      [_, state_token] =
+        Regex.run(
+          ~r/state=([^&]+)/,
+          DrivewayOS.Billing.StripeConnect.oauth_url_for(tenant)
+        )
+
+      DrivewayOS.Billing.StripeClientMock
+      |> expect(:exchange_oauth_code, fn "stripe-code-incomplete" ->
+        {:ok, %{stripe_user_id: "acct_incomplete_wizard"}}
+      end)
+
+      conn =
+        conn
+        |> Map.put(:host, "lvh.me")
+        |> get(
+          "/onboarding/stripe/callback?code=stripe-code-incomplete&state=#{state_token}"
+        )
+
+      assert redirected_to(conn, 302) =~ "/admin/onboarding"
+    end
+
     test "bogus state → 400", %{conn: conn} do
       conn =
         conn

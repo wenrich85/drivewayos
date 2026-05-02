@@ -71,7 +71,7 @@ defmodule DrivewayOSWeb.SignupLiveTest do
       # /sign-in form and goes straight to the dashboard.
       assert external_url =~ "/auth/customer/store-token"
       assert external_url =~ "token="
-      assert external_url =~ "return_to=%2Fadmin"
+      assert external_url =~ "return_to=%2Fadmin%2Fonboarding"
 
       # Verify side effects.
       {:ok, tenant} = Platform.get_tenant_by_slug(slug)
