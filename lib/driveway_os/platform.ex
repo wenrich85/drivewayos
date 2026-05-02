@@ -26,6 +26,7 @@ defmodule DrivewayOS.Platform do
     AuditLog,
     CustomDomain,
     OauthState,
+    PaymentConnection,
     Plan,
     PlatformToken,
     PlatformUser,
@@ -45,6 +46,7 @@ defmodule DrivewayOS.Platform do
     resource Plan
     resource TenantReferral
     resource AccountingConnection
+    resource PaymentConnection
   end
 
   @doc """
@@ -120,6 +122,46 @@ defmodule DrivewayOS.Platform do
     case get_accounting_connection(tenant_id, provider) do
       {:ok, %AccountingConnection{
          auto_sync_enabled: true,
+         disconnected_at: nil,
+         access_token: token
+       } = conn}
+      when is_binary(token) ->
+        {:ok, conn}
+
+      _ ->
+        {:error, :no_active_connection}
+    end
+  end
+
+  @doc """
+  Look up the PaymentConnection for a (tenant, provider) tuple.
+  Returns `{:ok, connection}` or `{:error, :not_found}`.
+  """
+  @spec get_payment_connection(binary(), atom()) ::
+          {:ok, PaymentConnection.t()} | {:error, :not_found}
+  def get_payment_connection(tenant_id, provider)
+      when is_binary(tenant_id) and is_atom(provider) do
+    PaymentConnection
+    |> Ash.Query.filter(tenant_id == ^tenant_id and provider == ^provider)
+    |> Ash.read_one(authorize?: false)
+    |> case do
+      {:ok, nil} -> {:error, :not_found}
+      {:ok, conn} -> {:ok, conn}
+      {:error, _} -> {:error, :not_found}
+    end
+  end
+
+  @doc """
+  Like `get_payment_connection/2` but rejects rows that aren't
+  actively chargeable — disconnected, paused, or missing tokens.
+  Returns `{:error, :no_active_connection}` for any of those.
+  """
+  @spec get_active_payment_connection(binary(), atom()) ::
+          {:ok, PaymentConnection.t()} | {:error, :no_active_connection}
+  def get_active_payment_connection(tenant_id, provider) do
+    case get_payment_connection(tenant_id, provider) do
+      {:ok, %PaymentConnection{
+         auto_charge_enabled: true,
          disconnected_at: nil,
          access_token: token
        } = conn}
