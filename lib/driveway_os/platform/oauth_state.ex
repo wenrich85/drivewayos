@@ -41,7 +41,7 @@ defmodule DrivewayOS.Platform.OauthState do
     end
 
     attribute :purpose, :atom do
-      constraints one_of: [:stripe_connect]
+      constraints one_of: [:stripe_connect, :zoho_books]
       default :stripe_connect
       allow_nil? false
       public? true
