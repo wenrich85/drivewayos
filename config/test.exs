@@ -68,6 +68,7 @@ config :driveway_os, :stripe_webhook_secret, "whsec_test_placeholder"
 
 # Postmark placeholder (test env). Mox replaces all real API calls.
 config :driveway_os, :postmark_account_token, "test-account-token-placeholder"
+config :driveway_os, :postmark_affiliate_ref_id, nil
 
 # --- Wallaby (browser tests) ---
 # Tests must be tagged `:browser` to use this; everything else runs

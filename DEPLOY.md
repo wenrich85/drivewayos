@@ -39,6 +39,7 @@ Optional but you almost certainly want them on for prod.
 | `STRIPE_SECRET_KEY` | Stripe platform secret key. |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret. |
 | `POSTMARK_ACCOUNT_TOKEN` | Postmark account-level token used to provision tenant-scoped Servers via the API. |
+| `POSTMARK_AFFILIATE_REF_ID` | Optional. Platform-level Postmark affiliate referral code; appended to outbound Postmark URLs as `?ref=<value>`. Leave unset until enrolled in Postmark's referral program. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD` | Outbound mail (Zoho, Postmark, SES, etc.). |
 
 Each is optional at boot — the release will start without them —
