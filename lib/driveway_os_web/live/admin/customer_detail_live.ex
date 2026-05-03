@@ -129,28 +129,6 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
     end
   end
 
-  defp update_customer_role(socket, role, success_msg) do
-    case socket.assigns.customer
-         |> Ash.Changeset.for_update(:update, %{role: role})
-         |> Ash.update(authorize?: false, tenant: socket.assigns.current_tenant.id) do
-      {:ok, updated} ->
-        {:noreply,
-         socket
-         |> assign(:customer, updated)
-         |> assign(:flash_msg, success_msg)}
-
-      _ ->
-        {:noreply, assign(socket, :flash_msg, "Couldn't update the role.")}
-    end
-  end
-
-  defp last_admin?(socket) do
-    case DrivewayOS.Accounts.tenant_admins(socket.assigns.current_tenant.id) do
-      [%{id: only_id}] -> only_id == socket.assigns.customer.id
-      _ -> false
-    end
-  end
-
   def handle_event("show_subscribe_form", _, socket) do
     {:noreply, socket |> assign(:subscribe_form?, true) |> assign(:subscribe_error, nil)}
   end
@@ -205,6 +183,28 @@ defmodule DrivewayOSWeb.Admin.CustomerDetailLive do
 
   def handle_event("cancel_subscription", %{"id" => id}, socket),
     do: transition_subscription(socket, id, :cancel)
+
+  defp update_customer_role(socket, role, success_msg) do
+    case socket.assigns.customer
+         |> Ash.Changeset.for_update(:update, %{role: role})
+         |> Ash.update(authorize?: false, tenant: socket.assigns.current_tenant.id) do
+      {:ok, updated} ->
+        {:noreply,
+         socket
+         |> assign(:customer, updated)
+         |> assign(:flash_msg, success_msg)}
+
+      _ ->
+        {:noreply, assign(socket, :flash_msg, "Couldn't update the role.")}
+    end
+  end
+
+  defp last_admin?(socket) do
+    case DrivewayOS.Accounts.tenant_admins(socket.assigns.current_tenant.id) do
+      [%{id: only_id}] -> only_id == socket.assigns.customer.id
+      _ -> false
+    end
+  end
 
   defp transition_subscription(socket, id, action) do
     tenant_id = socket.assigns.current_tenant.id

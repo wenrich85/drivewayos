@@ -71,14 +71,6 @@ defmodule DrivewayOSWeb.SignupLive do
      |> assign(:slug_status, slug_status)}
   end
 
-  defp check_slug_status(slug) do
-    case String.trim(slug || "") do
-      "" -> :empty
-      _ -> Platform.slug_available?(slug)
-    end
-  end
-
-  @impl true
   def handle_event("submit", %{"signup" => params}, socket) do
     attrs = %{
       slug: params["slug"] |> to_string() |> String.trim() |> String.downcase(),
@@ -320,6 +312,13 @@ defmodule DrivewayOSWeb.SignupLive do
   end
 
   # --- Helpers ---
+
+  defp check_slug_status(slug) do
+    case String.trim(slug || "") do
+      "" -> :empty
+      _ -> Platform.slug_available?(slug)
+    end
+  end
 
   # After provisioning, redirect through the tenant subdomain's
   # `/auth/customer/store-token` controller so the new admin lands

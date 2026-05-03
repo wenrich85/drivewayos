@@ -124,16 +124,6 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
     end
   end
 
-  # Both the booking's owner and a tenant admin can reschedule.
-  # Anyone else (the third-party non-admin path that auth already
-  # blocks at mount) returns false defensively.
-  defp can_reschedule?(socket) do
-    me = socket.assigns.current_customer
-    booker = socket.assigns.booker
-
-    me.role == :admin or me.id == booker.id
-  end
-
   def handle_event("hide_reschedule_form", _, socket) do
     {:noreply,
      socket
@@ -195,6 +185,81 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
     end
   end
 
+  # Admin per-vehicle pricing override. Form posts:
+  #   pricing[primary_price_cents]: dollars-as-string
+  #   pricing[extras][0][description], pricing[extras][0][price_cents], …
+  # We turn that into the canonical `:array of :map` shape and call
+  # the dedicated :update_vehicle_prices action which recomputes the
+  # appointment's rolled-up `price_cents`.
+  def handle_event("save_vehicle_pricing", %{"pricing" => params}, socket) do
+    if socket.assigns.current_customer.role != :admin do
+      {:noreply, socket}
+    else
+      tenant_id = socket.assigns.current_tenant.id
+      primary = parse_dollars(params["primary_price_cents"])
+      extras = build_extras(params["extras"])
+
+      case socket.assigns.appt
+           |> Ash.Changeset.for_update(:update_vehicle_prices, %{
+             primary_price_cents: primary,
+             additional_vehicles: extras
+           })
+           |> Ash.update(authorize?: false, tenant: tenant_id) do
+        {:ok, updated} ->
+          {:noreply,
+           socket
+           |> assign(:appt, updated)
+           |> assign(:flash_msg, "Pricing saved.")}
+
+        _ ->
+          {:noreply, assign(socket, :flash_msg, "Couldn't save pricing.")}
+      end
+    end
+  end
+
+  def handle_event(
+        "save_operator_notes",
+        %{"appointment" => %{"operator_notes" => notes}},
+        socket
+      ) do
+    if socket.assigns.current_customer.role == :admin do
+      tenant_id = socket.assigns.current_tenant.id
+
+      case socket.assigns.appt
+           |> Ash.Changeset.for_update(:set_operator_notes, %{operator_notes: notes})
+           |> Ash.update(authorize?: false, tenant: tenant_id) do
+        {:ok, updated} ->
+          {:noreply,
+           socket
+           |> assign(:appt, updated)
+           |> assign(:flash_msg, "Operator notes saved.")}
+
+        _ ->
+          {:noreply, assign(socket, :flash_msg, "Couldn't save the notes.")}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("resend_email", _, socket) do
+    if socket.assigns.current_customer.role == :admin do
+      do_resend_email(socket)
+    else
+      {:noreply, socket}
+    end
+  end
+
+  # Both the booking's owner and a tenant admin can reschedule.
+  # Anyone else (the third-party non-admin path that auth already
+  # blocks at mount) returns false defensively.
+  defp can_reschedule?(socket) do
+    me = socket.assigns.current_customer
+    booker = socket.assigns.booker
+
+    me.role == :admin or me.id == booker.id
+  end
+
   defp reschedule_flash(actor, booker) do
     if actor.id == booker.id and actor.role != :admin do
       "Rescheduled. We sent you a confirmation."
@@ -250,38 +315,6 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
     _ -> :ok
   end
 
-  # Admin per-vehicle pricing override. Form posts:
-  #   pricing[primary_price_cents]: dollars-as-string
-  #   pricing[extras][0][description], pricing[extras][0][price_cents], …
-  # We turn that into the canonical `:array of :map` shape and call
-  # the dedicated :update_vehicle_prices action which recomputes the
-  # appointment's rolled-up `price_cents`.
-  def handle_event("save_vehicle_pricing", %{"pricing" => params}, socket) do
-    if socket.assigns.current_customer.role != :admin do
-      {:noreply, socket}
-    else
-      tenant_id = socket.assigns.current_tenant.id
-      primary = parse_dollars(params["primary_price_cents"])
-      extras = build_extras(params["extras"])
-
-      case socket.assigns.appt
-           |> Ash.Changeset.for_update(:update_vehicle_prices, %{
-             primary_price_cents: primary,
-             additional_vehicles: extras
-           })
-           |> Ash.update(authorize?: false, tenant: tenant_id) do
-        {:ok, updated} ->
-          {:noreply,
-           socket
-           |> assign(:appt, updated)
-           |> assign(:flash_msg, "Pricing saved.")}
-
-        _ ->
-          {:noreply, assign(socket, :flash_msg, "Couldn't save pricing.")}
-      end
-    end
-  end
-
   defp parse_dollars(nil), do: 0
   defp parse_dollars(""), do: 0
 
@@ -305,39 +338,6 @@ defmodule DrivewayOSWeb.AppointmentDetailLive do
         "price_cents" => parse_dollars(entry["price_cents"])
       }
     end)
-  end
-
-  def handle_event(
-        "save_operator_notes",
-        %{"appointment" => %{"operator_notes" => notes}},
-        socket
-      ) do
-    if socket.assigns.current_customer.role == :admin do
-      tenant_id = socket.assigns.current_tenant.id
-
-      case socket.assigns.appt
-           |> Ash.Changeset.for_update(:set_operator_notes, %{operator_notes: notes})
-           |> Ash.update(authorize?: false, tenant: tenant_id) do
-        {:ok, updated} ->
-          {:noreply,
-           socket
-           |> assign(:appt, updated)
-           |> assign(:flash_msg, "Operator notes saved.")}
-
-        _ ->
-          {:noreply, assign(socket, :flash_msg, "Couldn't save the notes.")}
-      end
-    else
-      {:noreply, socket}
-    end
-  end
-
-  def handle_event("resend_email", _, socket) do
-    if socket.assigns.current_customer.role == :admin do
-      do_resend_email(socket)
-    else
-      {:noreply, socket}
-    end
   end
 
   defp do_resend_email(socket) do
