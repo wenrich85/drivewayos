@@ -40,6 +40,8 @@ Optional but you almost certainly want them on for prod.
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret. |
 | `POSTMARK_ACCOUNT_TOKEN` | Postmark account-level token used to provision tenant-scoped Servers via the API. |
 | `POSTMARK_AFFILIATE_REF_ID` | Optional. Platform-level Postmark affiliate referral code; appended to outbound Postmark URLs as `?ref=<value>`. Leave unset until enrolled in Postmark's referral program. |
+| `RESEND_API_KEY` | Resend account-level token used to provision tenant-scoped api_keys via the API. |
+| `RESEND_AFFILIATE_REF_ID` | Optional. Platform-level Resend affiliate referral code; appended to outbound Resend URLs as `?ref=<value>`. Leave unset until enrolled in Resend's referral program. |
 | `ZOHO_CLIENT_ID` | Zoho Books OAuth client id (one per platform — every tenant uses the same one). Get from Zoho's API console at https://api-console.zoho.com. |
 | `ZOHO_CLIENT_SECRET` | Paired with `ZOHO_CLIENT_ID`. |
 | `ZOHO_AFFILIATE_REF_ID` | Optional. Platform-level Zoho affiliate referral code; appended to outbound Zoho OAuth URLs as `?ref=<value>`. Leave unset until enrolled in Zoho's referral program. |

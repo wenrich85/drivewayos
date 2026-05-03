@@ -75,6 +75,10 @@ config :driveway_os, :stripe_webhook_secret, "whsec_test_placeholder"
 config :driveway_os, :postmark_account_token, "test-account-token-placeholder"
 config :driveway_os, :postmark_affiliate_ref_id, nil
 
+# Resend placeholder (test env). Mox replaces all real API calls.
+config :driveway_os, :resend_api_key, "test-resend-api-key-placeholder"
+config :driveway_os, :resend_affiliate_ref_id, nil
+
 # Zoho placeholders (test env). Mox replaces all real API calls.
 config :driveway_os, :zoho_client, DrivewayOS.Accounting.ZohoClient.Mock
 config :driveway_os, :zoho_client_id, "test-zoho-client-id"
