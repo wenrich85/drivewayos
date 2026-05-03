@@ -96,6 +96,9 @@ defmodule DrivewayOSWeb.Router do
     get "/onboarding/zoho/start", ZohoOauthController, :start
     get "/onboarding/zoho/callback", ZohoOauthController, :callback
 
+    get "/onboarding/square/start", SquareOauthController, :start
+    get "/onboarding/square/callback", SquareOauthController, :callback
+
     # Platform-admin (the SaaS operator — us). All under admin.lvh.me.
     live "/platform-sign-in", Platform.SignInLive
     live "/tenants", Platform.TenantsLive
