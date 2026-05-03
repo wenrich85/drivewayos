@@ -235,7 +235,7 @@ defmodule DrivewayOSWeb.Admin.IntegrationsLiveTest do
       connect_resend!(ctx.tenant.id)
 
       {:ok, view, _html} = live(ctx.conn, "/admin/integrations")
-      view |> element("button[id^='table-pause']") |> render_click()
+      view |> element("button[id^='table-pause'][phx-value-resource='email']") |> render_click()
 
       {:ok, refreshed} = DrivewayOS.Platform.get_email_connection(ctx.tenant.id, :resend)
       refute refreshed.auto_send_enabled
@@ -245,7 +245,7 @@ defmodule DrivewayOSWeb.Admin.IntegrationsLiveTest do
       connect_resend!(ctx.tenant.id)
 
       {:ok, view, _html} = live(ctx.conn, "/admin/integrations")
-      view |> element("button[id^='table-disconnect']") |> render_click()
+      view |> element("button[id^='table-disconnect'][phx-value-resource='email']") |> render_click()
 
       {:ok, refreshed} = DrivewayOS.Platform.get_email_connection(ctx.tenant.id, :resend)
       assert refreshed.api_key == nil

@@ -2,9 +2,10 @@ defmodule DrivewayOSWeb.Admin.IntegrationsLive do
   @moduledoc """
   Tenant admin → integrations page at `/admin/integrations`.
 
-  Lists every connection row for the current tenant — both
-  AccountingConnection (Phase 3) and PaymentConnection (Phase 4) —
-  in a unified table on desktop and a card-per-row stack on mobile.
+  Lists every connection row for the current tenant —
+  AccountingConnection (Phase 3), PaymentConnection (Phase 4), and
+  EmailConnection (Phase 4b) — in a unified table on desktop and a
+  card-per-row stack on mobile.
   Pause / Resume / Disconnect buttons per row dispatch to the
   resource module identified by the row's `resource` field.
 
