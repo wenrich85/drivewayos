@@ -72,6 +72,22 @@ defmodule DrivewayOS.Onboarding.Providers.ResendTest do
     assert Resend.setup_complete?(ctx.tenant)
   end
 
+  test "setup_complete?/1 false after disconnect (api_key cleared)", ctx do
+    conn =
+      EmailConnection
+      |> Ash.Changeset.for_create(:connect, %{
+        tenant_id: ctx.tenant.id,
+        provider: :resend,
+        external_key_id: "k1",
+        api_key: "re_test_1"
+      })
+      |> Ash.create!(authorize?: false)
+
+    conn |> Ash.Changeset.for_update(:disconnect, %{}) |> Ash.update!(authorize?: false)
+
+    refute Resend.setup_complete?(ctx.tenant)
+  end
+
   test "affiliate_config/0 returns nil in V1" do
     # Same posture as Phase 1 Postmark — API-first, no OAuth URL
     # to tag, no enrolled affiliate program.
