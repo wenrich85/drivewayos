@@ -68,6 +68,25 @@ defmodule DrivewayOSWeb.PostmarkOnboardingControllerTest do
     assert event.event_type == :click
   end
 
+  test "GET /onboarding/postmark/start: rejects when no current admin", _ctx do
+    {:ok, %{tenant: t}} =
+      Platform.provision_tenant(%{
+        slug: "po-noauth-#{System.unique_integer([:positive])}",
+        display_name: "Anon",
+        admin_email: "anon-#{System.unique_integer([:positive])}@example.com",
+        admin_name: "A",
+        admin_password: "Password123!"
+      })
+
+    conn =
+      build_conn()
+      |> Map.put(:host, "#{t.slug}.lvh.me")
+      |> get("/onboarding/postmark/start")
+
+    # Existing tenant LoadCustomer plug pattern: redirect to /sign-in
+    assert redirected_to(conn) =~ "/sign-in"
+  end
+
   defp sign_in_admin_for_tenant(conn, tenant, admin) do
     {:ok, token, _} = AshAuthentication.Jwt.token_for_user(admin)
 
