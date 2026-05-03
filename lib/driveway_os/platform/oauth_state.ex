@@ -1,7 +1,7 @@
 defmodule DrivewayOS.Platform.OauthState do
   @moduledoc """
   Single-use state token issued when a tenant kicks off a third-party
-  OAuth flow (Stripe Connect, Zoho Books). The provider echoes the
+  OAuth flow (Stripe Connect, Zoho Books, Square). The provider echoes the
   token back on its OAuth callback so we can prove the callback
   wasn't forged.
 
@@ -42,7 +42,7 @@ defmodule DrivewayOS.Platform.OauthState do
     end
 
     attribute :purpose, :atom do
-      constraints one_of: [:stripe_connect, :zoho_books]
+      constraints one_of: [:stripe_connect, :zoho_books, :square]
       default :stripe_connect
       allow_nil? false
       public? true
