@@ -878,27 +878,99 @@ defmodule DrivewayOSWeb.BookingLive do
   end
 
   defp do_post_booking(socket, tenant, customer, service, appt) do
-    if tenant.stripe_account_id do
-      params = checkout_params(tenant, customer, service, appt)
+    cond do
+      tenant.stripe_account_id ->
+        do_stripe_checkout(socket, tenant, customer, service, appt)
 
-      case StripeClient.create_checkout_session(tenant.stripe_account_id, params) do
-        {:ok, %{id: session_id, url: url}} ->
-          appt
-          |> Ash.Changeset.for_update(:attach_stripe_session, %{
-            stripe_checkout_session_id: session_id,
-            payment_status: :pending
-          })
-          |> Ash.update!(authorize?: false, tenant: tenant.id)
+      has_active_square?(tenant) ->
+        do_square_checkout(socket, tenant, customer, service, appt)
 
-          {:noreply, redirect(socket, external: url)}
-
-        {:error, _reason} ->
-          {:noreply, push_navigate(socket, to: ~p"/book/success/#{appt.id}")}
-      end
-    else
-      send_confirmation_email(tenant, customer, appt, service)
-      {:noreply, push_navigate(socket, to: ~p"/book/success/#{appt.id}")}
+      true ->
+        send_confirmation_email(tenant, customer, appt, service)
+        {:noreply, push_navigate(socket, to: ~p"/book/success/#{appt.id}")}
     end
+  end
+
+  defp do_stripe_checkout(socket, tenant, customer, service, appt) do
+    params = checkout_params(tenant, customer, service, appt)
+
+    case StripeClient.create_checkout_session(tenant.stripe_account_id, params) do
+      {:ok, %{id: session_id, url: url}} ->
+        appt
+        |> Ash.Changeset.for_update(:attach_stripe_session, %{
+          stripe_checkout_session_id: session_id,
+          payment_status: :pending
+        })
+        |> Ash.update!(authorize?: false, tenant: tenant.id)
+
+        {:noreply, redirect(socket, external: url)}
+
+      {:error, _reason} ->
+        {:noreply, push_navigate(socket, to: ~p"/book/success/#{appt.id}")}
+    end
+  end
+
+  defp do_square_checkout(socket, tenant, customer, service, appt) do
+    {:ok, square_conn} = DrivewayOS.Platform.get_active_payment_connection(tenant.id, :square)
+
+    redirect_url = build_post_payment_url(tenant, appt)
+
+    appt_for_charge = %{
+      id: appt.id,
+      price_cents: appt.price_cents,
+      service_name: service.name
+    }
+
+    case DrivewayOS.Square.Charge.create_checkout_session(
+           square_conn,
+           appt_for_charge,
+           redirect_url
+         ) do
+      {:ok, %{checkout_url: url, order_id: order_id}} ->
+        appt
+        |> Ash.Changeset.for_update(:attach_stripe_session, %{
+          square_order_id: order_id,
+          payment_status: :pending
+        })
+        |> Ash.update!(authorize?: false, tenant: tenant.id)
+
+        {:noreply, redirect(socket, external: url)}
+
+      {:error, _reason} ->
+        # On Square API failure, fall through to confirmation-only flow.
+        # Tenant can manually invoice if needed; webhook will populate
+        # square_order_id later if Square eventually completes.
+        send_confirmation_email(tenant, customer, appt, service)
+        {:noreply, push_navigate(socket, to: ~p"/book/success/#{appt.id}")}
+    end
+  end
+
+  defp has_active_square?(tenant) do
+    case DrivewayOS.Platform.get_active_payment_connection(tenant.id, :square) do
+      {:ok, _} -> true
+      _ -> false
+    end
+  end
+
+  defp build_post_payment_url(tenant, appt) do
+    host = Application.fetch_env!(:driveway_os, :platform_host)
+
+    {scheme, port_suffix} =
+      if host == "lvh.me" do
+        port = endpoint_port() || 4000
+        {"http", ":#{port}"}
+      else
+        {"https", ""}
+      end
+
+    "#{scheme}://#{tenant.slug}.#{host}#{port_suffix}/book/success/#{appt.id}"
+  end
+
+  defp endpoint_port do
+    Application.get_env(:driveway_os, DrivewayOSWeb.Endpoint)
+    |> Kernel.||([])
+    |> Keyword.get(:http, [])
+    |> Keyword.get(:port)
   end
 
   defp send_confirmation_email(tenant, customer, appt, service) do
