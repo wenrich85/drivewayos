@@ -136,6 +136,12 @@ defmodule DrivewayOS.Scheduling.Appointment do
       constraints max_length: 100
     end
 
+    attribute :square_order_id, :string do
+      public? true
+
+      description "Square Order id, set on `Square.Charge.create_checkout_session/3`. Webhook matches `payment.updated` events to this Appointment via this id."
+    end
+
     attribute :payment_status, :atom do
       # `:failed` is set by the `payment_intent.payment_failed`
       # webhook (or any other declined-charge signal). The customer
@@ -404,11 +410,12 @@ defmodule DrivewayOS.Scheduling.Appointment do
     end
 
     update :attach_stripe_session do
-      accept [:stripe_checkout_session_id, :payment_status]
+      accept [:stripe_checkout_session_id, :payment_status, :square_order_id]
     end
 
     update :mark_paid do
       argument :stripe_payment_intent_id, :string
+      argument :square_order_id, :string
 
       # The after_action hook below isn't atomic-eligible (Ash's
       # AfterAction change doesn't implement atomic/3), so we drop
@@ -420,6 +427,7 @@ defmodule DrivewayOS.Scheduling.Appointment do
       change set_attribute(:paid_at, &DateTime.utc_now/0)
       change set_attribute(:status, :confirmed)
       change set_attribute(:stripe_payment_intent_id, arg(:stripe_payment_intent_id))
+      change set_attribute(:square_order_id, arg(:square_order_id))
 
       # Phase 3 Task 10: kick off accounting sync for this paid
       # appointment. `after_action` runs only on a successful commit,
@@ -488,6 +496,11 @@ defmodule DrivewayOS.Scheduling.Appointment do
     read :by_payment_intent do
       argument :payment_intent_id, :string, allow_nil?: false
       filter expr(stripe_payment_intent_id == ^arg(:payment_intent_id))
+    end
+
+    read :by_square_order_id do
+      argument :order_id, :string, allow_nil?: false
+      filter expr(square_order_id == ^arg(:order_id))
     end
 
     read :upcoming do

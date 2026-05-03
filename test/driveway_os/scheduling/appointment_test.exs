@@ -212,6 +212,27 @@ defmodule DrivewayOS.Scheduling.AppointmentTest do
     end
   end
 
+  describe ":by_square_order_id" do
+    test "finds appointments by square_order_id", ctx do
+      {:ok, appt} = book!(ctx.tenant_a, ctx.customer_a, ctx.service_a)
+
+      {:ok, updated} =
+        appt
+        |> Ash.Changeset.for_update(:attach_stripe_session, %{
+          square_order_id: "ord-square-1"
+        })
+        |> Ash.update(authorize?: false, tenant: ctx.tenant_a.id)
+
+      {:ok, [found]} =
+        Appointment
+        |> Ash.Query.for_read(:by_square_order_id, %{order_id: "ord-square-1"})
+        |> Ash.Query.set_tenant(ctx.tenant_a.id)
+        |> Ash.read(authorize?: false)
+
+      assert found.id == updated.id
+    end
+  end
+
   defp book!(tenant, customer, service) do
     Appointment
     |> Ash.Changeset.for_create(
