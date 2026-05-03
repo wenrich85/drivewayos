@@ -43,7 +43,13 @@ Optional but you almost certainly want them on for prod.
 | `ZOHO_CLIENT_ID` | Zoho Books OAuth client id (one per platform — every tenant uses the same one). Get from Zoho's API console at https://api-console.zoho.com. |
 | `ZOHO_CLIENT_SECRET` | Paired with `ZOHO_CLIENT_ID`. |
 | `ZOHO_AFFILIATE_REF_ID` | Optional. Platform-level Zoho affiliate referral code; appended to outbound Zoho OAuth URLs as `?ref=<value>`. Leave unset until enrolled in Zoho's referral program. |
+| `SQUARE_APP_ID` | Square OAuth application id (one per platform — every tenant uses the same one). Get from the Square Developer Dashboard at https://developer.squareup.com/apps. |
+| `SQUARE_APP_SECRET` | Paired with `SQUARE_APP_ID`. |
+| `SQUARE_WEBHOOK_SIGNATURE_KEY` | HMAC-SHA256 signing key for Square webhook signature verification. From the same Square Developer Dashboard's webhook configuration. |
+| `SQUARE_AFFILIATE_REF_ID` | Optional. Platform-level Square affiliate referral code; appended to outbound Square OAuth URLs as `?ref=<value>`. Leave unset until enrolled in Square's referral program. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD` | Outbound mail (Zoho, Postmark, SES, etc.). |
+
+> Square sandbox: set `SQUARE_OAUTH_BASE=https://connect.squareupsandbox.com` and `SQUARE_API_BASE=https://connect.squareupsandbox.com/v2` for testing. Defaults to prod when unset.
 
 Each is optional at boot — the release will start without them —
 but the corresponding feature (Stripe Connect onboarding, booking

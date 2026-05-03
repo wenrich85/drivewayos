@@ -56,7 +56,25 @@ if config_env() != :test do
     postmark_affiliate_ref_id: System.get_env("POSTMARK_AFFILIATE_REF_ID"),
     zoho_client_id: System.get_env("ZOHO_CLIENT_ID") || "",
     zoho_client_secret: System.get_env("ZOHO_CLIENT_SECRET") || "",
-    zoho_affiliate_ref_id: System.get_env("ZOHO_AFFILIATE_REF_ID")
+    zoho_affiliate_ref_id: System.get_env("ZOHO_AFFILIATE_REF_ID"),
+    square_app_id: System.get_env("SQUARE_APP_ID") || "",
+    square_app_secret: System.get_env("SQUARE_APP_SECRET") || "",
+    square_webhook_signature_key: System.get_env("SQUARE_WEBHOOK_SIGNATURE_KEY") || "",
+    square_affiliate_ref_id: System.get_env("SQUARE_AFFILIATE_REF_ID")
+
+  # Optional sandbox/prod toggle for Square. Defaults to prod
+  # (https://connect.squareup.com) when unset.
+  case System.get_env("SQUARE_OAUTH_BASE") do
+    nil -> :ok
+    "" -> :ok
+    base -> config :driveway_os, :square_oauth_base, base
+  end
+
+  case System.get_env("SQUARE_API_BASE") do
+    nil -> :ok
+    "" -> :ok
+    base -> config :driveway_os, :square_api_base, base
+  end
 end
 
 if config_env() == :prod do
