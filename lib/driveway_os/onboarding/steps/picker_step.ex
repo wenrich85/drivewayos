@@ -110,6 +110,9 @@ defmodule DrivewayOS.Onboarding.Steps.PickerStep do
       end
 
       @impl true
+      # `var!` suppresses the unused-variable warning Elixir raises inside
+      # `quote do` when a variable is only ever rebound, never read directly.
+      # Plain `assigns` would trigger the warning at expansion time.
       def render(var!(assigns)) do
         var!(assigns) = Phoenix.Component.assign(var!(assigns), :intro_copy, @intro_copy)
 
