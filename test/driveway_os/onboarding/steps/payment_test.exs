@@ -1,11 +1,12 @@
 defmodule DrivewayOS.Onboarding.Steps.PaymentTest do
   @moduledoc """
-  Steps.Payment is a thin presentational delegator over the
-  StripeConnect provider — the heavy lifting (OAuth dance + account
-  status) is exercised in the StripeConnect provider's own suite.
-  These tests pin the contract: the right id/title/done predicate,
-  and `submit/2` as a no-op (the actual provisioning happens out of
-  band via Stripe's hosted redirect).
+  Steps.Payment is the wizard's payment step. As of Phase 4, generic
+  over N providers in the `:payment` category — renders side-by-side
+  cards for each configured + not-yet-set-up provider (Stripe + Square
+  in V1). `complete?/1` returns true if ANY payment provider is
+  connected. The OAuth heavy lifting lives in each provider's own
+  suite; these tests pin the picker render + complete predicate +
+  no-op submit/2.
   """
   use DrivewayOS.DataCase, async: false
 
