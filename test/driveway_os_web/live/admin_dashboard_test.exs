@@ -108,7 +108,7 @@ defmodule DrivewayOSWeb.AdminDashboardTest do
         conn |> Map.put(:host, "#{ctx.tenant.slug}.lvh.me") |> live(~p"/admin")
 
       refute html =~ "Connect Stripe"
-      refute html =~ "Take card payments"
+      refute html =~ "Connect a Stripe account"
     end
 
     test "shows 'Set your service menu' for fresh tenants with default seeds", ctx do
