@@ -50,3 +50,8 @@ Application.put_env(:driveway_os, :postmark_client, DrivewayOS.Notifications.Pos
 # tests don't hit the real Zoho Books API. Tests that need to assert
 # on Zoho calls set explicit expectations via Mox.expect/3.
 Mox.defmock(DrivewayOS.Accounting.ZohoClient.Mock, for: DrivewayOS.Accounting.ZohoClient)
+
+# Square client mock — used by Square OAuth + payment-link flows so
+# tests don't hit the real Square API. Tests that need to assert on
+# Square calls set explicit expectations via Mox.expect/3.
+Mox.defmock(DrivewayOS.Square.Client.Mock, for: DrivewayOS.Square.Client)

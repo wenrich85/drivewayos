@@ -81,6 +81,13 @@ config :driveway_os, :zoho_client_id, "test-zoho-client-id"
 config :driveway_os, :zoho_client_secret, "test-zoho-client-secret"
 config :driveway_os, :zoho_affiliate_ref_id, nil
 
+# Square placeholders (test env). Mox replaces all real API calls.
+config :driveway_os, :square_client, DrivewayOS.Square.Client.Mock
+config :driveway_os, :square_app_id, "test-square-app-id"
+config :driveway_os, :square_app_secret, "test-square-app-secret"
+config :driveway_os, :square_webhook_signature_key, "test-square-webhook-key"
+config :driveway_os, :square_affiliate_ref_id, nil
+
 # --- Wallaby (browser tests) ---
 # Tests must be tagged `:browser` to use this; everything else runs
 # in the regular Sandbox. Wallaby points at port 4002 (the test

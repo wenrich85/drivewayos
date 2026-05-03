@@ -86,6 +86,10 @@ config :phoenix, :json_library, Jason
 # config/test.exs to point at the Mox mock.
 config :driveway_os, :zoho_client, DrivewayOS.Accounting.ZohoClient.Http
 
+# Default impl for the Square HTTP client. Tests override this in
+# config/test.exs to point at the Mox mock.
+config :driveway_os, :square_client, DrivewayOS.Square.Client.Http
+
 # Oban — background jobs (Phase 3). The :billing queue runs the
 # Accounting.SyncWorker enqueued from Appointment.mark_paid; the
 # :default queue is reserved for any future workers we add.
