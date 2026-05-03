@@ -210,6 +210,49 @@ defmodule DrivewayOSWeb.Admin.IntegrationsLiveTest do
     end
   end
 
+  describe "Email rows (Phase 4b)" do
+    test "lists Resend row when an active EmailConnection exists", ctx do
+      connect_resend!(ctx.tenant.id)
+
+      {:ok, _view, html} = live(ctx.conn, "/admin/integrations")
+      assert html =~ "Resend"
+      assert html =~ "Email"
+      assert html =~ "Active"
+      assert html =~ "Pause"
+      assert html =~ "Disconnect"
+    end
+
+    test "shows Paused for Resend when auto_send_enabled is false", ctx do
+      conn_row = connect_resend!(ctx.tenant.id)
+      conn_row |> Ash.Changeset.for_update(:pause, %{}) |> Ash.update!(authorize?: false)
+
+      {:ok, _view, html} = live(ctx.conn, "/admin/integrations")
+      assert html =~ "Paused"
+      assert html =~ "Resume"
+    end
+
+    test "Pause toggles auto_send_enabled for Resend", ctx do
+      connect_resend!(ctx.tenant.id)
+
+      {:ok, view, _html} = live(ctx.conn, "/admin/integrations")
+      view |> element("button[id^='table-pause']") |> render_click()
+
+      {:ok, refreshed} = DrivewayOS.Platform.get_email_connection(ctx.tenant.id, :resend)
+      refute refreshed.auto_send_enabled
+    end
+
+    test "Disconnect clears Resend api_key", ctx do
+      connect_resend!(ctx.tenant.id)
+
+      {:ok, view, _html} = live(ctx.conn, "/admin/integrations")
+      view |> element("button[id^='table-disconnect']") |> render_click()
+
+      {:ok, refreshed} = DrivewayOS.Platform.get_email_connection(ctx.tenant.id, :resend)
+      assert refreshed.api_key == nil
+      assert refreshed.disconnected_at != nil
+    end
+  end
+
   defp connect_zoho!(tenant_id) do
     AccountingConnection
     |> Ash.Changeset.for_create(:connect, %{
@@ -233,6 +276,17 @@ defmodule DrivewayOSWeb.Admin.IntegrationsLiveTest do
       access_token: "at",
       refresh_token: "rt",
       access_token_expires_at: DateTime.add(DateTime.utc_now(), 3600, :second)
+    })
+    |> Ash.create!(authorize?: false)
+  end
+
+  defp connect_resend!(tenant_id) do
+    DrivewayOS.Platform.EmailConnection
+    |> Ash.Changeset.for_create(:connect, %{
+      tenant_id: tenant_id,
+      provider: :resend,
+      external_key_id: "k1",
+      api_key: "re_test_il"
     })
     |> Ash.create!(authorize?: false)
   end

@@ -21,7 +21,7 @@ defmodule DrivewayOSWeb.Admin.IntegrationsLive do
   on_mount DrivewayOSWeb.LoadTenantHook
   on_mount DrivewayOSWeb.LoadCustomerHook
 
-  alias DrivewayOS.Platform.{AccountingConnection, PaymentConnection}
+  alias DrivewayOS.Platform.{AccountingConnection, EmailConnection, PaymentConnection}
 
   require Ash.Query
 
@@ -62,6 +62,7 @@ defmodule DrivewayOSWeb.Admin.IntegrationsLive do
   end
 
   defp resource_module("payment"), do: PaymentConnection
+  defp resource_module("email"), do: EmailConnection
   defp resource_module("accounting"), do: AccountingConnection
 
   defp with_owned_connection(socket, resource, id, changeset_fn) do
@@ -90,9 +91,15 @@ defmodule DrivewayOSWeb.Admin.IntegrationsLive do
       |> Ash.Query.filter(tenant_id == ^tenant_id)
       |> Ash.read(authorize?: false)
 
+    {:ok, email_conns} =
+      EmailConnection
+      |> Ash.Query.filter(tenant_id == ^tenant_id)
+      |> Ash.read(authorize?: false)
+
     rows =
       Enum.map(accounting_conns, &row_from_accounting/1) ++
-        Enum.map(payment_conns, &row_from_payment/1)
+        Enum.map(payment_conns, &row_from_payment/1) ++
+        Enum.map(email_conns, &row_from_email/1)
 
     Phoenix.Component.assign(socket, :rows, rows)
   end
@@ -108,6 +115,21 @@ defmodule DrivewayOSWeb.Admin.IntegrationsLive do
       last_activity_at: c.last_sync_at,
       last_error: c.last_sync_error,
       auto_enabled: c.auto_sync_enabled,
+      disconnected_at: c.disconnected_at
+    }
+  end
+
+  defp row_from_email(%EmailConnection{} = c) do
+    %{
+      id: c.id,
+      resource: "email",
+      provider: c.provider,
+      category: "Email",
+      status: status_text(c, :send),
+      connected_at: c.connected_at,
+      last_activity_at: c.last_send_at,
+      last_error: c.last_send_error,
+      auto_enabled: c.auto_send_enabled,
       disconnected_at: c.disconnected_at
     }
   end
@@ -130,8 +152,10 @@ defmodule DrivewayOSWeb.Admin.IntegrationsLive do
   defp status_text(%{disconnected_at: dt}, _) when not is_nil(dt), do: "Disconnected"
   defp status_text(%AccountingConnection{auto_sync_enabled: false}, _), do: "Paused"
   defp status_text(%PaymentConnection{auto_charge_enabled: false}, _), do: "Paused"
+  defp status_text(%EmailConnection{auto_send_enabled: false}, _), do: "Paused"
   defp status_text(%{last_sync_error: err}, _) when is_binary(err), do: "Error"
   defp status_text(%{last_charge_error: err}, _) when is_binary(err), do: "Error"
+  defp status_text(%{last_send_error: err}, _) when is_binary(err), do: "Error"
   defp status_text(_, _), do: "Active"
 
   defp status_badge_class("Active"), do: "badge badge-success"
@@ -142,6 +166,7 @@ defmodule DrivewayOSWeb.Admin.IntegrationsLive do
 
   defp provider_label(:zoho_books), do: "Zoho Books"
   defp provider_label(:square), do: "Square"
+  defp provider_label(:resend), do: "Resend"
   defp provider_label(p), do: p |> Atom.to_string() |> String.capitalize()
 
   defp format_date(nil), do: ""
