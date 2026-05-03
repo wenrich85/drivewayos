@@ -24,7 +24,8 @@ defmodule DrivewayOS.Onboarding.Registry do
     DrivewayOS.Onboarding.Providers.StripeConnect,
     DrivewayOS.Onboarding.Providers.Postmark,
     DrivewayOS.Onboarding.Providers.ZohoBooks,
-    DrivewayOS.Onboarding.Providers.Square
+    DrivewayOS.Onboarding.Providers.Square,
+    DrivewayOS.Onboarding.Providers.Resend
   ]
 
   @doc "All registered providers, in declaration order."
