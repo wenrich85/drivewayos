@@ -15,17 +15,10 @@ defmodule DrivewayOSWeb.StripeOnboardingController do
   alias DrivewayOS.Onboarding.{Affiliate, Wizard}
   alias DrivewayOS.Platform
 
+  plug DrivewayOSWeb.Plugs.RequireAdminCustomer when action in [:start]
+
   def start(conn, _params) do
     cond do
-      is_nil(conn.assigns[:current_tenant]) ->
-        conn |> redirect(to: ~p"/") |> halt()
-
-      is_nil(conn.assigns[:current_customer]) ->
-        conn |> redirect(to: ~p"/sign-in") |> halt()
-
-      conn.assigns.current_customer.role != :admin ->
-        conn |> redirect(to: ~p"/") |> halt()
-
       not StripeConnect.configured?() ->
         # Stripe Connect credentials aren't wired up on this server.
         # Bounce back to the dashboard with a flash so the operator

@@ -13,7 +13,7 @@ defmodule DrivewayOSWeb.PostmarkOnboardingController do
   alias DrivewayOS.Onboarding.Affiliate
   alias DrivewayOS.Onboarding.Providers.Postmark
 
-  plug :require_admin_customer
+  plug DrivewayOSWeb.Plugs.RequireAdminCustomer
 
   def start(conn, _params) do
     tenant = conn.assigns.current_tenant
@@ -32,21 +32,6 @@ defmodule DrivewayOSWeb.PostmarkOnboardingController do
         conn
         |> put_flash(:error, "Postmark setup failed: #{inspect(reason)}")
         |> redirect(to: "/admin/onboarding")
-    end
-  end
-
-  defp require_admin_customer(conn, _opts) do
-    cust = conn.assigns[:current_customer]
-
-    cond do
-      is_nil(cust) ->
-        conn |> redirect(to: "/sign-in") |> halt()
-
-      cust.role != :admin ->
-        conn |> redirect(to: "/") |> halt()
-
-      true ->
-        conn
     end
   end
 end

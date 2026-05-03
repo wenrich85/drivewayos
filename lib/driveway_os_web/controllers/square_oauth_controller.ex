@@ -14,17 +14,10 @@ defmodule DrivewayOSWeb.SquareOauthController do
   alias DrivewayOS.Onboarding.Affiliate
   alias DrivewayOS.Platform
 
+  plug DrivewayOSWeb.Plugs.RequireAdminCustomer when action in [:start]
+
   def start(conn, _params) do
     cond do
-      is_nil(conn.assigns[:current_tenant]) ->
-        conn |> redirect(to: ~p"/") |> halt()
-
-      is_nil(conn.assigns[:current_customer]) ->
-        conn |> redirect(to: ~p"/sign-in") |> halt()
-
-      conn.assigns.current_customer.role != :admin ->
-        conn |> redirect(to: ~p"/") |> halt()
-
       not OAuth.configured?() ->
         conn
         |> put_flash(
