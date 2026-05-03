@@ -35,7 +35,7 @@ defmodule DrivewayOS.Onboarding.Providers.Postmark do
         "Wire up Postmark so confirmations, reminders, and receipts " <>
           "go to your customers from your shop's address.",
       cta_label: "Set up email",
-      href: "/admin/onboarding"
+      href: "/onboarding/postmark/start"
     }
   end
 

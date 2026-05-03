@@ -35,7 +35,7 @@ defmodule DrivewayOS.Onboarding.Providers.PostmarkTest do
     d = Provider.display()
     assert d.title == "Send booking emails"
     assert d.cta_label == "Set up email"
-    assert d.href == "/admin/onboarding"
+    assert d.href == "/onboarding/postmark/start"
   end
 
   test "configured?/0 mirrors POSTMARK_ACCOUNT_TOKEN env" do

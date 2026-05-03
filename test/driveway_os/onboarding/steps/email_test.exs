@@ -1,16 +1,21 @@
 defmodule DrivewayOS.Onboarding.Steps.EmailTest do
+  @moduledoc """
+  Steps.Email is the wizard's email step. As of Phase 4b, generic
+  over N providers in the `:email` category — renders side-by-side
+  cards for each configured + not-yet-set-up provider (Postmark +
+  Resend in V1). `complete?/1` returns true if ANY email provider is
+  connected. Provisioning happens in the per-provider controllers
+  (PostmarkOnboardingController + ResendOnboardingController);
+  these tests pin the picker render + complete predicate + no-op
+  submit/2.
+  """
   use DrivewayOS.DataCase, async: false
 
-  import Mox
-
   alias DrivewayOS.Onboarding.Steps.Email, as: Step
-  alias DrivewayOS.Notifications.PostmarkClient
   alias DrivewayOS.Platform
 
-  setup :verify_on_exit!
-
   setup do
-    {:ok, %{tenant: tenant, admin: admin}} =
+    {:ok, %{tenant: tenant}} =
       Platform.provision_tenant(%{
         slug: "em-#{System.unique_integer([:positive])}",
         display_name: "Email Step Test",
@@ -19,99 +24,105 @@ defmodule DrivewayOS.Onboarding.Steps.EmailTest do
         admin_password: "Password123!"
       })
 
-    %{tenant: tenant, admin: admin}
+    %{tenant: tenant}
   end
 
   test "id/0 is :email" do
     assert Step.id() == :email
   end
 
-  test "complete?/1 false when tenant has no postmark_server_id", ctx do
+  test "title/0 is the email step heading" do
+    assert Step.title() == "Send booking emails"
+  end
+
+  test "complete?/1 false when tenant has no email provider connected", ctx do
     refute Step.complete?(ctx.tenant)
   end
 
-  test "submit/2 happy path: provisions Postmark and updates the socket", ctx do
-    expect(PostmarkClient.Mock, :create_server, fn _name, _opts ->
-      {:ok, %{server_id: 88_001, api_key: "server-token-pq"}}
-    end)
+  test "complete?/1 true once Postmark is connected", ctx do
+    {:ok, with_pm} =
+      ctx.tenant
+      |> Ash.Changeset.for_update(:update, %{
+        postmark_server_id: "88001",
+        postmark_api_key: "server-token-pq"
+      })
+      |> Ash.update(authorize?: false)
 
+    assert Step.complete?(with_pm)
+  end
+
+  test "complete?/1 true once Resend EmailConnection exists", ctx do
+    DrivewayOS.Platform.EmailConnection
+    |> Ash.Changeset.for_create(:connect, %{
+      tenant_id: ctx.tenant.id,
+      provider: :resend,
+      external_key_id: "k1",
+      api_key: "re_x"
+    })
+    |> Ash.create!(authorize?: false)
+
+    assert Step.complete?(ctx.tenant)
+  end
+
+  test "submit/2 is a no-op — provisioning happens via the per-provider controller", ctx do
     socket = %Phoenix.LiveView.Socket{
       assigns: %{
         __changed__: %{},
         current_tenant: ctx.tenant,
-        current_customer: ctx.admin,
         errors: %{}
       }
     }
 
-    assert {:ok, socket} = Step.submit(%{}, socket)
-    assert socket.assigns.current_tenant.postmark_server_id == "88001"
+    assert {:ok, ^socket} = Step.submit(%{}, socket)
   end
 
-  test "submit/2 surfaces Postmark API error", ctx do
-    expect(PostmarkClient.Mock, :create_server, fn _, _ ->
-      {:error, %{status: 401, body: %{"Message" => "Invalid token"}}}
-    end)
+  describe "render/1 picker (multi-provider)" do
+    setup do
+      Application.put_env(:driveway_os, :postmark_account_token, "pt_master_test")
+      Application.put_env(:driveway_os, :resend_api_key, "re_master_test")
 
-    socket = %Phoenix.LiveView.Socket{
-      assigns: %{__changed__: %{}, current_tenant: ctx.tenant, current_customer: ctx.admin, errors: %{}}
-    }
-
-    assert {:error, _} = Step.submit(%{}, socket)
-  end
-
-  describe "submit/2 affiliate logging" do
-    test "logs :click then :provisioned on Postmark API success", ctx do
-      expect(PostmarkClient.Mock, :create_server, fn _name, _opts ->
-        {:ok, %{server_id: 88_001, api_key: "server-token-pq"}}
+      on_exit(fn ->
+        Application.delete_env(:driveway_os, :postmark_account_token)
+        Application.delete_env(:driveway_os, :resend_api_key)
       end)
 
-      socket = %Phoenix.LiveView.Socket{
-        assigns: %{
-          __changed__: %{},
-          current_tenant: ctx.tenant,
-          current_customer: ctx.admin,
-          errors: %{}
-        }
-      }
-
-      assert {:ok, _} = Step.submit(%{}, socket)
-
-      {:ok, all} = Ash.read(DrivewayOS.Platform.TenantReferral, authorize?: false)
-      events = Enum.filter(all, &(&1.tenant_id == ctx.tenant.id))
-      # Sort by occurred_at to assert chronological order — :click comes
-      # before :provisioned regardless of alphabetic accident.
-      types =
-        events
-        |> Enum.sort_by(& &1.occurred_at, DateTime)
-        |> Enum.map(& &1.event_type)
-
-      assert types == [:click, :provisioned]
-      assert Enum.all?(events, &(&1.provider == :postmark))
+      :ok
     end
 
-    test "logs only :click when Postmark API fails", ctx do
-      expect(PostmarkClient.Mock, :create_server, fn _, _ ->
-        {:error, %{status: 401, body: %{"Message" => "Invalid token"}}}
-      end)
+    test "renders cards for every configured email provider not yet set up", ctx do
+      html =
+        Step.render(%{__changed__: %{}, current_tenant: ctx.tenant})
+        |> Phoenix.LiveViewTest.rendered_to_string()
 
-      socket = %Phoenix.LiveView.Socket{
-        assigns: %{
-          __changed__: %{},
-          current_tenant: ctx.tenant,
-          current_customer: ctx.admin,
-          errors: %{}
-        }
-      }
+      # Both V1 email providers visible.
+      assert html =~ "Set up email"
+      assert html =~ "Set up Resend"
+    end
 
-      assert {:error, _} = Step.submit(%{}, socket)
+    test "applies UX rules: 44px touch targets, motion-reduce, slate-600 text", ctx do
+      html =
+        Step.render(%{__changed__: %{}, current_tenant: ctx.tenant})
+        |> Phoenix.LiveViewTest.rendered_to_string()
 
-      {:ok, all} = Ash.read(DrivewayOS.Platform.TenantReferral, authorize?: false)
-      events = Enum.filter(all, &(&1.tenant_id == ctx.tenant.id))
+      assert html =~ "min-h-[44px]"
+      assert html =~ "motion-reduce:transition-none"
+      assert html =~ "text-slate-600"
+    end
 
-      assert [event] = events
-      assert event.event_type == :click
-      assert event.provider == :postmark
+    test "Postmark card href routes to /onboarding/postmark/start", ctx do
+      html =
+        Step.render(%{__changed__: %{}, current_tenant: ctx.tenant})
+        |> Phoenix.LiveViewTest.rendered_to_string()
+
+      assert html =~ "/onboarding/postmark/start"
+    end
+
+    test "Resend card href routes to /onboarding/resend/start", ctx do
+      html =
+        Step.render(%{__changed__: %{}, current_tenant: ctx.tenant})
+        |> Phoenix.LiveViewTest.rendered_to_string()
+
+      assert html =~ "/onboarding/resend/start"
     end
   end
 end

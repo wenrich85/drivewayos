@@ -101,6 +101,9 @@ defmodule DrivewayOSWeb.Router do
     get "/onboarding/square/start", SquareOauthController, :start
     get "/onboarding/square/callback", SquareOauthController, :callback
 
+    get "/onboarding/postmark/start", PostmarkOnboardingController, :start
+    get "/onboarding/resend/start", ResendOnboardingController, :start
+
     # Platform-admin (the SaaS operator — us). All under admin.lvh.me.
     live "/platform-sign-in", Platform.SignInLive
     live "/tenants", Platform.TenantsLive

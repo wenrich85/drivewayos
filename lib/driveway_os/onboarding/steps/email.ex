@@ -1,81 +1,25 @@
 defmodule DrivewayOS.Onboarding.Steps.Email do
   @moduledoc """
-  Email wizard step. Wraps the Postmark provider.
+  Email wizard step. Generic over N providers in the `:email`
+  category via `Steps.PickerStep`. As of Phase 4b, both providers
+  (Postmark + Resend) are API-first — picker cards route to each
+  provider's `/onboarding/<provider>/start` controller path which
+  fires provisioning synchronously and redirects back.
 
-  Unlike Payment (hosted-redirect), Email is API-first: the wizard
-  submit calls `Providers.Postmark.provision/2` synchronously, which
-  hits Postmark's /servers endpoint, persists credentials on the
-  tenant, and sends a welcome email through the new server. The
-  send doubles as the deliverability probe — failure is surfaced
-  to the operator instead of advancing.
+  V1 provider universe: Postmark, Resend. Wizard's "any one
+  provider connected = step done" semantics mean a tenant doesn't
+  see Resend's card if Postmark is already set up (and vice-versa).
+  Switching is support-driven.
   """
-  @behaviour DrivewayOS.Onboarding.Step
-
-  use Phoenix.Component
-
-  alias DrivewayOS.Onboarding.{Affiliate, Providers.Postmark}
-  alias DrivewayOS.Platform.Tenant
+  use DrivewayOS.Onboarding.Steps.PickerStep,
+    category: :email,
+    intro_copy:
+      "Pick the email provider for booking confirmations and reminders. " <>
+        "You can change later by emailing support."
 
   @impl true
   def id, do: :email
 
   @impl true
   def title, do: "Send booking emails"
-
-  @impl true
-  def complete?(%Tenant{} = tenant), do: Postmark.setup_complete?(tenant)
-
-  @impl true
-  def render(assigns) do
-    display = Postmark.display()
-    assigns = Map.put(assigns, :display, display)
-
-    ~H"""
-    <form id="step-email-form" phx-submit="step_submit" class="space-y-3">
-      <p class="text-sm text-base-content/70">{@display.blurb}</p>
-      <%= if perk = Affiliate.perk_copy(:postmark) do %>
-        <p class="text-xs text-success font-medium">{perk}</p>
-      <% end %>
-      <p class="text-xs text-base-content/60">
-        We'll create a Postmark server for your shop and send you a quick test email
-        to confirm everything's working. Takes a few seconds.
-      </p>
-      <p :if={@errors[:email]} class="text-error text-sm">
-        {@errors[:email]}
-      </p>
-      <button type="submit" class="btn btn-primary btn-sm gap-1">
-        {@display.cta_label}
-        <span class="hero-arrow-right w-3 h-3" aria-hidden="true"></span>
-      </button>
-    </form>
-    """
-  end
-
-  @impl true
-  def submit(_params, socket) do
-    tenant = socket.assigns.current_tenant
-
-    # Log :click before the API call so a failed provision still
-    # leaves a funnel breadcrumb. log_event/4 is fire-and-forget —
-    # it always returns :ok, even on persistence failure.
-    :ok = Affiliate.log_event(tenant, :postmark, :click, %{wizard_step: "email"})
-
-    case Postmark.provision(tenant, %{}) do
-      {:ok, updated} ->
-        :ok =
-          Affiliate.log_event(updated, :postmark, :provisioned, %{
-            server_id: updated.postmark_server_id
-          })
-
-        {:ok, Phoenix.Component.assign(socket, :current_tenant, updated)}
-
-      {:error, reason} ->
-        {:error, format_reason(reason)}
-    end
-  end
-
-  defp format_reason(%{status: status, body: body}),
-    do: "Postmark error #{status}: #{inspect(body)}"
-
-  defp format_reason(other), do: inspect(other)
 end
