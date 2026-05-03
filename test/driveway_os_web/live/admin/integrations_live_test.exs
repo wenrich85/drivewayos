@@ -73,7 +73,7 @@ defmodule DrivewayOSWeb.Admin.IntegrationsLiveTest do
     connect_zoho!(ctx.tenant.id)
 
     {:ok, view, _html} = live(ctx.conn, "/admin/integrations")
-    view |> element("button", "Pause") |> render_click()
+    view |> element("button[id^='table-pause']") |> render_click()
 
     {:ok, refreshed} = Platform.get_accounting_connection(ctx.tenant.id, :zoho_books)
     refute refreshed.auto_sync_enabled
@@ -83,7 +83,7 @@ defmodule DrivewayOSWeb.Admin.IntegrationsLiveTest do
     connect_zoho!(ctx.tenant.id)
 
     {:ok, view, _html} = live(ctx.conn, "/admin/integrations")
-    view |> element("button", "Disconnect") |> render_click()
+    view |> element("button[id^='table-disconnect']") |> render_click()
 
     {:ok, refreshed} = Platform.get_accounting_connection(ctx.tenant.id, :zoho_books)
     assert refreshed.access_token == nil
@@ -119,13 +119,95 @@ defmodule DrivewayOSWeb.Admin.IntegrationsLiveTest do
     # Attempt to pause OTHER tenant's connection by crafting the event.
     # render_click bypasses the DOM filter — exactly what an attacker
     # would do via the browser console / DevTools.
-    render_click(view, "pause", %{"id" => other_conn.id})
+    render_click(view, "pause", %{"resource" => "accounting", "id" => other_conn.id})
 
     # other_conn should still be active (untouched).
     {:ok, refreshed} =
       Platform.get_accounting_connection(other_tenant.id, :zoho_books)
 
     assert refreshed.auto_sync_enabled == true
+  end
+
+  describe "PaymentConnection rows" do
+    test "Square row appears alongside Zoho row when both connected", ctx do
+      connect_zoho!(ctx.tenant.id)
+      connect_square!(ctx.tenant.id)
+
+      {:ok, _view, html} = live(ctx.conn, "/admin/integrations")
+
+      assert html =~ "Zoho Books"
+      assert html =~ "Square"
+      assert html =~ "Accounting"
+      assert html =~ "Payment"
+    end
+
+    test "Pause button toggles auto_charge_enabled on Square row", ctx do
+      connect_square!(ctx.tenant.id)
+
+      {:ok, view, _html} = live(ctx.conn, "/admin/integrations")
+
+      view
+      |> element("button[id^='table-pause'][phx-value-resource='payment']")
+      |> render_click()
+
+      {:ok, refreshed} = Platform.get_payment_connection(ctx.tenant.id, :square)
+      refute refreshed.auto_charge_enabled
+    end
+
+    test "Disconnect button clears Square tokens", ctx do
+      connect_square!(ctx.tenant.id)
+
+      {:ok, view, _html} = live(ctx.conn, "/admin/integrations")
+
+      view
+      |> element("button[id^='table-disconnect'][phx-value-resource='payment']")
+      |> render_click()
+
+      {:ok, refreshed} = Platform.get_payment_connection(ctx.tenant.id, :square)
+      assert refreshed.access_token == nil
+      assert refreshed.disconnected_at != nil
+    end
+
+    test "Cross-tenant tampering on Square rows is blocked", ctx do
+      {:ok, %{tenant: other_tenant}} =
+        Platform.provision_tenant(%{
+          slug: "other-#{System.unique_integer([:positive])}",
+          display_name: "Other",
+          admin_email: "other-#{System.unique_integer([:positive])}@example.com",
+          admin_name: "Other",
+          admin_password: "Password123!"
+        })
+
+      other_conn = connect_square!(other_tenant.id)
+      {:ok, view, _html} = live(ctx.conn, "/admin/integrations")
+
+      render_click(view, "pause", %{"resource" => "payment", "id" => other_conn.id})
+
+      {:ok, refreshed} = Platform.get_payment_connection(other_tenant.id, :square)
+      # not mutated
+      assert refreshed.auto_charge_enabled == true
+    end
+  end
+
+  describe "UX rules + mobile layout" do
+    test "renders min-h-[44px], aria-live, aria-label on action buttons", ctx do
+      connect_zoho!(ctx.tenant.id)
+      connect_square!(ctx.tenant.id)
+
+      {:ok, _view, html} = live(ctx.conn, "/admin/integrations")
+
+      assert html =~ "min-h-[44px]"
+      assert html =~ "aria-live=\"polite\""
+      assert html =~ ~r/aria-label=\"(Pause|Resume|Disconnect)/
+    end
+
+    test "border-slate-200 alignment with MASTER design system", ctx do
+      connect_zoho!(ctx.tenant.id)
+
+      {:ok, _view, html} = live(ctx.conn, "/admin/integrations")
+
+      assert html =~ "border-slate-200"
+    end
   end
 
   defp connect_zoho!(tenant_id) do
@@ -138,6 +220,19 @@ defmodule DrivewayOSWeb.Admin.IntegrationsLiveTest do
       refresh_token: "rt",
       access_token_expires_at: DateTime.add(DateTime.utc_now(), 3600, :second),
       region: "com"
+    })
+    |> Ash.create!(authorize?: false)
+  end
+
+  defp connect_square!(tenant_id) do
+    DrivewayOS.Platform.PaymentConnection
+    |> Ash.Changeset.for_create(:connect, %{
+      tenant_id: tenant_id,
+      provider: :square,
+      external_merchant_id: "MLR-1",
+      access_token: "at",
+      refresh_token: "rt",
+      access_token_expires_at: DateTime.add(DateTime.utc_now(), 3600, :second)
     })
     |> Ash.create!(authorize?: false)
   end
