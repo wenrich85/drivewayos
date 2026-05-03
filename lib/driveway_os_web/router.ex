@@ -35,6 +35,7 @@ defmodule DrivewayOSWeb.Router do
     pipe_through :webhook
 
     post "/stripe", StripeWebhookController, :handle
+    post "/square", SquareWebhookController, :handle
   end
 
   # Health check — load-balancer probe. Skips tenant + auth so
@@ -77,6 +78,7 @@ defmodule DrivewayOSWeb.Router do
     get "/admin/appointments.csv",
         AdminAppointmentsExportController,
         :appointments
+
     live "/admin/branding", Admin.BrandingLive
 
     get "/auth/customer/store-token", Auth.SessionController, :store_token
@@ -88,7 +90,7 @@ defmodule DrivewayOSWeb.Router do
     # AshAuthentication generates /auth/customer/{provider} +
     # /auth/customer/{provider}/callback under this prefix; the
     # AuthController handles the success + failure callbacks.
-    auth_routes Auth.AuthController, DrivewayOS.Accounts.Customer, path: "/auth/customer"
+    auth_routes(Auth.AuthController, DrivewayOS.Accounts.Customer, path: "/auth/customer")
 
     get "/onboarding/stripe/start", StripeOnboardingController, :start
     get "/onboarding/stripe/callback", StripeOnboardingController, :callback
