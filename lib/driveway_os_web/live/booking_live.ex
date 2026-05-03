@@ -882,8 +882,8 @@ defmodule DrivewayOSWeb.BookingLive do
       tenant.stripe_account_id ->
         do_stripe_checkout(socket, tenant, customer, service, appt)
 
-      has_active_square?(tenant) ->
-        do_square_checkout(socket, tenant, customer, service, appt)
+      (square_conn = active_square_connection(tenant)) ->
+        do_square_checkout(socket, tenant, customer, service, appt, square_conn)
 
       true ->
         send_confirmation_email(tenant, customer, appt, service)
@@ -910,9 +910,7 @@ defmodule DrivewayOSWeb.BookingLive do
     end
   end
 
-  defp do_square_checkout(socket, tenant, customer, service, appt) do
-    {:ok, square_conn} = DrivewayOS.Platform.get_active_payment_connection(tenant.id, :square)
-
+  defp do_square_checkout(socket, tenant, customer, service, appt, square_conn) do
     redirect_url = build_post_payment_url(tenant, appt)
 
     appt_for_charge = %{
@@ -945,10 +943,13 @@ defmodule DrivewayOSWeb.BookingLive do
     end
   end
 
-  defp has_active_square?(tenant) do
+  # Returns the active PaymentConnection or nil. Used as a cond
+  # predicate AND as the resource passed into do_square_checkout —
+  # fetched once, no double-DB-hit, no TOCTOU.
+  defp active_square_connection(tenant) do
     case DrivewayOS.Platform.get_active_payment_connection(tenant.id, :square) do
-      {:ok, _} -> true
-      _ -> false
+      {:ok, conn} -> conn
+      _ -> nil
     end
   end
 
