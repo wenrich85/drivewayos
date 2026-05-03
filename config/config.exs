@@ -90,6 +90,10 @@ config :driveway_os, :zoho_client, DrivewayOS.Accounting.ZohoClient.Http
 # config/test.exs to point at the Mox mock.
 config :driveway_os, :square_client, DrivewayOS.Square.Client.Http
 
+# Default impl for the Resend HTTP client. Tests override this via
+# test_helper.exs to point at the Mox mock.
+config :driveway_os, :resend_client, DrivewayOS.Notifications.ResendClient.Http
+
 # Oban — background jobs (Phase 3). The :billing queue runs the
 # Accounting.SyncWorker enqueued from Appointment.mark_paid; the
 # :default queue is reserved for any future workers we add.

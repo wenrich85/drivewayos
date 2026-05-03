@@ -55,3 +55,12 @@ Mox.defmock(DrivewayOS.Accounting.ZohoClient.Mock, for: DrivewayOS.Accounting.Zo
 # tests don't hit the real Square API. Tests that need to assert on
 # Square calls set explicit expectations via Mox.expect/3.
 Mox.defmock(DrivewayOS.Square.Client.Mock, for: DrivewayOS.Square.Client)
+
+# Resend client mock — used by Resend.provision/2 so tests don't
+# hit the real Resend API. Tests that need to assert on api-key
+# creation set explicit expectations via Mox.expect/3.
+Mox.defmock(DrivewayOS.Notifications.ResendClient.Mock,
+  for: DrivewayOS.Notifications.ResendClient
+)
+
+Application.put_env(:driveway_os, :resend_client, DrivewayOS.Notifications.ResendClient.Mock)
