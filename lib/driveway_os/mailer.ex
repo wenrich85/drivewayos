@@ -27,7 +27,7 @@ defmodule DrivewayOS.Mailer do
   @spec for_tenant(Tenant.t()) :: keyword()
   def for_tenant(%Tenant{} = tenant) do
     cond do
-      not Application.get_env(:swoosh, :api_client) ->
+      !Application.get_env(:swoosh, :api_client) ->
         []
 
       conn = active_resend_connection(tenant) ->

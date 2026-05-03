@@ -145,4 +145,22 @@ defmodule DrivewayOS.MailerTest do
     # Even with both connected, the test-mode override suppresses.
     assert Mailer.for_tenant(t) == []
   end
+
+  test "production path: module-atom api_client falls through to routing logic", ctx do
+    Application.put_env(:swoosh, :api_client, Swoosh.ApiClient.Req)
+
+    EmailConnection
+    |> Ash.Changeset.for_create(:connect, %{
+      tenant_id: ctx.tenant.id,
+      provider: :resend,
+      external_key_id: "k1",
+      api_key: "re_prod_path"
+    })
+    |> Ash.create!(authorize?: false)
+
+    # Must NOT raise ArgumentError. Must route to Resend.
+    opts = Mailer.for_tenant(ctx.tenant)
+    assert Keyword.get(opts, :adapter) == Swoosh.Adapters.Resend
+    assert Keyword.get(opts, :api_key) == "re_prod_path"
+  end
 end
